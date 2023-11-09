@@ -2,7 +2,8 @@ pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 
-use hypercore::Hypercore;
+use derive_builder::Builder;
+use hypercore::{Hypercore, HypercoreError};
 use messages::{Node, YoloIndex};
 use prost::{bytes::Buf, DecodeError, EncodeError, Message};
 
@@ -156,7 +157,6 @@ struct BlockEntry<T: BytesLike, M: CoreMem> {
     value: Option<T>,
 }
 
-// What is an entry
 impl<T: BytesLike, M: CoreMem> BlockEntry<T, M> {
     fn new(seq: u64, tree: Batch<M>, entry: Node) -> Self {
         BlockEntry {
@@ -171,8 +171,9 @@ impl<T: BytesLike, M: CoreMem> BlockEntry<T, M> {
 }
 
 // TODO this next
+/// Collects a series of actions and executes them atomically
 struct Batch<M: CoreMem> {
-    tree: Hyperbee,
+    tree: Hyperbee<M>,
     core: Hypercore<M>,
     //this.index = tree._batches.push(this) - 1
     //this.blocks = cache ? new Map() : null
@@ -194,17 +195,113 @@ struct Batch<M: CoreMem> {
     //}
 }
 
-impl<T: CoreMem> Batch<T> {
+impl<M: CoreMem> Batch<M> {
     fn new(
-        tree: Hyperbee,
-        core: Hypercore<T>,
+        tree: Hyperbee<M>,
+        core: Hypercore<M>,
         //batchLock: Option<()>, cache: ()
     ) -> Self {
         Batch { tree, core }
     }
 }
 
-struct Hyperbee {}
+// TODO use builder pattern macros for Hyperbee opts
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned")]
+pub struct Hyperbee<M: CoreMem> {
+    //this.core = core
+    core: Hypercore<M>,
+
+    //this.keyEncoding = opts.keyEncoding ? codecs(opts.keyEncoding) : null
+    // TODO make enum
+    key_encoding: String,
+
+    //this.valueEncoding = opts.valueEncoding ? codecs(opts.valueEncoding) : null
+    // TODO make enum
+    value_encoding: String,
+
+    //this.extension = opts.extension !== false ? opts.extension || Extension.register(this) : null
+    //this.metadata = opts.metadata || null
+    //this.lock = opts.lock || mutexify()
+
+    //this.sep = opts.sep || SEP
+    // TODO set default
+    sep: String,
+
+    //this.readonly = !!opts.readonly
+    // TODO set default false
+    readonly: bool,
+
+    //this.prefix = opts.prefix || null
+    // TODO set default
+    prefix: String,
+    //this._unprefixedKeyEncoding = this.keyEncoding
+    //this._sub = !!this.prefix
+    //this._checkout = opts.checkout || 0
+    //this._view = !!opts._view
+
+    //this._onappendBound = this._view ? null : this._onappend.bind(this)
+    //this._ontruncateBound = this._view ? null : this._ontruncate.bind(this)
+    //this._watchers = this._onappendBound ? [] : null
+    //this._entryWatchers = this._onappendBound ? [] : null
+    //this._sessions = opts.sessions !== false
+
+    //this._batches = []
+
+    //if (this._watchers) {
+    //  this.core.on('append', this._onappendBound)
+    //  this.core.on('truncate', this._ontruncateBound)
+    //}
+
+    //if (this.prefix && opts._sub) {
+    //  this.keyEncoding = prefixEncoding(this.prefix, this.keyEncoding)
+    //}
+}
+
+impl<M: CoreMem> Hyperbee<M> {
+    /// Gets the root of the tree
+    pub async fn get_root<T: BytesLike>(&self, ensure_header: bool) -> TreeNode<T, M> {
+        todo!()
+    }
+    pub async fn get_block<T: BytesLike>(&self, seq: u64) -> BlockEntry<T, M> {
+        todo!()
+    }
+
+    pub async fn get<T: BytesLike>(
+        &self,
+        key: T,
+        value: T,
+    ) -> Result<Option<Vec<u8>>, HypercoreError> {
+        //let node = await this.getRoot(false)
+        let node = self.get_root::<T>(false).await;
+        //while (true) {
+        //  if (node.block.isTarget(key)) {
+        //    return node.block.isDeletion() ? null : node.block.final(encoding)
+        //  }
+
+        //  let s = 0
+        //  let e = node.keys.length
+        //  let c
+
+        //  while (s < e) {
+        //    const mid = (s + e) >> 1
+
+        //    c = b4a.compare(key, await node.getKey(mid))
+
+        //    if (c === 0) return (await this.getBlock(node.keys[mid].seq)).final(encoding)
+
+        //    if (c < 0) e = mid
+        //    else s = mid + 1
+        //  }
+
+        //  if (!node.children.length) return null
+
+        //  const i = c < 0 ? e : s
+        //  node = await node.getChildNode(i)
+        //}
+        todo!()
+    }
+}
 
 #[cfg(test)]
 mod tests {
