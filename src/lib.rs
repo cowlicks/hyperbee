@@ -7,8 +7,8 @@ use hypercore::{Hypercore, HypercoreError, Info};
 use messages::{Node, YoloIndex};
 use prost::{bytes::Buf, DecodeError, EncodeError, Message};
 
-pub trait BytesLike: Into<Vec<u8>> + From<Vec<u8>> + Clone + PartialEq {}
-impl<T: Into<Vec<u8>> + From<Vec<u8>> + Clone + PartialEq> BytesLike for T {}
+pub trait BytesLike: Into<Vec<u8>> + From<Vec<u8>> + Clone + PartialEq + Buf {}
+impl<T: Into<Vec<u8>> + From<Vec<u8>> + Clone + PartialEq + Buf> BytesLike for T {}
 
 pub trait CoreMem: random_access_storage::RandomAccess + std::fmt::Debug + Send {}
 impl<T: random_access_storage::RandomAccess + std::fmt::Debug + Send> CoreMem for T {}
@@ -95,7 +95,7 @@ impl<T: BytesLike> Pointers<T> {
     }
 }
 
-fn inflate<B: Buf, T: BytesLike>(buf: B) -> Result<Pointers<T>, DecodeError> {
+fn inflate<T: BytesLike>(buf: T) -> Result<Pointers<T>, DecodeError> {
     return Pointers::new(buf);
 }
 
@@ -154,7 +154,6 @@ impl<T: BytesLike> TreeNode<T> {
 //pub struct BlockEntry<T: BytesLike, M: CoreMem> {
 pub struct BlockEntry<T: BytesLike> {
     seq: u64,
-    //tree: Batch<M>,
     index: Option<Pointers<T>>,
     index_buffer: T,
     key: T,
@@ -187,43 +186,9 @@ impl<T: BytesLike> BlockEntry<T> {
       }
     */
     fn get_tree_node(&self, offset: u64) -> TreeNode<T> {
-        let index = inflate(self.index_buffer);
+        let buf: Vec<u8> = self.index_buffer.clone().into();
+        let index = Pointers::<T>::new(&buf[..]);
         todo!()
-    }
-}
-
-// TODO this next
-/// Collects a series of actions and executes them atomically
-struct Batch<M: CoreMem> {
-    tree: Hyperbee<M>,
-    core: Hypercore<M>,
-    //this.index = tree._batches.push(this) - 1
-    //this.blocks = cache ? new Map() : null
-    //this.autoFlush = !batchLock
-    //this.rootSeq = 0
-    //this.root = null
-    //this.length = 0
-    //this.options = options
-    //this.locked = null
-    //this.batchLock = batchLock
-    //this.onseq = this.options.onseq || noop
-    //this.appending = null
-    //this.isSnapshot = this.core !== this.tree.core
-    //this.shouldUpdate = this.options.update !== false
-    //this.updating = null
-    //this.encoding = {
-    //  key: options.keyEncoding ? codecs(options.keyEncoding) : tree.keyEncoding,
-    //  value: options.valueEncoding ? codecs(options.valueEncoding) : tree.valueEncoding
-    //}
-}
-
-impl<M: CoreMem> Batch<M> {
-    fn new(
-        tree: Hyperbee<M>,
-        core: Hypercore<M>,
-        //batchLock: Option<()>, cache: ()
-    ) -> Self {
-        Batch { tree, core }
     }
 }
 
@@ -286,13 +251,13 @@ impl<M: CoreMem> Hyperbee<M> {
     }
     /// Gets the root of the tree
     pub async fn get_root<T: BytesLike>(&mut self, _ensure_header: bool) -> TreeNode<T> {
-        let _block: BlockEntry<Vec<u8>> = self.get_block(self.version() - 1).await;
-        _block.get_tree_node(0)
+        let block: BlockEntry<T> = self.get_block(self.version() - 1).await;
+        block.get_tree_node(0)
     }
-    pub async fn get_block<T: BytesLike>(&mut self, _seq: u64) -> BlockEntry<T> {
-        let x = self.core.get(_seq).await.unwrap().unwrap();
+    pub async fn get_block<T: BytesLike>(&mut self, seq: u64) -> BlockEntry<T> {
+        let x = self.core.get(seq).await.unwrap().unwrap();
         let node = Node::decode(&x[..]).unwrap();
-        BlockEntry::new(_seq, node)
+        BlockEntry::new(seq, node)
     }
 
     pub async fn get<T: BytesLike>(&mut self, key: T) -> Result<Option<Vec<u8>>, HypercoreError> {
@@ -306,44 +271,6 @@ impl<M: CoreMem> Hyperbee<M> {
             if node.block.is_target(&key) {
                 return Ok(Some(node.block.index_buffer.clone().into()));
             }
-            //
-            //  let s = 0
-            //  let e = node.keys.length
-            //  let c
-            let s = 0;
-            let e = node.keys.len();
-            /*
-            {
-                let c = while s < e {
-                    let mid = ((s + e) >> 1) as u64;
-                    // compare these
-                    let comp = key == node.get_key(mid).await;
-                    if comp == 0 {}
-                };
-
-                if node.children.len() == 0 {
-                    return Ok(Option::None);
-                }
-                //let i = c < 0 ? e : s;
-            }
-            */
-
-            //  while (s < e) {
-            //    const mid = (s + e) >> 1
-
-            //    c = b4a.compare(key, await node.getKey(mid))
-
-            //    if (c === 0) return (await this.getBlock(node.keys[mid].seq)).final(encoding)
-
-            //    if (c < 0) e = mid
-            //    else s = mid + 1
-            //  }
-
-            //  if (!node.children.length) return null
-
-            //  const i = c < 0 ? e : s
-            //  node = await node.getChildNode(i)
-            //}
             todo!()
         }
     }
@@ -354,25 +281,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn construct_key() {
-        Key {
-            seq: 0,
-            value: "foo".to_string(),
-        };
-    }
-
-    #[test]
-    fn construct_child() {
-        Child {
-            seq: 0,
-            offset: 0,
-            value: "foo".to_string(),
-        };
-    }
-    #[test]
     fn foo() {
         let buf = vec![10, 2, 1, 2, 18, 2, 3, 4];
         let level = messages::yolo_index::Level::decode(&buf[..]);
         dbg!(&level);
+    }
+
+    #[test]
+    fn looper() {
+        let mut o = 1;
+        loop {
+            let x = o + 2;
+            dbg!(&x);
+            dbg!(&o);
+            o = o + 3;
+            if o > 55 {
+                break;
+            }
+        }
     }
 }
