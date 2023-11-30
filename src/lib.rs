@@ -118,21 +118,17 @@ fn deflate<T: BytesLike>(index: Vec<Level<T>>) -> Result<Vec<u8>, EncodeError> {
     return Ok(buf);
 }
 
-struct TreeNode<T: BytesLike, M: CoreMem> {
-    block: BlockEntry<T, M>,
+/// A node in the tree
+pub struct TreeNode<T: BytesLike> {
+    block: BlockEntry<T>,
     keys: Vec<Key<T>>,
     children: Vec<Child<T>>,
     offset: u64,
     changed: bool,
 }
 
-impl<T: BytesLike, M: CoreMem> TreeNode<T, M> {
-    fn new(
-        block: BlockEntry<T, M>,
-        keys: Vec<Key<T>>,
-        children: Vec<Child<T>>,
-        offset: u64,
-    ) -> Self {
+impl<T: BytesLike> TreeNode<T> {
+    fn new(block: BlockEntry<T>, keys: Vec<Key<T>>, children: Vec<Child<T>>, offset: u64) -> Self {
         let out = TreeNode {
             block,
             offset,
@@ -146,29 +142,29 @@ impl<T: BytesLike, M: CoreMem> TreeNode<T, M> {
     fn preload(&self) {
         todo!()
     }
-    async fn get_key(&self, seq: u64) -> T {
+    async fn get_key(&self, _seq: u64) -> T {
         todo!()
     }
 
-    async fn get_block(&self, seq: u64) -> BlockEntry<T, M> {
+    async fn get_block(&self, _seq: u64) -> BlockEntry<T> {
         todo!()
     }
 }
 
-struct BlockEntry<T: BytesLike, M: CoreMem> {
+//pub struct BlockEntry<T: BytesLike, M: CoreMem> {
+pub struct BlockEntry<T: BytesLike> {
     seq: u64,
-    tree: Batch<M>,
+    //tree: Batch<M>,
     index: Option<Pointers<T>>,
     index_buffer: T,
     key: T,
     value: Option<T>,
 }
 
-impl<T: BytesLike, M: CoreMem> BlockEntry<T, M> {
-    fn new(seq: u64, tree: Batch<M>, entry: Node) -> Self {
+impl<T: BytesLike> BlockEntry<T> {
+    fn new(seq: u64, entry: Node) -> Self {
         BlockEntry {
             seq,
-            tree,
             index: Option::None,
             index_buffer: entry.index.into(),
             key: entry.key.into(),
@@ -180,7 +176,18 @@ impl<T: BytesLike, M: CoreMem> BlockEntry<T, M> {
         key == &self.key
     }
 
-    fn get_tree_node(offset: u64) -> TreeNode<T, M> {
+    /*
+           getTreeNode (offset) {
+        if (this.index === null) {
+          this.index = inflate(this.indexBuffer)
+          this.indexBuffer = null
+        }
+        const entry = this.index.get(offset)
+        return new TreeNode(this, entry.keys, entry.children, offset)
+      }
+    */
+    fn get_tree_node(&self, offset: u64) -> TreeNode<T> {
+        let index = inflate(self.index_buffer);
         todo!()
     }
 }
@@ -278,15 +285,17 @@ impl<M: CoreMem> Hyperbee<M> {
         self.core.info().length
     }
     /// Gets the root of the tree
-    pub async fn get_root<T: BytesLike>(&self, ensure_header: bool) -> TreeNode<T, M> {
-        let block = self.get_block(self.version() - 1).await;
-        todo!()
+    pub async fn get_root<T: BytesLike>(&mut self, _ensure_header: bool) -> TreeNode<T> {
+        let _block: BlockEntry<Vec<u8>> = self.get_block(self.version() - 1).await;
+        _block.get_tree_node(0)
     }
-    pub async fn get_block<T: BytesLike>(&self, seq: u64) -> BlockEntry<T, M> {
-        todo!()
+    pub async fn get_block<T: BytesLike>(&mut self, _seq: u64) -> BlockEntry<T> {
+        let x = self.core.get(_seq).await.unwrap().unwrap();
+        let node = Node::decode(&x[..]).unwrap();
+        BlockEntry::new(_seq, node)
     }
 
-    pub async fn get<T: BytesLike>(&self, key: T) -> Result<Option<Vec<u8>>, HypercoreError> {
+    pub async fn get<T: BytesLike>(&mut self, key: T) -> Result<Option<Vec<u8>>, HypercoreError> {
         //let node = await this.getRoot(false)
         let node = self.get_root::<T>(false).await;
         //while (true) {
