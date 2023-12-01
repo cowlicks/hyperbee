@@ -16,24 +16,34 @@ struct Key {
     value: Option<Vec<u8>>,
 }
 
-impl Key {
-    fn new(seq: u64, value: Option<Vec<u8>>) -> Self {
-        Key { seq, value }
-    }
-}
-
 #[derive(Clone, Debug)]
 struct Child {
     seq: u64,
     offset: u64,            // correct?
     value: Option<Vec<u8>>, // correct?
 }
-impl Child {
-    fn new(seq: u64, offset: u64, value: Option<Vec<u8>>) -> Self {
-        Child { seq, offset, value }
-    }
+
+#[derive(Clone, Debug)]
+pub struct BlockEntry {
+    /// index in the hypercore
+    seq: u64,
+    index: Option<Pointers>,
+    index_buffer: Vec<u8>,
+    key: Vec<u8>,
+    value: Option<Vec<u8>>,
 }
 
+/// A node in the tree
+#[derive(Debug)]
+pub struct TreeNode {
+    block: BlockEntry,
+    keys: Vec<Key>,
+    children: Vec<Child>,
+    offset: u64,
+    changed: bool,
+}
+
+//
 // NB: this is a smart wrapper around the proto_buf messages::yolo_index::Level;
 #[derive(Clone, Debug)]
 struct Level {
@@ -41,15 +51,77 @@ struct Level {
     children: Vec<Child>,
 }
 
+#[derive(Clone, Debug)]
+struct Pointers {
+    levels: Vec<Level>,
+}
+
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned", derive(Debug))]
+pub struct Hyperbee<M: CoreMem> {
+    //this.core = core
+    pub core: Hypercore<M>,
+    //this.keyEncoding = opts.keyEncoding ? codecs(opts.keyEncoding) : null
+    // TODO make enum
+    //key_encoding: String,
+
+    //this.valueEncoding = opts.valueEncoding ? codecs(opts.valueEncoding) : null
+    // TODO make enum
+    //value_encoding: String,
+
+    //this.extension = opts.extension !== false ? opts.extension || Extension.register(this) : null
+    //this.metadata = opts.metadata || null
+    //this.lock = opts.lock || mutexify()
+
+    //this.sep = opts.sep || SEP
+    // TODO set default
+    //sep: String,
+
+    //this.readonly = !!opts.readonly
+    // TODO set default false
+    //readonly: bool,
+
+    //this.prefix = opts.prefix || null
+    // TODO set default
+    //prefix: String,
+    //this._unprefixedKeyEncoding = this.keyEncoding
+    //this._sub = !!this.prefix
+    //this._checkout = opts.checkout || 0
+    //this._view = !!opts._view
+
+    //this._onappendBound = this._view ? null : this._onappend.bind(this)
+    //this._ontruncateBound = this._view ? null : this._ontruncate.bind(this)
+    //this._watchers = this._onappendBound ? [] : null
+    //this._entryWatchers = this._onappendBound ? [] : null
+    //this._sessions = opts.sessions !== false
+
+    //this._batches = []
+
+    //if (this._watchers) {
+    //  this.core.on('append', this._onappendBound)
+    //  this.core.on('truncate', this._ontruncateBound)
+    //}
+
+    //if (this.prefix && opts._sub) {
+    //  this.keyEncoding = prefixEncoding(this.prefix, this.keyEncoding)
+    //}
+}
+impl Key {
+    fn new(seq: u64, value: Option<Vec<u8>>) -> Self {
+        Key { seq, value }
+    }
+}
+
+impl Child {
+    fn new(seq: u64, offset: u64, value: Option<Vec<u8>>) -> Self {
+        Child { seq, offset, value }
+    }
+}
+
 impl Level {
     fn new(keys: Vec<Key>, children: Vec<Child>) -> Self {
         Self { keys, children }
     }
-}
-
-#[derive(Clone, Debug)]
-struct Pointers {
-    levels: Vec<Level>,
 }
 
 impl Pointers {
@@ -112,16 +184,6 @@ fn deflate(index: Vec<Level>) -> Result<Vec<u8>, EncodeError> {
     return Ok(buf);
 }
 
-/// A node in the tree
-#[derive(Debug)]
-pub struct TreeNode {
-    block: BlockEntry,
-    keys: Vec<Key>,
-    children: Vec<Child>,
-    offset: u64,
-    changed: bool,
-}
-
 impl TreeNode {
     fn new(block: BlockEntry, keys: Vec<Key>, children: Vec<Child>, offset: u64) -> Self {
         let out = TreeNode {
@@ -159,16 +221,6 @@ impl TreeNode {
     async fn get_block(&self, _seq: u64) -> BlockEntry {
         todo!()
     }
-}
-
-//pub struct BlockEntry<T: BytesLike, M: CoreMem> {
-#[derive(Clone, Debug)]
-pub struct BlockEntry {
-    seq: u64,
-    index: Option<Pointers>,
-    index_buffer: Vec<u8>,
-    key: Vec<u8>,
-    value: Option<Vec<u8>>,
 }
 
 impl BlockEntry {
@@ -210,56 +262,6 @@ impl BlockEntry {
 }
 
 // TODO use builder pattern macros for Hyperbee opts
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned", derive(Debug))]
-pub struct Hyperbee<M: CoreMem> {
-    //this.core = core
-    pub core: Hypercore<M>,
-    //this.keyEncoding = opts.keyEncoding ? codecs(opts.keyEncoding) : null
-    // TODO make enum
-    //key_encoding: String,
-
-    //this.valueEncoding = opts.valueEncoding ? codecs(opts.valueEncoding) : null
-    // TODO make enum
-    //value_encoding: String,
-
-    //this.extension = opts.extension !== false ? opts.extension || Extension.register(this) : null
-    //this.metadata = opts.metadata || null
-    //this.lock = opts.lock || mutexify()
-
-    //this.sep = opts.sep || SEP
-    // TODO set default
-    //sep: String,
-
-    //this.readonly = !!opts.readonly
-    // TODO set default false
-    //readonly: bool,
-
-    //this.prefix = opts.prefix || null
-    // TODO set default
-    //prefix: String,
-    //this._unprefixedKeyEncoding = this.keyEncoding
-    //this._sub = !!this.prefix
-    //this._checkout = opts.checkout || 0
-    //this._view = !!opts._view
-
-    //this._onappendBound = this._view ? null : this._onappend.bind(this)
-    //this._ontruncateBound = this._view ? null : this._ontruncate.bind(this)
-    //this._watchers = this._onappendBound ? [] : null
-    //this._entryWatchers = this._onappendBound ? [] : null
-    //this._sessions = opts.sessions !== false
-
-    //this._batches = []
-
-    //if (this._watchers) {
-    //  this.core.on('append', this._onappendBound)
-    //  this.core.on('truncate', this._ontruncateBound)
-    //}
-
-    //if (this.prefix && opts._sub) {
-    //  this.keyEncoding = prefixEncoding(this.prefix, this.keyEncoding)
-    //}
-}
 
 impl<M: CoreMem> Hyperbee<M> {
     /// trying to duplicate Js Hb.versinon
@@ -278,15 +280,16 @@ impl<M: CoreMem> Hyperbee<M> {
     }
 
     pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, HypercoreError> {
-        //let node = await this.getRoot(false)
         let node = self.get_root(false).await;
         dbg!(&node.keys);
-        //while (true) {
+        dbg!(&node.children);
         loop {
+            // check if this is our guy
             if node.block.is_target(&key) {
                 return Ok(Some(node.block.index_buffer.clone().into()));
             }
 
+            // find
             let mut ki: isize = -1;
             for i in 0..node.keys.len() {
                 let val = node.get_key(i).await;
