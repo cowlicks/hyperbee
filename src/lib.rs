@@ -7,54 +7,52 @@ use hypercore::{Hypercore, HypercoreError, Info};
 use messages::{Node, YoloIndex};
 use prost::{bytes::Buf, DecodeError, EncodeError, Message};
 
-pub trait BytesLike: Into<Vec<u8>> + From<Vec<u8>> + Clone + PartialEq + Buf {}
-impl<T: Into<Vec<u8>> + From<Vec<u8>> + Clone + PartialEq + Buf> BytesLike for T {}
-
 pub trait CoreMem: random_access_storage::RandomAccess + std::fmt::Debug + Send {}
 impl<T: random_access_storage::RandomAccess + std::fmt::Debug + Send> CoreMem for T {}
 
-struct Key<T>
-where
-    T: BytesLike,
-{
+#[derive(Clone, Debug)]
+struct Key {
     seq: u64,
-    value: Option<T>,
+    value: Option<Vec<u8>>,
 }
 
-impl<T: BytesLike> Key<T> {
-    fn new(seq: u64, value: Option<T>) -> Self {
+impl Key {
+    fn new(seq: u64, value: Option<Vec<u8>>) -> Self {
         Key { seq, value }
     }
 }
 
-struct Child<T: BytesLike> {
+#[derive(Clone, Debug)]
+struct Child {
     seq: u64,
-    offset: u64,      // correct?
-    value: Option<T>, // correct?
+    offset: u64,            // correct?
+    value: Option<Vec<u8>>, // correct?
 }
-impl<T: BytesLike> Child<T> {
-    fn new(seq: u64, offset: u64, value: Option<T>) -> Self {
+impl Child {
+    fn new(seq: u64, offset: u64, value: Option<Vec<u8>>) -> Self {
         Child { seq, offset, value }
     }
 }
 
 // NB: this is a smart wrapper around the proto_buf messages::yolo_index::Level;
-struct Level<T: BytesLike> {
-    keys: Vec<Key<T>>,
-    children: Vec<Child<T>>,
+#[derive(Clone, Debug)]
+struct Level {
+    keys: Vec<Key>,
+    children: Vec<Child>,
 }
 
-impl<T: BytesLike> Level<T> {
-    fn new(keys: Vec<Key<T>>, children: Vec<Child<T>>) -> Self {
-        Level { keys, children }
+impl Level {
+    fn new(keys: Vec<Key>, children: Vec<Child>) -> Self {
+        Self { keys, children }
     }
 }
 
-struct Pointers<T: BytesLike> {
-    levels: Vec<Level<T>>,
+#[derive(Clone, Debug)]
+struct Pointers {
+    levels: Vec<Level>,
 }
 
-impl<T: BytesLike> Pointers<T> {
+impl Pointers {
     fn new<B: Buf>(buf: B) -> Result<Self, DecodeError> {
         let levels = YoloIndex::decode(buf)?
             .levels
@@ -79,7 +77,7 @@ impl<T: BytesLike> Pointers<T> {
         Ok(Pointers { levels })
     }
 
-    fn get(&self, i: usize) -> &Level<T> {
+    fn get(&self, i: usize) -> &Level {
         return &self.levels[i];
     }
 
@@ -95,11 +93,7 @@ impl<T: BytesLike> Pointers<T> {
     }
 }
 
-fn inflate<T: BytesLike>(buf: T) -> Result<Pointers<T>, DecodeError> {
-    return Pointers::new(buf);
-}
-
-fn deflate<T: BytesLike>(index: Vec<Level<T>>) -> Result<Vec<u8>, EncodeError> {
+fn deflate(index: Vec<Level>) -> Result<Vec<u8>, EncodeError> {
     let levels = index
         .iter()
         .map(|level| {
@@ -119,16 +113,17 @@ fn deflate<T: BytesLike>(index: Vec<Level<T>>) -> Result<Vec<u8>, EncodeError> {
 }
 
 /// A node in the tree
-pub struct TreeNode<T: BytesLike> {
-    block: BlockEntry<T>,
-    keys: Vec<Key<T>>,
-    children: Vec<Child<T>>,
+#[derive(Debug)]
+pub struct TreeNode {
+    block: BlockEntry,
+    keys: Vec<Key>,
+    children: Vec<Child>,
     offset: u64,
     changed: bool,
 }
 
-impl<T: BytesLike> TreeNode<T> {
-    fn new(block: BlockEntry<T>, keys: Vec<Key<T>>, children: Vec<Child<T>>, offset: u64) -> Self {
+impl TreeNode {
+    fn new(block: BlockEntry, keys: Vec<Key>, children: Vec<Child>, offset: u64) -> Self {
         let out = TreeNode {
             block,
             offset,
@@ -140,27 +135,43 @@ impl<T: BytesLike> TreeNode<T> {
         out
     }
     fn preload(&self) {
-        todo!()
+        //todo!()
     }
-    async fn get_key(&self, _seq: u64) -> T {
+    async fn get_key(&self, index: usize) -> Vec<u8> {
+        /*
+                 async getKey (index) {
+          const key = this.keys[index]
+          if (key.value) return key.value
+          const k = (key.seq === this.block.seq) ?
+          this.block.key :
+          await this.block.tree.getKey(key.seq);
+
+          return (key.value = k)
+        }
+              */
+        let key = self.keys[index].clone();
+        if let Some(value) = key.value {
+            return value;
+        }
         todo!()
     }
 
-    async fn get_block(&self, _seq: u64) -> BlockEntry<T> {
+    async fn get_block(&self, _seq: u64) -> BlockEntry {
         todo!()
     }
 }
 
 //pub struct BlockEntry<T: BytesLike, M: CoreMem> {
-pub struct BlockEntry<T: BytesLike> {
+#[derive(Clone, Debug)]
+pub struct BlockEntry {
     seq: u64,
-    index: Option<Pointers<T>>,
-    index_buffer: T,
-    key: T,
-    value: Option<T>,
+    index: Option<Pointers>,
+    index_buffer: Vec<u8>,
+    key: Vec<u8>,
+    value: Option<Vec<u8>>,
 }
 
-impl<T: BytesLike> BlockEntry<T> {
+impl BlockEntry {
     fn new(seq: u64, entry: Node) -> Self {
         BlockEntry {
             seq,
@@ -171,7 +182,7 @@ impl<T: BytesLike> BlockEntry<T> {
         }
     }
 
-    fn is_target(&self, key: &T) -> bool {
+    fn is_target(&self, key: &[u8]) -> bool {
         key == &self.key
     }
 
@@ -185,10 +196,16 @@ impl<T: BytesLike> BlockEntry<T> {
         return new TreeNode(this, entry.keys, entry.children, offset)
       }
     */
-    fn get_tree_node(&self, offset: u64) -> TreeNode<T> {
+    fn get_tree_node(&self, offset: u64) -> TreeNode {
         let buf: Vec<u8> = self.index_buffer.clone().into();
-        let index = Pointers::<T>::new(&buf[..]);
-        todo!()
+        let index = Pointers::new(&buf[..]).unwrap();
+        let entry = index.get(offset as usize);
+        TreeNode::new(
+            self.clone(),
+            entry.keys.clone(),
+            entry.children.clone(),
+            offset,
+        )
     }
 }
 
@@ -250,27 +267,58 @@ impl<M: CoreMem> Hyperbee<M> {
         self.core.info().length
     }
     /// Gets the root of the tree
-    pub async fn get_root<T: BytesLike>(&mut self, _ensure_header: bool) -> TreeNode<T> {
-        let block: BlockEntry<T> = self.get_block(self.version() - 1).await;
+    pub async fn get_root(&mut self, _ensure_header: bool) -> TreeNode {
+        let block: BlockEntry = self.get_block(self.version() - 1).await;
         block.get_tree_node(0)
     }
-    pub async fn get_block<T: BytesLike>(&mut self, seq: u64) -> BlockEntry<T> {
+    pub async fn get_block(&mut self, seq: u64) -> BlockEntry {
         let x = self.core.get(seq).await.unwrap().unwrap();
         let node = Node::decode(&x[..]).unwrap();
         BlockEntry::new(seq, node)
     }
 
-    pub async fn get<T: BytesLike>(&mut self, key: T) -> Result<Option<Vec<u8>>, HypercoreError> {
+    pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, HypercoreError> {
         //let node = await this.getRoot(false)
-        let node = self.get_root::<T>(false).await;
+        let node = self.get_root(false).await;
+        dbg!(&node.keys);
         //while (true) {
         loop {
-            //  if (node.block.isTarget(key)) {
-            //    return node.block.isDeletion() ? null : node.block.final(encoding)
-            //  }
             if node.block.is_target(&key) {
                 return Ok(Some(node.block.index_buffer.clone().into()));
             }
+
+            let mut ki: isize = -1;
+            for i in 0..node.keys.len() {
+                let val = node.get_key(i).await;
+                if val > key {
+                    ki = i as isize;
+                    break;
+                }
+            }
+            dbg!(ki);
+            /*
+            let s = 0
+            let e = node.keys.length
+            let c
+
+            while (s < e) {
+              const mid = (s + e) >> 1
+
+              c = b4a.compare(key, await node.getKey(mid))
+
+              /// found it
+              if (c === 0) return (await this.getBlock(node.keys[mid].seq)).final(encoding)
+
+              if (c < 0) e = mid
+              else s = mid + 1
+            }
+
+            if (!node.children.length) return null
+
+            const i = c < 0 ? e : s
+            node = await node.getChildNode(i)
+            */
+
             todo!()
         }
     }
@@ -287,6 +335,16 @@ mod tests {
         dbg!(&level);
     }
 
+    #[test]
+    fn vec_order() {
+        let a: Vec<u8> = vec![1];
+        let b: Vec<u8> = vec![1, 2];
+        let c: Vec<u8> = vec![1, 3];
+        let d: Vec<u8> = vec![5];
+        assert!(a < b);
+        assert!(a < c);
+        assert!(c < d);
+    }
     #[test]
     fn looper() {
         let mut o = 1;
