@@ -27,10 +27,18 @@ struct Child {
 pub struct BlockEntry {
     /// index in the hypercore
     seq: u64,
+    /// Pointers::new(Node::new(hypercore.get(seq)).index))
     index: Option<Pointers>,
+    /// Node::new(hypercore.get(seq)).index
     index_buffer: Vec<u8>,
+    /// Node::new(hypercore.get(seq)).key
     key: Vec<u8>,
+    /// Node::new(hypercore.get(seq)).value
     value: Option<Vec<u8>>,
+    // TODO wrap a ref to the hyperbee or hypercore here
+    // this is our reference to the hypercore.
+    // we use it do things like hyperore.get(..)
+    //tree: Arc<Hyperbee>
 }
 
 /// A node in the tree
@@ -201,7 +209,7 @@ impl TreeNode {
     }
     async fn get_key(&self, index: usize) -> Vec<u8> {
         /*
-                 async getKey (index) {
+             async getKey (index) {
           const key = this.keys[index]
           if (key.value) return key.value
           const k = (key.seq === this.block.seq) ?
@@ -215,6 +223,13 @@ impl TreeNode {
         if let Some(value) = key.value {
             return value;
         }
+        /*
+        let value = if key.seq == self.block.seq {
+            self.block.key
+        } else {
+            self.block.tree.get_key(key.seq)
+        }
+        */
         todo!()
     }
 
@@ -248,14 +263,15 @@ impl BlockEntry {
         return new TreeNode(this, entry.keys, entry.children, offset)
       }
     */
+    /// offset is the offset of the node within the hypercore block
     fn get_tree_node(&self, offset: u64) -> TreeNode {
         let buf: Vec<u8> = self.index_buffer.clone().into();
-        let index = Pointers::new(&buf[..]).unwrap();
-        let entry = index.get(offset as usize);
+        let pointers = Pointers::new(&buf[..]).unwrap();
+        let node_data = pointers.get(offset as usize);
         TreeNode::new(
             self.clone(),
-            entry.keys.clone(),
-            entry.children.clone(),
+            node_data.keys.clone(),
+            node_data.children.clone(),
             offset,
         )
     }
