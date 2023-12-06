@@ -315,25 +315,24 @@ impl<M: CoreMem> Hyperbee<M> {
             }
 
             // find
-            let mut ki: isize = -1;
+            let mut ki: usize = node.keys.len();
             for i in 0..node.keys.len() {
                 let val = node.get_key(i).await;
-                dbg!(&val.len());
-                if val > key {
-                    ki = i as isize;
+                if key < val {
+                    ki = i;
                     break;
                 }
                 if val == key {
-                    return Ok(self.get_block(node.keys[ki as usize].seq).await.value);
+                    let the_key = node.keys[i].clone();
+                    return Ok(self.get_block(the_key.seq).await.value);
                 }
             }
 
-            // get Child
-            if ki == 0 {
-                return Ok(self.get_block(node.keys[ki as usize].seq).await.value);
+            if node.children.is_empty() {
+                return Ok(None);
             }
-            dbg!(ki);
-            todo!()
+
+            node = node.get_child(ki).await;
         }
     }
 }
