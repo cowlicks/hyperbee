@@ -3,7 +3,7 @@ pub mod messages {
 }
 
 use derive_builder::Builder;
-use hypercore::{Hypercore, HypercoreError, Info};
+use hypercore::{Hypercore, HypercoreError};
 use messages::{Node, YoloIndex};
 use prost::{bytes::Buf, DecodeError, EncodeError, Message};
 use std::sync::{Arc, Mutex};
@@ -12,13 +12,13 @@ pub trait CoreMem: random_access_storage::RandomAccess + std::fmt::Debug + Send 
 impl<T: random_access_storage::RandomAccess + std::fmt::Debug + Send> CoreMem for T {}
 
 #[derive(Clone, Debug)]
-struct Key {
+pub struct Key {
     seq: u64,
     value: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug)]
-struct Child {
+pub struct Child {
     seq: u64,
     offset: u64,            // correct?
     value: Option<Vec<u8>>, // correct?
@@ -48,20 +48,20 @@ pub struct TreeNode<M: CoreMem> {
     block: BlockEntry<M>,
     keys: Vec<Key>,
     children: Vec<Child>,
-    offset: u64,
-    changed: bool,
+    //offset: u64,
+    //changed: bool,
 }
 
 //
 // NB: this is a smart wrapper around the proto_buf messages::yolo_index::Level;
 #[derive(Clone, Debug)]
-struct Level {
+pub struct Level {
     keys: Vec<Key>,
     children: Vec<Child>,
 }
 
 #[derive(Clone, Debug)]
-struct Pointers {
+pub struct Pointers {
     levels: Vec<Level>,
 }
 
@@ -69,52 +69,7 @@ struct Pointers {
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
     //this.core = core
-    //pub core: Hypercore<M>,
     pub core: Arc<Mutex<Hypercore<M>>>,
-    //this.keyEncoding = opts.keyEncoding ? codecs(opts.keyEncoding) : null
-    // TODO make enum
-    //key_encoding: String,
-
-    //this.valueEncoding = opts.valueEncoding ? codecs(opts.valueEncoding) : null
-    // TODO make enum
-    //value_encoding: String,
-
-    //this.extension = opts.extension !== false ? opts.extension || Extension.register(this) : null
-    //this.metadata = opts.metadata || null
-    //this.lock = opts.lock || mutexify()
-
-    //this.sep = opts.sep || SEP
-    // TODO set default
-    //sep: String,
-
-    //this.readonly = !!opts.readonly
-    // TODO set default false
-    //readonly: bool,
-
-    //this.prefix = opts.prefix || null
-    // TODO set default
-    //prefix: String,
-    //this._unprefixedKeyEncoding = this.keyEncoding
-    //this._sub = !!this.prefix
-    //this._checkout = opts.checkout || 0
-    //this._view = !!opts._view
-
-    //this._onappendBound = this._view ? null : this._onappend.bind(this)
-    //this._ontruncateBound = this._view ? null : this._ontruncate.bind(this)
-    //this._watchers = this._onappendBound ? [] : null
-    //this._entryWatchers = this._onappendBound ? [] : null
-    //this._sessions = opts.sessions !== false
-
-    //this._batches = []
-
-    //if (this._watchers) {
-    //  this.core.on('append', this._onappendBound)
-    //  this.core.on('truncate', this._ontruncateBound)
-    //}
-
-    //if (this.prefix && opts._sub) {
-    //  this.keyEncoding = prefixEncoding(this.prefix, this.keyEncoding)
-    //}
 }
 impl Key {
     fn new(seq: u64, value: Option<Vec<u8>>) -> Self {
@@ -163,7 +118,7 @@ impl Pointers {
         return &self.levels[i];
     }
 
-    fn has_key(&self, seq: u64) -> bool {
+    pub fn has_key(&self, seq: u64) -> bool {
         for lvl in &self.levels {
             for k in &lvl.keys {
                 if k.seq == seq {
@@ -175,7 +130,7 @@ impl Pointers {
     }
 }
 
-fn deflate(index: Vec<Level>) -> Result<Vec<u8>, EncodeError> {
+pub fn deflate(index: Vec<Level>) -> Result<Vec<u8>, EncodeError> {
     let levels = index
         .iter()
         .map(|level| {
@@ -198,31 +153,60 @@ impl<M: CoreMem> TreeNode<M> {
     fn new(block: BlockEntry<M>, keys: Vec<Key>, children: Vec<Child>, offset: u64) -> Self {
         let out = TreeNode {
             block,
-            offset,
             keys,
             children,
-            changed: false,
+            //offset,
+            //changed: false,
         };
         out
     }
     async fn get_key(&self, index: usize) -> Vec<u8> {
         let key = self.keys[index].clone();
         if let Some(value) = key.value {
+            dbg!("get_key has value");
             return value;
         }
         let value = if key.seq == self.block.seq {
-            self.block.key.clone()
+            dbg!("get_key key.seq == block.seq");
+            //self.block.key.clone()
+            todo!()
         } else {
+            dbg!("_get_key from core");
             self._get_key(key.seq).await
         };
         return value;
     }
 
+    // TODO dedupe with hb.get_block
+    async fn get_block(&self, seq: u64) -> BlockEntry<M> {
+        let mut core = self.block.core.lock().unwrap();
+        let b = core.get(seq).await.unwrap().unwrap();
+        let node = Node::decode(&b[..]).unwrap();
+        let b = BlockEntry::new(seq, node, self.block.core.clone());
+        b
+    }
     async fn _get_key(&self, seq: u64) -> Vec<u8> {
+        let block = self.get_block(seq).await;
+        block.key
+    }
+    /*
+    async getChildNode (index) {
+      const child = this.children[index]
+      if (child.value) return child.value
+      const block = child.seq === this.block.seq ? this.block : await this.block.tree.getBlock(child.seq)
+      return (child.value = block.getTreeNode(child.offset))
+    }
+    */
+    pub async fn get_child(&self, index: usize) -> TreeNode<M> {
+        let child = self.children[index].clone();
+        if let Some(value) = child.value {
+            todo!()
+            //return value;
+        }
         todo!()
     }
 
-    async fn get_block(&self, _seq: u64) -> BlockEntry<M> {
+    pub async fn nearest_node(&mut self, key: Vec<u8>) -> Result<TreeNode<M>, HypercoreError> {
         todo!()
     }
 }
@@ -244,15 +228,16 @@ impl<M: CoreMem> BlockEntry<M> {
     }
 
     /*
-           getTreeNode (offset) {
+     getTreeNode (offset) {
         if (this.index === null) {
           this.index = inflate(this.indexBuffer)
           this.indexBuffer = null
         }
         const entry = this.index.get(offset)
         return new TreeNode(this, entry.keys, entry.children, offset)
-      }
+     }
     */
+
     /// offset is the offset of the node within the hypercore block
     fn get_tree_node(self, offset: u64) -> TreeNode<M> {
         let buf: Vec<u8> = self.index_buffer.clone().into();
@@ -299,35 +284,17 @@ impl<M: CoreMem> Hyperbee<M> {
             let mut ki: isize = -1;
             for i in 0..node.keys.len() {
                 let val = node.get_key(i).await;
+                dbg!(&val.len());
                 if val > key {
                     ki = i as isize;
                     break;
                 }
+                if val == key {
+                    todo!()
+                }
             }
+            //node.get_child(ki + 1 as usize);
             dbg!(ki);
-            /*
-            let s = 0
-            let e = node.keys.length
-            let c
-
-            while (s < e) {
-              const mid = (s + e) >> 1
-
-              c = b4a.compare(key, await node.getKey(mid))
-
-              /// found it
-              if (c === 0) return (await this.getBlock(node.keys[mid].seq)).final(encoding)
-
-              if (c < 0) e = mid
-              else s = mid + 1
-            }
-
-            if (!node.children.length) return null
-
-            const i = c < 0 ? e : s
-            node = await node.getChildNode(i)
-            */
-
             todo!()
         }
     }
