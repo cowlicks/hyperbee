@@ -207,8 +207,42 @@ impl<M: CoreMem> TreeNode<M> {
         return child_block.get_tree_node(child.offset);
     }
 
-    pub async fn nearest_node(&mut self, key: Vec<u8>) -> Result<TreeNode<M>, HypercoreError> {
-        todo!()
+    #[async_recursion]
+    pub async fn nearest_node(
+        &self,
+        key: Vec<u8>,
+        mut path: Vec<isize>,
+    ) -> Result<(bool, Vec<isize>), HypercoreError> {
+        for i in 0..self.keys.len() {
+            let val = self.get_key(i).await;
+            if val >= key {
+                path.push(i as isize);
+
+                if val == key {
+                    // found. stop
+                    return Ok((true, path));
+                }
+
+                if self.children.len() == 0 {
+                    return Ok((false, path));
+                }
+
+                return self
+                    .get_child(i + 1)
+                    .await
+                    .nearest_node(key.clone(), path)
+                    .await;
+            }
+        }
+        path.push(-1);
+        if self.children.is_empty() {
+            return Ok((false, path));
+        }
+        return self
+            .get_child(0)
+            .await
+            .nearest_node(key.clone(), path)
+            .await;
     }
 }
 
@@ -273,9 +307,7 @@ impl<M: CoreMem> Hyperbee<M> {
     }
 
     pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, HypercoreError> {
-        let node = self.get_root(false).await;
-        dbg!(&node.children.len());
-        dbg!(&node.keys.len());
+        let mut node = self.get_root(false).await;
         loop {
             // check if this is our guy
             if node.block.is_target(&key) {
