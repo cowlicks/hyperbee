@@ -171,7 +171,6 @@ impl<M: CoreMem> TreeNode<M> {
             //self.block.key.clone()
             todo!()
         } else {
-            dbg!("_get_key from core");
             self._get_key(key.seq).await
         };
         return value;
@@ -185,10 +184,12 @@ impl<M: CoreMem> TreeNode<M> {
         let b = BlockEntry::new(seq, node, self.block.core.clone());
         b
     }
+
     async fn _get_key(&self, seq: u64) -> Vec<u8> {
         let block = self.get_block(seq).await;
         block.key
     }
+
     /*
     async getChildNode (index) {
       const child = this.children[index]
@@ -273,7 +274,8 @@ impl<M: CoreMem> Hyperbee<M> {
 
     pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, HypercoreError> {
         let node = self.get_root(false).await;
-        dbg!(&node.children);
+        dbg!(&node.children.len());
+        dbg!(&node.keys.len());
         loop {
             // check if this is our guy
             if node.block.is_target(&key) {
@@ -290,10 +292,14 @@ impl<M: CoreMem> Hyperbee<M> {
                     break;
                 }
                 if val == key {
-                    todo!()
+                    return Ok(self.get_block(node.keys[ki as usize].seq).await.value);
                 }
             }
-            //node.get_child(ki + 1 as usize);
+
+            // get Child
+            if ki == 0 {
+                return Ok(self.get_block(node.keys[ki as usize].seq).await.value);
+            }
             dbg!(ki);
             todo!()
         }
