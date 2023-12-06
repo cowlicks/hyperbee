@@ -2,11 +2,14 @@ pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 
+use async_recursion::async_recursion;
 use derive_builder::Builder;
 use hypercore::{Hypercore, HypercoreError};
 use messages::{Node, YoloIndex};
 use prost::{bytes::Buf, DecodeError, EncodeError, Message};
-use std::sync::{Arc, Mutex};
+
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub trait CoreMem: random_access_storage::RandomAccess + std::fmt::Debug + Send {}
 impl<T: random_access_storage::RandomAccess + std::fmt::Debug + Send> CoreMem for T {}
@@ -178,7 +181,7 @@ impl<M: CoreMem> TreeNode<M> {
 
     // TODO dedupe with hb.get_block
     async fn get_block(&self, seq: u64) -> BlockEntry<M> {
-        let mut core = self.block.core.lock().unwrap();
+        let mut core = self.block.core.lock().await;
         let b = core.get(seq).await.unwrap().unwrap();
         let node = Node::decode(&b[..]).unwrap();
         let b = BlockEntry::new(seq, node, self.block.core.clone());
@@ -257,17 +260,17 @@ impl<M: CoreMem> BlockEntry<M> {
 
 impl<M: CoreMem> Hyperbee<M> {
     /// trying to duplicate Js Hb.versinon
-    pub fn version(&self) -> u64 {
-        self.core.lock().unwrap().info().length
+    pub async fn version(&self) -> u64 {
+        self.core.lock().await.info().length
     }
     /// Gets the root of the tree
     pub async fn get_root(&mut self, _ensure_header: bool) -> TreeNode<M> {
-        let block: BlockEntry<M> = self.get_block(self.version() - 1).await;
+        let block: BlockEntry<M> = self.get_block(self.version().await - 1).await;
         block.get_tree_node(0)
     }
 
     pub async fn get_block(&mut self, seq: u64) -> BlockEntry<M> {
-        let x = self.core.lock().unwrap().get(seq).await.unwrap().unwrap();
+        let x = self.core.lock().await.get(seq).await.unwrap().unwrap();
         let node = Node::decode(&x[..]).unwrap();
         BlockEntry::new(seq, node, self.core.clone())
     }
