@@ -203,25 +203,9 @@ impl<M: CoreMem> TreeNode<M> {
             children,
             changed: false,
         };
-        out.preload();
         out
     }
-    fn preload(&self) {
-        //todo!()
-    }
-
     async fn get_key(&self, index: usize) -> Vec<u8> {
-        /*
-             async getKey (index) {
-          const key = this.keys[index]
-          if (key.value) return key.value
-          const k = (key.seq === this.block.seq) ?
-          this.block.key :
-          await this.block.tree.getKey(key.seq);
-
-          return (key.value = k)
-        }
-              */
         let key = self.keys[index].clone();
         if let Some(value) = key.value {
             return value;
@@ -304,7 +288,6 @@ impl<M: CoreMem> Hyperbee<M> {
 
     pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, HypercoreError> {
         let node = self.get_root(false).await;
-        dbg!(&node.keys);
         dbg!(&node.children);
         loop {
             // check if this is our guy
