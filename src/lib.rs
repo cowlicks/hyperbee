@@ -203,11 +203,8 @@ impl<M: CoreMem> TreeNode<M> {
     */
     pub async fn get_child(&self, index: usize) -> TreeNode<M> {
         let child = self.children[index].clone();
-        if let Some(value) = child.value {
-            todo!()
-            //return value;
-        }
-        todo!()
+        let child_block = self.get_block(child.seq).await;
+        return child_block.get_tree_node(child.offset);
     }
 
     pub async fn nearest_node(&mut self, key: Vec<u8>) -> Result<TreeNode<M>, HypercoreError> {
