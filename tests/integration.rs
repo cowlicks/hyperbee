@@ -4,7 +4,7 @@ use tokio::sync::Mutex;
 
 use hypercore::{self, HypercoreBuilder, Storage};
 
-static HYPERBEE_STORAGE_DIR: &str = "./test_data/hb2";
+static HYPERBEE_STORAGE_DIR: &str = "./test_data/basic";
 
 #[tokio::test]
 async fn integration() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,11 +23,11 @@ async fn integration() -> Result<(), Box<dyn std::error::Error>> {
     let buf = "1".as_bytes();
     let x = hb.get(buf.into()).await?.unwrap();
     let x = std::str::from_utf8(&x).unwrap();
-    assert_eq!(x, "2");
+    assert_eq!(x, "1");
 
     let buf = "2".as_bytes();
     let x = hb.get(buf.into()).await?.unwrap();
     let x = std::str::from_utf8(&x).unwrap();
-    assert_eq!(x, "4");
+    assert_eq!(x, "2");
     Ok(())
 }
