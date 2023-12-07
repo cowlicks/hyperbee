@@ -6,11 +6,11 @@ import { rm, cp } from 'node:fs/promises';
 import Hypercore from 'hypercore';
 import Hyperbee from 'hyperbee';
 
-const DATA_DIR_NAME = 'basic';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const NODE_TEST_DATA_DIR_NAME = 'test_data'
 const RS_TEST_DATA_DIR_NAME = 'test_data'
-const PATH_TO_NODE_TEST_DATA = __dirname;
+const PATH_TO_NODE_TEST_DATA = join(__dirname, NODE_TEST_DATA_DIR_NAME);
 const PATH_TO_RS_TEST_DATA = join(__dirname, '..', RS_TEST_DATA_DIR_NAME);
 
 const rmTestData = async (dataName) => {
@@ -23,10 +23,14 @@ const copyTestData = async (dataName) => {
 
 }
 
+const DATA_DIR_NAME = 'basic';
+const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
+
+
 (async ()=> {
 
-  await rmTestData(DATA_DIR_NAME);
-  const core = new Hypercore(DATA_DIR_NAME)
+  await rmTestData(PATH_TO_DATA_DIR);
+  const core = new Hypercore(PATH_TO_DATA_DIR)
   const db = new Hyperbee(core)
   await db.ready()
 
