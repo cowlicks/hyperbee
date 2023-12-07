@@ -4,7 +4,7 @@ use tokio::sync::Mutex;
 
 use hypercore::{self, HypercoreBuilder, Storage};
 
-static HYPERBEE_STORAGE_DIR: &str = "./hb2";
+static HYPERBEE_STORAGE_DIR: &str = "./test_data/hb2";
 
 #[tokio::test]
 async fn integration() -> Result<(), Box<dyn std::error::Error>> {
