@@ -353,7 +353,7 @@ mod tests {
             let x = o + 2;
             dbg!(&x);
             dbg!(&o);
-            o = o + 3;
+            o += 3;
             if o > 55 {
                 break;
             }
