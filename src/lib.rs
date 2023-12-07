@@ -23,8 +23,8 @@ pub struct Key {
 #[derive(Clone, Debug)]
 pub struct Child {
     seq: u64,
-    offset: u64,            // correct?
-    value: Option<Vec<u8>>, // correct?
+    offset: u64,             // correct?
+    _value: Option<Vec<u8>>, // correct?
 }
 
 #[derive(Clone, Debug)]
@@ -32,7 +32,7 @@ pub struct BlockEntry<M: CoreMem> {
     /// index in the hypercore
     seq: u64,
     /// Pointers::new(Node::new(hypercore.get(seq)).index))
-    index: Option<Pointers>,
+    _index: Option<Pointers>,
     /// Node::new(hypercore.get(seq)).index
     index_buffer: Vec<u8>,
     /// Node::new(hypercore.get(seq)).key
@@ -81,8 +81,12 @@ impl Key {
 }
 
 impl Child {
-    fn new(seq: u64, offset: u64, value: Option<Vec<u8>>) -> Self {
-        Child { seq, offset, value }
+    fn new(seq: u64, offset: u64, _value: Option<Vec<u8>>) -> Self {
+        Child {
+            seq,
+            offset,
+            _value,
+        }
     }
 }
 
@@ -153,7 +157,7 @@ pub fn deflate(index: Vec<Level>) -> Result<Vec<u8>, EncodeError> {
 }
 
 impl<M: CoreMem> TreeNode<M> {
-    fn new(block: BlockEntry<M>, keys: Vec<Key>, children: Vec<Child>, offset: u64) -> Self {
+    fn new(block: BlockEntry<M>, keys: Vec<Key>, children: Vec<Child>, _offset: u64) -> Self {
         let out = TreeNode {
             block,
             keys,
@@ -250,7 +254,7 @@ impl<M: CoreMem> BlockEntry<M> {
     fn new(seq: u64, entry: Node, core: Arc<Mutex<Hypercore<M>>>) -> Self {
         BlockEntry {
             seq,
-            index: Option::None,
+            _index: Option::None,
             index_buffer: entry.index.into(),
             key: entry.key.into(),
             value: entry.value.map(|x| x.into()),
@@ -261,17 +265,6 @@ impl<M: CoreMem> BlockEntry<M> {
     fn is_target(&self, key: &[u8]) -> bool {
         key == &self.key
     }
-
-    /*
-     getTreeNode (offset) {
-        if (this.index === null) {
-          this.index = inflate(this.indexBuffer)
-          this.indexBuffer = null
-        }
-        const entry = this.index.get(offset)
-        return new TreeNode(this, entry.keys, entry.children, offset)
-     }
-    */
 
     /// offset is the offset of the node within the hypercore block
     fn get_tree_node(self, offset: u64) -> TreeNode<M> {
