@@ -296,7 +296,7 @@ impl<M: CoreMem> Hyperbee<M> {
         loop {
             // check if this is our guy
             if node.block.is_target(&key) {
-                return Ok(Some(node.block.index_buffer.clone()));
+                return Ok(node.block.value.clone());
             }
 
             // find

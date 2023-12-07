@@ -23,7 +23,8 @@ const copyTestData = async (dataName) => {
 
 }
 
-const N = 25
+const start = 0
+const stop = 25
 const DATA_DIR_NAME = 'basic';
 const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
 
@@ -35,11 +36,11 @@ const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
   const db = new Hyperbee(core)
   await db.ready()
 
-  for (let i = 0; i < N; i += 1) {
+  for (let i = start; i < stop; i += 1) {
     const x = String(i);
     await db.put(x, x);
   }
-  for (let i = 0; i < N; i += 1) {
+  for (let i = start; i < stop; i += 1) {
     const x = String(i);
     const res = await db.get(x);
     if (res.value.toString() !== x) {
