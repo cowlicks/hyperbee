@@ -105,7 +105,7 @@ impl Pointers {
                 let keys = level
                     .keys
                     .iter()
-                    .map(|k| Key::new(k.clone(), Option::None))
+                    .map(|k| Key::new(*k, Option::None))
                     .collect();
                 let mut children = vec![];
                 for i in (0..(level.children.len())).step_by(2) {
@@ -122,7 +122,7 @@ impl Pointers {
     }
 
     fn get(&self, i: usize) -> &Level {
-        return &self.levels[i];
+        &self.levels[i]
     }
 
     pub fn has_key(&self, seq: u64) -> bool {
@@ -133,7 +133,7 @@ impl Pointers {
                 }
             }
         }
-        return false;
+        false
     }
 }
 
@@ -141,7 +141,7 @@ pub fn deflate(index: Vec<Level>) -> Result<Vec<u8>, EncodeError> {
     let levels = index
         .iter()
         .map(|level| {
-            let keys: Vec<u64> = level.keys.iter().map(|k| k.seq.clone()).collect();
+            let keys: Vec<u64> = level.keys.iter().map(|k| k.seq).collect();
             let mut children = vec![];
             for i in 0..(level.children.len()) {
                 children.push(level.children[i].seq);
@@ -153,19 +153,18 @@ pub fn deflate(index: Vec<Level>) -> Result<Vec<u8>, EncodeError> {
         .collect();
     let mut buf = vec![];
     (YoloIndex { levels }).encode(&mut buf)?;
-    return Ok(buf);
+    Ok(buf)
 }
 
 impl<M: CoreMem> TreeNode<M> {
     fn new(block: BlockEntry<M>, keys: Vec<Key>, children: Vec<Child>, _offset: u64) -> Self {
-        let out = TreeNode {
+        TreeNode {
             block,
             keys,
             children,
             //offset,
             //changed: false,
-        };
-        out
+        }
     }
     async fn get_key(&self, index: usize) -> Vec<u8> {
         let key = self.keys[index].clone();
@@ -173,14 +172,13 @@ impl<M: CoreMem> TreeNode<M> {
             dbg!("get_key has value");
             return value;
         }
-        let value = if key.seq == self.block.seq {
+        if key.seq == self.block.seq {
             dbg!("get_key key.seq == block.seq");
             //self.block.key.clone()
             todo!()
         } else {
             self._get_key(key.seq).await
-        };
-        return value;
+        }
     }
 
     // TODO dedupe with hb.get_block
@@ -188,8 +186,7 @@ impl<M: CoreMem> TreeNode<M> {
         let mut core = self.block.core.lock().await;
         let b = core.get(seq).await.unwrap().unwrap();
         let node = Node::decode(&b[..]).unwrap();
-        let b = BlockEntry::new(seq, node, self.block.core.clone());
-        b
+        BlockEntry::new(seq, node, self.block.core.clone())
     }
 
     async fn _get_key(&self, seq: u64) -> Vec<u8> {
@@ -208,7 +205,7 @@ impl<M: CoreMem> TreeNode<M> {
     pub async fn get_child(&self, index: usize) -> TreeNode<M> {
         let child = self.children[index].clone();
         let child_block = self.get_block(child.seq).await;
-        return child_block.get_tree_node(child.offset);
+        child_block.get_tree_node(child.offset)
     }
 
     #[async_recursion]
@@ -227,7 +224,7 @@ impl<M: CoreMem> TreeNode<M> {
                     return Ok((true, path));
                 }
 
-                if self.children.len() == 0 {
+                if self.children.is_empty() {
                     return Ok((false, path));
                 }
 
@@ -242,11 +239,10 @@ impl<M: CoreMem> TreeNode<M> {
         if self.children.is_empty() {
             return Ok((false, path));
         }
-        return self
-            .get_child(0)
+        self.get_child(0)
             .await
             .nearest_node(key.clone(), path)
-            .await;
+            .await
     }
 }
 
@@ -255,20 +251,20 @@ impl<M: CoreMem> BlockEntry<M> {
         BlockEntry {
             seq,
             _index: Option::None,
-            index_buffer: entry.index.into(),
-            key: entry.key.into(),
-            value: entry.value.map(|x| x.into()),
+            index_buffer: entry.index,
+            key: entry.key,
+            value: entry.value,
             core,
         }
     }
 
     fn is_target(&self, key: &[u8]) -> bool {
-        key == &self.key
+        key == self.key
     }
 
     /// offset is the offset of the node within the hypercore block
     fn get_tree_node(self, offset: u64) -> TreeNode<M> {
-        let buf: Vec<u8> = self.index_buffer.clone().into();
+        let buf: Vec<u8> = self.index_buffer.clone();
         let pointers = Pointers::new(&buf[..]).unwrap();
         let node_data = pointers.get(offset as usize);
         TreeNode::new(
@@ -304,7 +300,7 @@ impl<M: CoreMem> Hyperbee<M> {
         loop {
             // check if this is our guy
             if node.block.is_target(&key) {
-                return Ok(Some(node.block.index_buffer.clone().into()));
+                return Ok(Some(node.block.index_buffer.clone()));
             }
 
             // find
