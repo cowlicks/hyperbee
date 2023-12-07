@@ -1,0 +1,11 @@
+{
+  "name": "gen_test_data",
+  "type": "module",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "hyperbee": "^2.18.1",
+    "hypercore": "^10.31.10"
+  }
+}
