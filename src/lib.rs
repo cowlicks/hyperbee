@@ -173,8 +173,7 @@ impl<M: CoreMem> TreeNode<M> {
         }
         if key.seq == self.block.seq {
             dbg!("get_key key.seq == block.seq");
-            //self.block.key.clone()
-            todo!()
+            return self.block.key.clone();
         } else {
             self._get_key(key.seq).await
         }
