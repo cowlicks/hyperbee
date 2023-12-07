@@ -8,26 +8,20 @@ static HYPERBEE_STORAGE_DIR: &str = "./test_data/basic";
 
 #[tokio::test]
 async fn integration() -> Result<(), Box<dyn std::error::Error>> {
+    let N = 25;
     let path = Path::new(&HYPERBEE_STORAGE_DIR).to_owned();
     let storage = Storage::new_disk(&path, false).await.unwrap();
     let mut hc = HypercoreBuilder::new(storage).build().await.unwrap();
-    let _ = hc.get(11).await.unwrap().unwrap();
 
     let hc = Arc::new(Mutex::new(hc));
     let mut hb = hyperbee_rs::HyperbeeBuilder::default().core(hc).build()?;
-    let buf = "0".as_bytes();
-    let x = hb.get(buf.into()).await?.unwrap();
-    let x = std::str::from_utf8(&x).unwrap();
-    assert_eq!(x, "0");
+    for i in 0..N {
+        println!("{i}");
+        let x = i.to_string();
+        let res = hb.get(x.as_bytes().into()).await?.unwrap();
+        let res = std::str::from_utf8(&res).unwrap();
+        assert_eq!(res, x);
+    }
 
-    let buf = "1".as_bytes();
-    let x = hb.get(buf.into()).await?.unwrap();
-    let x = std::str::from_utf8(&x).unwrap();
-    assert_eq!(x, "1");
-
-    let buf = "2".as_bytes();
-    let x = hb.get(buf.into()).await?.unwrap();
-    let x = std::str::from_utf8(&x).unwrap();
-    assert_eq!(x, "2");
     Ok(())
 }

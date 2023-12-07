@@ -71,7 +71,6 @@ pub struct Pointers {
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
-    //this.core = core
     pub core: Arc<Mutex<Hypercore<M>>>,
 }
 impl Key {
