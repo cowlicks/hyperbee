@@ -168,11 +168,9 @@ impl<M: CoreMem> TreeNode<M> {
     async fn get_key(&self, index: usize) -> Vec<u8> {
         let key = self.keys[index].clone();
         if let Some(value) = key.value {
-            dbg!("get_key has value");
             return value;
         }
         if key.seq == self.block.seq {
-            dbg!("get_key key.seq == block.seq");
             return self.block.key.clone();
         } else {
             self._get_key(key.seq).await
