@@ -7,12 +7,20 @@ use derive_builder::Builder;
 use hypercore::{Hypercore, HypercoreError};
 use messages::{Node, YoloIndex};
 use prost::{bytes::Buf, DecodeError, EncodeError, Message};
+use random_access_storage::RandomAccess;
+use thiserror::Error;
 
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 use tokio::sync::Mutex;
 
-pub trait CoreMem: random_access_storage::RandomAccess + std::fmt::Debug + Send {}
-impl<T: random_access_storage::RandomAccess + std::fmt::Debug + Send> CoreMem for T {}
+pub trait CoreMem: RandomAccess + Debug + Send {}
+impl<T: RandomAccess + Debug + Send> CoreMem for T {}
+
+#[derive(Error, Debug)]
+pub enum HyperbeeError {
+    #[error("There was an error in the underlying Hypercore")]
+    HypercoreError(#[from] HypercoreError),
+}
 
 #[derive(Clone, Debug)]
 pub struct Key {
@@ -165,42 +173,34 @@ impl<M: CoreMem> TreeNode<M> {
             //changed: false,
         }
     }
-    async fn get_key(&self, index: usize) -> Vec<u8> {
+    async fn get_key(&self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
         let key = self.keys[index].clone();
         if let Some(value) = key.value {
-            return value;
+            return Ok(value);
         }
         if key.seq == self.block.seq {
-            self.block.key.clone()
+            Ok(self.block.key.clone())
         } else {
             self._get_key(key.seq).await
         }
     }
 
     // TODO dedupe with hb.get_block
-    async fn get_block(&self, seq: u64) -> BlockEntry<M> {
+    async fn get_block(&self, seq: u64) -> Result<BlockEntry<M>, HyperbeeError> {
         let mut core = self.block.core.lock().await;
-        let b = core.get(seq).await.unwrap().unwrap();
+        let b = core.get(seq).await?.unwrap();
         let node = Node::decode(&b[..]).unwrap();
-        BlockEntry::new(seq, node, self.block.core.clone())
+        Ok(BlockEntry::new(seq, node, self.block.core.clone()))
     }
 
-    async fn _get_key(&self, seq: u64) -> Vec<u8> {
-        let block = self.get_block(seq).await;
-        block.key
+    async fn _get_key(&self, seq: u64) -> Result<Vec<u8>, HyperbeeError> {
+        let block = self.get_block(seq).await?;
+        Ok(block.key)
     }
 
-    /*
-    async getChildNode (index) {
-      const child = this.children[index]
-      if (child.value) return child.value
-      const block = child.seq === this.block.seq ? this.block : await this.block.tree.getBlock(child.seq)
-      return (child.value = block.getTreeNode(child.offset))
-    }
-    */
     pub async fn get_child(&self, index: usize) -> TreeNode<M> {
         let child = self.children[index].clone();
-        let child_block = self.get_block(child.seq).await;
+        let child_block = self.get_block(child.seq).await.unwrap();
         child_block.get_tree_node(child.offset)
     }
 
@@ -209,14 +209,13 @@ impl<M: CoreMem> TreeNode<M> {
         &self,
         key: Vec<u8>,
         mut path: Vec<isize>,
-    ) -> Result<(bool, Vec<isize>), HypercoreError> {
+    ) -> Result<(bool, Vec<isize>), HyperbeeError> {
         for i in 0..self.keys.len() {
-            let val = self.get_key(i).await;
+            let val = self.get_key(i).await?;
             if val >= key {
                 path.push(i as isize);
 
                 if val == key {
-                    // found. stop
                     return Ok((true, path));
                 }
 
@@ -280,19 +279,19 @@ impl<M: CoreMem> Hyperbee<M> {
         self.core.lock().await.info().length
     }
     /// Gets the root of the tree
-    pub async fn get_root(&mut self, _ensure_header: bool) -> TreeNode<M> {
-        let block: BlockEntry<M> = self.get_block(self.version().await - 1).await;
-        block.get_tree_node(0)
+    pub async fn get_root(&mut self, _ensure_header: bool) -> Result<TreeNode<M>, HyperbeeError> {
+        let block: BlockEntry<M> = self.get_block(self.version().await - 1).await.unwrap();
+        Ok(block.get_tree_node(0))
     }
 
-    pub async fn get_block(&mut self, seq: u64) -> BlockEntry<M> {
-        let x = self.core.lock().await.get(seq).await.unwrap().unwrap();
+    pub async fn get_block(&mut self, seq: u64) -> Result<BlockEntry<M>, HyperbeeError> {
+        let x = self.core.lock().await.get(seq).await?.unwrap();
         let node = Node::decode(&x[..]).unwrap();
-        BlockEntry::new(seq, node, self.core.clone())
+        Ok(BlockEntry::new(seq, node, self.core.clone()))
     }
 
-    pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, HypercoreError> {
-        let mut node = self.get_root(false).await;
+    pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, HyperbeeError> {
+        let mut node = self.get_root(false).await?;
         loop {
             // check if this is our guy
             if node.block.is_target(&key) {
@@ -302,14 +301,14 @@ impl<M: CoreMem> Hyperbee<M> {
             // find
             let mut ki: usize = node.keys.len();
             for i in 0..node.keys.len() {
-                let val = node.get_key(i).await;
+                let val = node.get_key(i).await?;
                 if key < val {
                     ki = i;
                     break;
                 }
                 if val == key {
                     let the_key = node.keys[i].clone();
-                    return Ok(self.get_block(the_key.seq).await.value);
+                    return Ok(self.get_block(the_key.seq).await?.value);
                 }
             }
 
