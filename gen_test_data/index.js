@@ -23,13 +23,12 @@ const copyTestData = async (dataName) => {
 
 }
 
-const start = 0
-const stop = 25
-const DATA_DIR_NAME = 'basic';
-const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
+async function basic() {
+  const start = 0
+  const stop = 25
+  const DATA_DIR_NAME = 'basic';
+  const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
 
-
-(async ()=> {
 
   await rmTestData(DATA_DIR_NAME);
   const core = new Hypercore(PATH_TO_DATA_DIR)
@@ -48,4 +47,36 @@ const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
     }
   }
   await copyTestData(DATA_DIR_NAME);
-})()
+}
+
+async function with_replaced_values() {
+  const start = 0
+  const stop = 25
+  const DATA_DIR_NAME = 'with_replaced_values';
+  const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
+
+
+  await rmTestData(DATA_DIR_NAME);
+  const core = new Hypercore(PATH_TO_DATA_DIR)
+  const db = new Hyperbee(core)
+  await db.ready()
+
+  for (let i = start; i < stop; i += 1) {
+    const x = String(i);
+    await db.put(x, x);
+  }
+
+  for (let i = start; i < stop; i += 1) {
+    const x = String(i);
+    await db.put(x, String(i*2));
+  }
+
+  await copyTestData(DATA_DIR_NAME);
+}
+
+async function run() {
+  await basic();
+  await with_replaced_values();
+}
+
+run()

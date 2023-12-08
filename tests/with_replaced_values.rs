@@ -3,10 +3,10 @@ use tokio::sync::Mutex;
 
 use hypercore::{self, HypercoreBuilder, Storage};
 
-static HYPERBEE_STORAGE_DIR: &str = "./test_data/basic";
+static HYPERBEE_STORAGE_DIR: &str = "./test_data/with_replaced_values";
 
 #[tokio::test]
-async fn basic() -> Result<(), Box<dyn std::error::Error>> {
+async fn with_replaced_values() -> Result<(), Box<dyn std::error::Error>> {
     let start = 0;
     let stop = 25;
     let path = Path::new(&HYPERBEE_STORAGE_DIR).to_owned();
@@ -16,11 +16,15 @@ async fn basic() -> Result<(), Box<dyn std::error::Error>> {
     let hc = Arc::new(Mutex::new(hc));
     let mut hb = hyperbee_rs::HyperbeeBuilder::default().core(hc).build()?;
     for i in start..stop {
-        println!("{i}");
-        let x = i.to_string();
-        let res = hb.get(x.as_bytes().into()).await?.unwrap();
+        let key = i.to_string();
+        let expected = (i * 2).to_string();
+
+        let res = hb.get(key.as_bytes().into()).await?.unwrap();
         let res = std::str::from_utf8(&res).unwrap();
-        assert_eq!(res, x);
+        dbg!(&key);
+        dbg!(&expected);
+        dbg!(&res);
+        assert_eq!(res, expected);
     }
     Ok(())
 }
