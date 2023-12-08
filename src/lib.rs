@@ -22,6 +22,12 @@ pub enum HyperbeeError {
     HypercoreError(#[from] HypercoreError),
     #[error("There was an error decoding Hypercore data")]
     DecodeError(#[from] DecodeError),
+    #[error("Hyperbee has no root")]
+    NoRootError(),
+    #[error("No key at seq  `{0}`")]
+    NoKeyAtSeqError(u64),
+    #[error("No child at seq  `{0}`")]
+    NoChildAtSeqError(u64),
 }
 
 #[derive(Clone, Debug)]
@@ -188,21 +194,31 @@ impl<M: CoreMem> TreeNode<M> {
     }
 
     // TODO dedupe with hb.get_block
-    async fn get_block(&self, seq: u64) -> Result<BlockEntry<M>, HyperbeeError> {
+    async fn get_block(&self, seq: u64) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
         let mut core = self.block.core.lock().await;
-        let b = core.get(seq).await?.unwrap();
-        let node = Node::decode(&b[..])?;
-        Ok(BlockEntry::new(seq, node, self.block.core.clone()))
+        match core.get(seq).await? {
+            Some(core_block) => {
+                let node = Node::decode(&core_block[..])?;
+                Ok(Some(BlockEntry::new(seq, node, self.block.core.clone())))
+            }
+            None => Ok(None),
+        }
     }
 
     async fn _get_key(&self, seq: u64) -> Result<Vec<u8>, HyperbeeError> {
-        let block = self.get_block(seq).await?;
-        Ok(block.key)
+        Ok(self
+            .get_block(seq)
+            .await?
+            .ok_or(HyperbeeError::NoKeyAtSeqError(seq))?
+            .key)
     }
 
     pub async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
         let child = self.children[index].clone();
-        let child_block = self.get_block(child.seq).await?;
+        let child_block = self
+            .get_block(child.seq)
+            .await?
+            .ok_or(HyperbeeError::NoChildAtSeqError(child.seq))?;
         child_block.get_tree_node(child.offset)
     }
 
@@ -282,14 +298,21 @@ impl<M: CoreMem> Hyperbee<M> {
     }
     /// Gets the root of the tree
     pub async fn get_root(&mut self, _ensure_header: bool) -> Result<TreeNode<M>, HyperbeeError> {
-        let block: BlockEntry<M> = self.get_block(self.version().await - 1).await?;
+        let block = self
+            .get_block(self.version().await - 1)
+            .await?
+            .ok_or(HyperbeeError::NoRootError())?;
         block.get_tree_node(0)
     }
 
-    pub async fn get_block(&mut self, seq: u64) -> Result<BlockEntry<M>, HyperbeeError> {
-        let x = self.core.lock().await.get(seq).await?.unwrap();
-        let node = Node::decode(&x[..])?;
-        Ok(BlockEntry::new(seq, node, self.core.clone()))
+    pub async fn get_block(&mut self, seq: u64) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
+        match self.core.lock().await.get(seq).await? {
+            Some(core_block) => {
+                let node = Node::decode(&core_block[..])?;
+                Ok(Some(BlockEntry::new(seq, node, self.core.clone())))
+            }
+            None => Ok(None),
+        }
     }
 
     pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, HyperbeeError> {
@@ -310,7 +333,10 @@ impl<M: CoreMem> Hyperbee<M> {
                 }
                 if val == key {
                     let the_key = node.keys[i].clone();
-                    return Ok(self.get_block(the_key.seq).await?.value);
+                    return match self.get_block(the_key.seq).await? {
+                        Some(block) => Ok(block.value),
+                        None => Ok(None),
+                    };
                 }
             }
 
