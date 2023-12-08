@@ -171,7 +171,7 @@ impl<M: CoreMem> TreeNode<M> {
             return value;
         }
         if key.seq == self.block.seq {
-            return self.block.key.clone();
+            self.block.key.clone()
         } else {
             self._get_key(key.seq).await
         }
