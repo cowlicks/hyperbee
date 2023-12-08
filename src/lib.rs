@@ -198,10 +198,10 @@ impl<M: CoreMem> TreeNode<M> {
         Ok(block.key)
     }
 
-    pub async fn get_child(&self, index: usize) -> TreeNode<M> {
+    pub async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
         let child = self.children[index].clone();
-        let child_block = self.get_block(child.seq).await.unwrap();
-        child_block.get_tree_node(child.offset)
+        let child_block = self.get_block(child.seq).await?;
+        Ok(child_block.get_tree_node(child.offset))
     }
 
     #[async_recursion]
@@ -225,7 +225,7 @@ impl<M: CoreMem> TreeNode<M> {
 
                 return self
                     .get_child(i + 1)
-                    .await
+                    .await?
                     .nearest_node(key.clone(), path)
                     .await;
             }
@@ -235,7 +235,7 @@ impl<M: CoreMem> TreeNode<M> {
             return Ok((false, path));
         }
         self.get_child(0)
-            .await
+            .await?
             .nearest_node(key.clone(), path)
             .await
     }
@@ -280,7 +280,7 @@ impl<M: CoreMem> Hyperbee<M> {
     }
     /// Gets the root of the tree
     pub async fn get_root(&mut self, _ensure_header: bool) -> Result<TreeNode<M>, HyperbeeError> {
-        let block: BlockEntry<M> = self.get_block(self.version().await - 1).await.unwrap();
+        let block: BlockEntry<M> = self.get_block(self.version().await - 1).await?;
         Ok(block.get_tree_node(0))
     }
 
@@ -316,7 +316,7 @@ impl<M: CoreMem> Hyperbee<M> {
                 return Ok(None);
             }
 
-            node = node.get_child(ki).await;
+            node = node.get_child(ki).await?;
         }
     }
 }
