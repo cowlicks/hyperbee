@@ -20,6 +20,8 @@ impl<T: RandomAccess + Debug + Send> CoreMem for T {}
 pub enum HyperbeeError {
     #[error("There was an error in the underlying Hypercore")]
     HypercoreError(#[from] HypercoreError),
+    #[error("There was an error decoding Hypercore data")]
+    DecodeError(#[from] DecodeError),
 }
 
 #[derive(Clone, Debug)]
@@ -189,7 +191,7 @@ impl<M: CoreMem> TreeNode<M> {
     async fn get_block(&self, seq: u64) -> Result<BlockEntry<M>, HyperbeeError> {
         let mut core = self.block.core.lock().await;
         let b = core.get(seq).await?.unwrap();
-        let node = Node::decode(&b[..]).unwrap();
+        let node = Node::decode(&b[..])?;
         Ok(BlockEntry::new(seq, node, self.block.core.clone()))
     }
 
@@ -201,7 +203,7 @@ impl<M: CoreMem> TreeNode<M> {
     pub async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
         let child = self.children[index].clone();
         let child_block = self.get_block(child.seq).await?;
-        Ok(child_block.get_tree_node(child.offset))
+        child_block.get_tree_node(child.offset)
     }
 
     #[async_recursion]
@@ -258,16 +260,16 @@ impl<M: CoreMem> BlockEntry<M> {
     }
 
     /// offset is the offset of the node within the hypercore block
-    fn get_tree_node(self, offset: u64) -> TreeNode<M> {
+    fn get_tree_node(self, offset: u64) -> Result<TreeNode<M>, HyperbeeError> {
         let buf: Vec<u8> = self.index_buffer.clone();
-        let pointers = Pointers::new(&buf[..]).unwrap();
+        let pointers = Pointers::new(&buf[..])?;
         let node_data = pointers.get(offset as usize);
-        TreeNode::new(
+        Ok(TreeNode::new(
             self,
             node_data.keys.clone(),
             node_data.children.clone(),
             offset,
-        )
+        ))
     }
 }
 
@@ -281,12 +283,12 @@ impl<M: CoreMem> Hyperbee<M> {
     /// Gets the root of the tree
     pub async fn get_root(&mut self, _ensure_header: bool) -> Result<TreeNode<M>, HyperbeeError> {
         let block: BlockEntry<M> = self.get_block(self.version().await - 1).await?;
-        Ok(block.get_tree_node(0))
+        block.get_tree_node(0)
     }
 
     pub async fn get_block(&mut self, seq: u64) -> Result<BlockEntry<M>, HyperbeeError> {
         let x = self.core.lock().await.get(seq).await?.unwrap();
-        let node = Node::decode(&x[..]).unwrap();
+        let node = Node::decode(&x[..])?;
         Ok(BlockEntry::new(seq, node, self.core.clone()))
     }
 
