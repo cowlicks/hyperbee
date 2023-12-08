@@ -31,20 +31,20 @@ pub enum HyperbeeError {
 }
 
 #[derive(Clone, Debug)]
-pub struct Key {
+struct Key {
     seq: u64,
     value: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug)]
-pub struct Child {
+struct Child {
     seq: u64,
     offset: u64,             // correct?
     _value: Option<Vec<u8>>, // correct?
 }
 
 #[derive(Clone, Debug)]
-pub struct BlockEntry<M: CoreMem> {
+struct BlockEntry<M: CoreMem> {
     /// index in the hypercore
     seq: u64,
     /// Pointers::new(Node::new(hypercore.get(seq)).index))
@@ -63,7 +63,7 @@ pub struct BlockEntry<M: CoreMem> {
 
 /// A node in the tree
 #[derive(Debug)]
-pub struct TreeNode<M: CoreMem> {
+struct TreeNode<M: CoreMem> {
     block: BlockEntry<M>,
     keys: Vec<Key>,
     children: Vec<Child>,
@@ -87,7 +87,7 @@ pub struct Pointers {
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
-    pub core: Arc<Mutex<Hypercore<M>>>,
+    core: Arc<Mutex<Hypercore<M>>>,
 }
 impl Key {
     fn new(seq: u64, value: Option<Vec<u8>>) -> Self {
@@ -202,18 +202,14 @@ impl<M: CoreMem> TreeNode<M> {
         if key.seq == self.block.seq {
             Ok(self.block.key.clone())
         } else {
-            self._get_key(key.seq).await
+            Ok(get_block(&self.block.core, key.seq)
+                .await?
+                .ok_or(HyperbeeError::NoKeyAtSeqError(key.seq))?
+                .key)
         }
     }
 
-    async fn _get_key(&self, seq: u64) -> Result<Vec<u8>, HyperbeeError> {
-        Ok(get_block(&self.block.core, seq)
-            .await?
-            .ok_or(HyperbeeError::NoKeyAtSeqError(seq))?
-            .key)
-    }
-
-    pub async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
+    async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
         let child = self.children[index].clone();
         let child_block = get_block(&self.block.core, child.seq)
             .await?
@@ -295,7 +291,7 @@ impl<M: CoreMem> Hyperbee<M> {
         self.core.lock().await.info().length
     }
     /// Gets the root of the tree
-    pub async fn get_root(&mut self, _ensure_header: bool) -> Result<TreeNode<M>, HyperbeeError> {
+    async fn get_root(&mut self, _ensure_header: bool) -> Result<TreeNode<M>, HyperbeeError> {
         let block = get_block(&self.core, self.version().await - 1)
             .await?
             .ok_or(HyperbeeError::NoRootError())?;
