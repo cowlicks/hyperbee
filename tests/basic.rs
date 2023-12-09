@@ -18,8 +18,9 @@ async fn basic() -> Result<(), Box<dyn std::error::Error>> {
     for i in start..stop {
         println!("{i}");
         let x = i.to_string();
-        let res = hb.get(x.as_bytes().into()).await?.unwrap();
+        let (seq, res) = hb.get(x.as_bytes().into()).await?.unwrap();
         let res = std::str::from_utf8(&res).unwrap();
+        dbg!(seq, res);
         assert_eq!(res, x);
     }
     Ok(())
