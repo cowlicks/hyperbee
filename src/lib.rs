@@ -298,12 +298,12 @@ impl<M: CoreMem> Hyperbee<M> {
         block.get_tree_node(0)
     }
 
-    pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, HyperbeeError> {
+    pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
         let mut node = self.get_root(false).await?;
         loop {
             // check if this is our guy
             if node.block.is_target(&key) {
-                return Ok(node.block.value.clone());
+                return Ok(node.block.value.map(|v| (node.block.seq, v.clone())));
             }
 
             // find
@@ -317,7 +317,7 @@ impl<M: CoreMem> Hyperbee<M> {
                 if val == key {
                     let the_key = node.keys[i].clone();
                     return match get_block(&self.core, the_key.seq).await? {
-                        Some(block) => Ok(block.value),
+                        Some(block) => Ok(block.value.map(|v| (block.seq, v.clone()))),
                         None => Ok(None),
                     };
                 }
@@ -328,42 +328,6 @@ impl<M: CoreMem> Hyperbee<M> {
             }
 
             node = node.get_child(ki).await?;
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn foo() {
-        let buf = vec![10, 2, 1, 2, 18, 2, 3, 4];
-        let level = messages::yolo_index::Level::decode(&buf[..]);
-        dbg!(&level);
-    }
-
-    #[test]
-    fn vec_order() {
-        let a: Vec<u8> = vec![1];
-        let b: Vec<u8> = vec![1, 2];
-        let c: Vec<u8> = vec![1, 3];
-        let d: Vec<u8> = vec![5];
-        assert!(a < b);
-        assert!(a < c);
-        assert!(c < d);
-    }
-    #[test]
-    fn looper() {
-        let mut o = 1;
-        loop {
-            let x = o + 2;
-            dbg!(&x);
-            dbg!(&o);
-            o += 3;
-            if o > 55 {
-                break;
-            }
         }
     }
 }
