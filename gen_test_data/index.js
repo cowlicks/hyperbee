@@ -36,14 +36,16 @@ async function basic() {
   await db.ready()
 
   for (let i = start; i < stop; i += 1) {
-    const x = String(i);
-    await db.put(x, x);
+    const key = String(i);
+    const value = String(stop - i)
+    await db.put(key, value);
   }
   for (let i = start; i < stop; i += 1) {
-    const x = String(i);
-    const res = await db.get(x);
-    if (res.value.toString() !== x) {
-      console.error(`Could not get ${x} instead go ${res.value.toString()}`)
+    const key = String(i);
+    const value = String(stop - i)
+    const res = await db.get(key);
+    if (res.value.toString() !== value) {
+      console.error(`Could not get ${key} instead go ${res.value.toString()}`)
     }
   }
   await copyTestData(DATA_DIR_NAME);

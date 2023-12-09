@@ -17,11 +17,12 @@ async fn basic() -> Result<(), Box<dyn std::error::Error>> {
     let mut hb = hyperbee_rs::HyperbeeBuilder::default().core(hc).build()?;
     for i in start..stop {
         println!("{i}");
-        let x = i.to_string();
-        let (seq, res) = hb.get(x.as_bytes().into()).await?.unwrap();
+        let key = i.to_string();
+        let expected = (stop - i).to_string();
+        let (seq, res) = hb.get(key.as_bytes().into()).await?.unwrap();
         let res = std::str::from_utf8(&res).unwrap();
         dbg!(seq, res);
-        assert_eq!(res, x);
+        assert_eq!(res, expected);
     }
     Ok(())
 }
