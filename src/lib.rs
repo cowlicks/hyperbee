@@ -210,7 +210,7 @@ impl<M: CoreMem> TreeNode<M> {
     }
 
     async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
-        let child = self.children[index].clone();
+        let child = &self.children[index];
         let child_block = get_block(&self.block.core, child.seq)
             .await?
             .ok_or(HyperbeeError::NoChildAtSeqError(child.seq))?;
