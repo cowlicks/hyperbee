@@ -200,9 +200,9 @@ impl<M: CoreMem> TreeNode<M> {
         }
     }
     async fn get_key(&self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
-        let key = self.keys[index].clone();
-        if let Some(value) = key.value {
-            return Ok(value);
+        let key = &self.keys[index];
+        if let Some(value) = &key.value {
+            return Ok(value.clone());
         }
         if key.seq == self.block.seq {
             Ok(self.block.key.clone())
