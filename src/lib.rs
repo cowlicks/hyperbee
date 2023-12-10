@@ -306,23 +306,25 @@ impl<M: CoreMem> Hyperbee<M> {
                 return Ok(node.block.value.map(|v| (node.block.seq, v.clone())));
             }
 
-            // find
+            // find the matching key, or next child
             let mut ki: usize = node.keys.len();
             for i in 0..node.keys.len() {
                 let val = node.get_key(i).await?;
+                // found matching child
                 if key < val {
                     ki = i;
                     break;
                 }
+                // found matching key
                 if val == key {
-                    let the_key = node.keys[i].clone();
-                    return match get_block(&self.core, the_key.seq).await? {
+                    return match get_block(&self.core, node.keys[i].seq).await? {
                         Some(block) => Ok(block.value.map(|v| (block.seq, v.clone()))),
                         None => Ok(None),
                     };
                 }
             }
 
+            // leaf node with no match
             if node.children.is_empty() {
                 return Ok(None);
             }
