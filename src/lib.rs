@@ -55,9 +55,7 @@ struct BlockEntry<M: CoreMem> {
     key: Vec<u8>,
     /// Node::new(hypercore.get(seq)).value
     value: Option<Vec<u8>>,
-    // TODO wrap a ref to the hyperbee or hypercore here
-    // this is our reference to the hypercore.
-    // we use it do things like hyperore.get(..)
+    /// Our reference to the Hypercore
     core: Arc<Mutex<Hypercore<M>>>,
 }
 
@@ -279,8 +277,7 @@ impl<M: CoreMem> BlockEntry<M> {
 
     /// offset is the offset of the node within the hypercore block
     fn get_tree_node(self, offset: u64) -> Result<TreeNode<M>, HyperbeeError> {
-        let buf: Vec<u8> = self.index_buffer.clone();
-        let pointers = Pointers::new(&buf[..])?;
+        let pointers = Pointers::new(&self.index_buffer[..])?;
         let node_data = pointers.get(offset as usize);
         Ok(TreeNode::new(
             self,
