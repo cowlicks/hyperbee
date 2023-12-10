@@ -86,10 +86,10 @@ pub struct Pointers {
 /// The function we use to get key's keys, key's values, and TreeNodes out of the core
 /// Getting a key's key:
 /// get_block(core, key.seq).await?.unwrap().key
-/// Getting a child as TreeNode:
-/// get_block(core, child.seq).await?.unwrap().get_tree_node(child.offset)
 /// Getting a key's value:
 /// get_block(core, key.seq).await?.unwrap().value
+/// Getting a child as TreeNode:
+/// get_block(core, child.seq).await?.unwrap().get_tree_node(child.offset)
 async fn get_block<M: CoreMem>(
     core: &Arc<Mutex<Hypercore<M>>>,
     seq: u64,
