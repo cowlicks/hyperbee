@@ -6,7 +6,7 @@ use async_recursion::async_recursion;
 use derive_builder::Builder;
 use hypercore::{Hypercore, HypercoreError};
 use messages::{Node, YoloIndex};
-use prost::{bytes::Buf, DecodeError, EncodeError, Message};
+use prost::{bytes::Buf, DecodeError, Message};
 use random_access_storage::RandomAccess;
 use thiserror::Error;
 
@@ -44,6 +44,7 @@ struct Child {
 }
 
 #[derive(Clone, Debug)]
+/// A block off the Hypercore
 struct BlockEntry<M: CoreMem> {
     /// index in the hypercore
     seq: u64,
@@ -80,6 +81,26 @@ pub struct Level {
 #[derive(Clone, Debug)]
 pub struct Pointers {
     levels: Vec<Level>,
+}
+
+/// The function we use to get key's keys, key's values, and TreeNodes out of the core
+/// Getting a key's key:
+/// get_block(core, key.seq).await?.unwrap().key
+/// Getting a child as TreeNode:
+/// get_block(core, child.seq).await?.unwrap().get_tree_node(child.offset)
+/// Getting a key's value:
+/// get_block(core, key.seq).await?.unwrap().value
+async fn get_block<M: CoreMem>(
+    core: &Arc<Mutex<Hypercore<M>>>,
+    seq: u64,
+) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
+    match core.lock().await.get(seq).await? {
+        Some(core_block) => {
+            let node = Node::decode(&core_block[..])?;
+            Ok(Some(BlockEntry::new(seq, node, core.clone())))
+        }
+        None => Ok(None),
+    }
 }
 
 #[derive(Debug, Builder)]
@@ -147,45 +168,6 @@ impl Pointers {
             }
         }
         false
-    }
-}
-
-pub fn deflate(index: Vec<Level>) -> Result<Vec<u8>, EncodeError> {
-    let levels = index
-        .iter()
-        .map(|level| {
-            let keys: Vec<u64> = level.keys.iter().map(|k| k.seq).collect();
-            let mut children = vec![];
-            for i in 0..(level.children.len()) {
-                children.push(level.children[i].seq);
-                children.push(level.children[i].offset);
-            }
-
-            messages::yolo_index::Level { keys, children }
-        })
-        .collect();
-    let mut buf = vec![];
-    (YoloIndex { levels }).encode(&mut buf)?;
-    Ok(buf)
-}
-
-/// The function we use to get key's keys, key's values, and TreeNodes out of the core
-/// Getting a key's key:
-/// get_block(core, key.seq).await?.unwrap().key
-/// Getting a child as TreeNode:
-/// get_block(core, child.seq).await?.unwrap().get_tree_node(child.offset)
-/// Getting a key's value:
-/// get_block(core, key.seq).await?.unwrap().value
-async fn get_block<M: CoreMem>(
-    core: &Arc<Mutex<Hypercore<M>>>,
-    seq: u64,
-) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
-    match core.lock().await.get(seq).await? {
-        Some(core_block) => {
-            let node = Node::decode(&core_block[..])?;
-            Ok(Some(BlockEntry::new(seq, node, core.clone())))
-        }
-        None => Ok(None),
     }
 }
 
