@@ -26,6 +26,8 @@ pub enum HyperbeeError {
     NoRootError(),
     #[error("No key at seq  `{0}`")]
     NoKeyAtSeqError(u64),
+    #[error("No key at seq  `{0}`")]
+    NoValueAtSeqError(u64),
     #[error("No child at seq  `{0}`")]
     NoChildAtSeqError(u64),
 }
@@ -305,9 +307,10 @@ impl<M: CoreMem> Hyperbee<M> {
                 }
                 // found matching key
                 if val == *key {
-                    return match get_block(&self.core, node.keys[i].seq).await? {
+                    let seq = &node.keys[i].seq;
+                    return match get_block(&self.core, *seq).await? {
                         Some(block) => Ok(block.value.map(|v| (block.seq, v))),
-                        None => Ok(None),
+                        None => Err(HyperbeeError::NoValueAtSeqError(*seq)),
                     };
                 }
             }
