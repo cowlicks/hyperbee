@@ -171,6 +171,13 @@ pub fn deflate(index: Vec<Level>) -> Result<Vec<u8>, EncodeError> {
     Ok(buf)
 }
 
+/// The function we use to get key's keys, key's values, and TreeNodes out of the core
+/// Getting a key's key:
+/// get_block(core, key.seq).await?.unwrap().key
+/// Getting a child as TreeNode:
+/// get_block(core, child.seq).await?.unwrap().get_tree_node(child.offset)
+/// Getting a key's value:
+/// get_block(core, key.seq).await?.unwrap().value
 async fn get_block<M: CoreMem>(
     core: &Arc<Mutex<Hypercore<M>>>,
     seq: u64,
@@ -298,6 +305,7 @@ impl<M: CoreMem> Hyperbee<M> {
         block.get_tree_node(0)
     }
 
+    /// Get the value associated with a key
     pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
         let mut node = self.get_root(false).await?;
         loop {
@@ -307,6 +315,7 @@ impl<M: CoreMem> Hyperbee<M> {
             }
 
             // find the matching key, or next child
+            // TODO do this with a binary search
             let mut ki: usize = node.keys.len();
             for i in 0..node.keys.len() {
                 let val = node.get_key(i).await?;
@@ -329,6 +338,7 @@ impl<M: CoreMem> Hyperbee<M> {
                 return Ok(None);
             }
 
+            // get next node
             node = node.get_child(ki).await?;
         }
     }
