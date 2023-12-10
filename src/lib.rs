@@ -306,12 +306,12 @@ impl<M: CoreMem> Hyperbee<M> {
     }
 
     /// Get the value associated with a key
-    pub async fn get(&mut self, key: Vec<u8>) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
+    pub async fn get(&mut self, key: &Vec<u8>) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
         let mut node = self.get_root(false).await?;
         loop {
             // check if this is our guy
-            if node.block.is_target(&key) {
-                return Ok(node.block.value.map(|v| (node.block.seq, v.clone())));
+            if node.block.is_target(key) {
+                return Ok(node.block.value.map(|v| (node.block.seq, v)));
             }
 
             // find the matching key, or next child
@@ -320,14 +320,14 @@ impl<M: CoreMem> Hyperbee<M> {
             for i in 0..node.keys.len() {
                 let val = node.get_key(i).await?;
                 // found matching child
-                if key < val {
+                if *key < val {
                     ki = i;
                     break;
                 }
                 // found matching key
-                if val == key {
+                if val == *key {
                     return match get_block(&self.core, node.keys[i].seq).await? {
-                        Some(block) => Ok(block.value.map(|v| (block.seq, v.clone()))),
+                        Some(block) => Ok(block.value.map(|v| (block.seq, v))),
                         None => Ok(None),
                     };
                 }
