@@ -2,6 +2,7 @@ pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 
+use async_recursion::async_recursion;
 use derive_builder::Builder;
 use hypercore::{Hypercore, HypercoreError};
 use messages::{Node, YoloIndex};
@@ -201,6 +202,42 @@ impl<M: CoreMem> TreeNode<M> {
             .await?
             .ok_or(HyperbeeError::NoChildAtSeqError(child.seq))?;
         child_block.get_tree_node(child.offset)
+    }
+
+    #[async_recursion]
+    pub async fn nearest_node(
+        &self,
+        key: Vec<u8>,
+        mut path: Vec<isize>,
+    ) -> Result<(bool, Vec<isize>), HyperbeeError> {
+        for i in 0..self.keys.len() {
+            let val = self.get_key(i).await?;
+            if val >= key {
+                path.push(i as isize);
+
+                if val == key {
+                    return Ok((true, path));
+                }
+
+                if self.children.is_empty() {
+                    return Ok((false, path));
+                }
+
+                return self
+                    .get_child(i + 1)
+                    .await?
+                    .nearest_node(key.clone(), path)
+                    .await;
+            }
+        }
+        path.push(-1);
+        if self.children.is_empty() {
+            return Ok((false, path));
+        }
+        self.get_child(0)
+            .await?
+            .nearest_node(key.clone(), path)
+            .await
     }
 }
 
