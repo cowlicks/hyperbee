@@ -188,6 +188,14 @@ impl<M: CoreMem> TreeNode<M> {
         }
     }
 
+    async fn get_key_value(&self, index: usize) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
+        let seq = &self.keys[index].seq;
+        return match get_block(&self.block.core, *seq).await? {
+            Some(block) => Ok(block.value.map(|v| (block.seq, v))),
+            None => Err(HyperbeeError::NoValueAtSeqError(*seq)),
+        };
+    }
+
     async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
         let child = &self.children[index];
         let child_block = get_block(&self.block.core, child.seq)
@@ -297,11 +305,7 @@ impl<M: CoreMem> Hyperbee<M> {
                 }
                 // found matching key
                 if val == *key {
-                    let seq = &node.keys[i].seq;
-                    return match get_block(&self.core, *seq).await? {
-                        Some(block) => Ok(block.value.map(|v| (block.seq, v))),
-                        None => Err(HyperbeeError::NoValueAtSeqError(*seq)),
-                    };
+                    return node.get_key_value(i).await;
                 }
             }
 
