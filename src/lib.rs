@@ -258,19 +258,21 @@ impl<M: CoreMem> Hyperbee<M> {
 
             // find the matching key, or next child
             // TODO do this with a binary search
-            let mut ki: usize = node.keys.len();
-            for i in 0..node.keys.len() {
-                let val = node.get_key(i).await?;
-                // found matching child
-                if *key < val {
-                    ki = i;
-                    break;
+            let child_index: usize = 'found: {
+                for i in 0..node.keys.len() {
+                    let val = node.get_key(i).await?;
+                    // found matching child
+                    if *key < val {
+                        break 'found i;
+                    }
+                    // found matching key
+                    if val == *key {
+                        return node.get_key_value(i).await;
+                    }
                 }
-                // found matching key
-                if val == *key {
-                    return node.get_key_value(i).await;
-                }
-            }
+                // key is greater than all of this nodes keys, take last child
+                node.keys.len()
+            };
 
             // leaf node with no match
             if node.children.is_empty() {
@@ -278,7 +280,7 @@ impl<M: CoreMem> Hyperbee<M> {
             }
 
             // get next node
-            node = node.get_child(ki).await?;
+            node = node.get_child(child_index).await?;
         }
     }
 }
