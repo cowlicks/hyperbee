@@ -26,3 +26,16 @@ async fn basic() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn no_key() -> Result<(), Box<dyn std::error::Error>> {
+    let path = Path::new(&HYPERBEE_STORAGE_DIR).to_owned();
+    let storage = Storage::new_disk(&path, false).await.unwrap();
+    let hc = HypercoreBuilder::new(storage).build().await.unwrap();
+
+    let hc = Arc::new(Mutex::new(hc));
+    let mut hb = hyperbee_rs::HyperbeeBuilder::default().core(hc).build()?;
+    let result = hb.get(&"foobar".to_string().into_bytes()).await?;
+    assert_eq!(result, Option::None);
+    Ok(())
+}
