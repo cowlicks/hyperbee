@@ -189,10 +189,10 @@ impl<M: CoreMem> TreeNode<M> {
 
     async fn get_key_value(&self, index: usize) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
         let seq = &self.keys[index].seq;
-        return match get_block(&self.block.core, *seq).await? {
+        match get_block(&self.block.core, *seq).await? {
             Some(block) => Ok(block.value.map(|v| (block.seq, v))),
             None => Err(HyperbeeError::NoValueAtSeqError(*seq)),
-        };
+        }
     }
 
     async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
