@@ -72,16 +72,22 @@ struct TreeNode<M: CoreMem> {
     //changed: bool,
 }
 
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned", derive(Debug))]
+pub struct Hyperbee<M: CoreMem> {
+    core: Arc<Mutex<Hypercore<M>>>,
+}
+
 //
 // NB: this is a smart wrapper around the proto_buf messages::yolo_index::Level;
 #[derive(Clone, Debug)]
-pub struct Level {
+struct Level {
     keys: Vec<Key>,
     children: Vec<Child>,
 }
 
 #[derive(Clone, Debug)]
-pub struct Pointers {
+struct Pointers {
     levels: Vec<Level>,
 }
 
@@ -105,11 +111,6 @@ async fn get_block<M: CoreMem>(
     }
 }
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned", derive(Debug))]
-pub struct Hyperbee<M: CoreMem> {
-    core: Arc<Mutex<Hypercore<M>>>,
-}
 impl Key {
     fn new(seq: u64, value: Option<Vec<u8>>) -> Self {
         Key { seq, value }
@@ -159,17 +160,6 @@ impl Pointers {
 
     fn get(&self, i: usize) -> &Level {
         &self.levels[i]
-    }
-
-    pub fn has_key(&self, seq: u64) -> bool {
-        for lvl in &self.levels {
-            for k in &lvl.keys {
-                if k.seq == seq {
-                    return true;
-                }
-            }
-        }
-        false
     }
 }
 
