@@ -13,8 +13,8 @@ use thiserror::Error;
 use std::{fmt::Debug, sync::Arc};
 use tokio::sync::Mutex;
 
-pub trait CoreMem: RandomAccess + Debug + Send {}
-impl<T: RandomAccess + Debug + Send> CoreMem for T {}
+pub trait CoreMem: RandomAccess + Debug + Send + Clone {}
+impl<T: RandomAccess + Debug + Send + Clone> CoreMem for T {}
 
 #[derive(Error, Debug)]
 pub enum HyperbeeError {
@@ -63,7 +63,7 @@ struct BlockEntry<M: CoreMem> {
 }
 
 /// A node in the tree
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct TreeNode<M: CoreMem> {
     block: BlockEntry<M>,
     keys: Vec<Key>,
@@ -204,40 +204,33 @@ impl<M: CoreMem> TreeNode<M> {
         child_block.get_tree_node(child.offset)
     }
 
+    async fn get_key_index(&self, key: &Vec<u8>) -> Result<(bool, isize), HyperbeeError> {
+        for i in 0..self.keys.len() {
+            let val = self.get_key(i).await?;
+            if *key <= val {
+                return Ok((*key == val, i as isize));
+            }
+        }
+        return Ok((false, -1));
+    }
+
     #[async_recursion]
     pub async fn nearest_node(
         &self,
         key: Vec<u8>,
-        mut path: Vec<isize>,
-    ) -> Result<(bool, Vec<isize>), HyperbeeError> {
-        for i in 0..self.keys.len() {
-            let val = self.get_key(i).await?;
-            if val >= key {
-                path.push(i as isize);
-
-                if val == key {
-                    return Ok((true, path));
-                }
-
-                if self.children.is_empty() {
-                    return Ok((false, path));
-                }
-
-                return self
-                    .get_child(i + 1)
-                    .await?
-                    .nearest_node(key.clone(), path)
-                    .await;
-            }
+        mut path: Vec<(TreeNode<M>, isize)>,
+    ) -> Result<(bool, Vec<(TreeNode<M>, isize)>), HyperbeeError> {
+        let (matched, index) = self.get_key_index(&key).await?;
+        path.push((self.clone(), index));
+        if matched || self.children.is_empty() {
+            return Ok((matched, path));
         }
-        path.push(-1);
-        if self.children.is_empty() {
-            return Ok((false, path));
-        }
-        self.get_child(0)
+
+        return Ok(self
+            .get_child((index + 1) as usize)
             .await?
             .nearest_node(key.clone(), path)
-            .await
+            .await?);
     }
 }
 
