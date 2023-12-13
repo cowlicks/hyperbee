@@ -2,7 +2,6 @@ pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 
-use async_recursion::async_recursion;
 use derive_builder::Builder;
 use hypercore::{Hypercore, HypercoreError};
 use messages::{Node, YoloIndex};
@@ -13,8 +12,8 @@ use thiserror::Error;
 use std::{fmt::Debug, sync::Arc};
 use tokio::sync::Mutex;
 
-pub trait CoreMem: RandomAccess + Debug + Send + Clone {}
-impl<T: RandomAccess + Debug + Send + Clone> CoreMem for T {}
+pub trait CoreMem: RandomAccess + Debug + Send {}
+impl<T: RandomAccess + Debug + Send> CoreMem for T {}
 
 #[derive(Error, Debug)]
 pub enum HyperbeeError {
@@ -63,7 +62,7 @@ struct BlockEntry<M: CoreMem> {
 }
 
 /// A node in the tree
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct TreeNode<M: CoreMem> {
     block: BlockEntry<M>,
     keys: Vec<Key>,
@@ -188,7 +187,10 @@ impl<M: CoreMem> TreeNode<M> {
         }
     }
 
-    async fn get_key_value(&self, index: usize) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
+    async fn get_value_of_key(
+        &self,
+        index: usize,
+    ) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
         let seq = &self.keys[index].seq;
         match get_block(&self.block.core, *seq).await? {
             Some(block) => Ok(block.value.map(|v| (block.seq, v))),
@@ -202,35 +204,6 @@ impl<M: CoreMem> TreeNode<M> {
             .await?
             .ok_or(HyperbeeError::NoChildAtSeqError(child.seq))?;
         child_block.get_tree_node(child.offset)
-    }
-
-    async fn get_key_index(&self, key: &Vec<u8>) -> Result<(bool, isize), HyperbeeError> {
-        for i in 0..self.keys.len() {
-            let val = self.get_key(i).await?;
-            if *key <= val {
-                return Ok((*key == val, i as isize));
-            }
-        }
-        return Ok((false, -1));
-    }
-
-    #[async_recursion]
-    pub async fn nearest_node(
-        &self,
-        key: Vec<u8>,
-        mut path: Vec<(TreeNode<M>, isize)>,
-    ) -> Result<(bool, Vec<(TreeNode<M>, isize)>), HyperbeeError> {
-        let (matched, index) = self.get_key_index(&key).await?;
-        path.push((self.clone(), index));
-        if matched || self.children.is_empty() {
-            return Ok((matched, path));
-        }
-
-        return Ok(self
-            .get_child((index + 1) as usize)
-            .await?
-            .nearest_node(key.clone(), path)
-            .await?);
     }
 }
 
@@ -297,7 +270,7 @@ impl<M: CoreMem> Hyperbee<M> {
                     }
                     // found matching key
                     if val == *key {
-                        return node.get_key_value(i).await;
+                        return node.get_value_of_key(i).await;
                     }
                 }
                 // key is greater than all of this nodes keys, take last child
