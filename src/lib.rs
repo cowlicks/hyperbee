@@ -1,3 +1,5 @@
+/// Rust version of [hyperbee](https://github.com/holepunchto/hyperbee)
+/// A B-tree built on top of Hypercore.
 pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
@@ -9,8 +11,8 @@ use prost::{bytes::Buf, DecodeError, Message};
 use random_access_storage::RandomAccess;
 use thiserror::Error;
 
-use std::{fmt::Debug, sync::Arc};
-use tokio::sync::Mutex;
+use std::{collections::BTreeMap, fmt::Debug, path::Path, sync::Arc};
+use tokio::sync::RwLock;
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
 impl<T: RandomAccess + Debug + Send> CoreMem for T {}
@@ -74,11 +76,11 @@ struct TreeNode<M: CoreMem> {
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
-    core: Arc<Mutex<Hypercore<M>>>,
+    core: Arc<RwLock<Hypercore<M>>>,
+    #[builder(default)]
+    root: Option<TreeNode<M>>,
 }
 
-//
-// NB: this is a smart wrapper around the proto_buf messages::yolo_index::Level;
 #[derive(Clone, Debug)]
 struct Level {
     keys: Vec<Key>,
@@ -98,10 +100,10 @@ struct Pointers {
 /// Getting a child as TreeNode:
 /// get_block(core, child.seq).await?.unwrap().get_tree_node(child.offset)
 async fn get_block<M: CoreMem>(
-    core: &Arc<Mutex<Hypercore<M>>>,
+    core: &Arc<RwLock<Hypercore<M>>>,
     seq: u64,
 ) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
-    match core.lock().await.get(seq).await? {
+    match core.write().await.get(seq).await? {
         Some(core_block) => {
             let node = Node::decode(&core_block[..])?;
             Ok(Some(BlockEntry::new(seq, node, core.clone())))
@@ -208,7 +210,7 @@ impl<M: CoreMem> TreeNode<M> {
 }
 
 impl<M: CoreMem> BlockEntry<M> {
-    fn new(seq: u64, entry: Node, core: Arc<Mutex<Hypercore<M>>>) -> Self {
+    fn new(seq: u64, entry: Node, core: Arc<RwLock<Hypercore<M>>>) -> Self {
         BlockEntry {
             seq,
             _index: Option::None,
@@ -240,7 +242,7 @@ impl<M: CoreMem> BlockEntry<M> {
 impl<M: CoreMem> Hyperbee<M> {
     /// trying to duplicate Js Hb.versinon
     pub async fn version(&self) -> u64 {
-        self.core.lock().await.info().length
+        self.core.read().await.info().length
     }
     /// Gets the root of the tree
     async fn get_root(&mut self, _ensure_header: bool) -> Result<TreeNode<M>, HyperbeeError> {
