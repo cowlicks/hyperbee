@@ -5,7 +5,7 @@ pub mod messages {
 }
 
 use derive_builder::Builder;
-use hypercore::{Hypercore, HypercoreError};
+use hypercore::{Hypercore, HypercoreBuilder, HypercoreError, Storage};
 use messages::{Node, YoloIndex};
 use prost::{bytes::Buf, DecodeError, Message};
 use random_access_storage::RandomAccess;
@@ -31,6 +31,10 @@ pub enum HyperbeeError {
     NoValueAtSeqError(u64),
     #[error("No child at seq  `{0}`")]
     NoChildAtSeqError(u64),
+    #[error("There was an error building the hyperbee")]
+    HyperbeeBuilderError(#[from] HyperbeeBuilderError),
+    //#[error("There was an error building the block cache")]
+    //BlocksBuilderError(#[from] BlocksBuilderError),
 }
 
 #[derive(Clone, Debug)]
@@ -60,7 +64,7 @@ struct BlockEntry<M: CoreMem> {
     /// Node::new(hypercore.get(seq)).value
     value: Option<Vec<u8>>,
     /// Our reference to the Hypercore
-    core: Arc<Mutex<Hypercore<M>>>,
+    core: Arc<RwLock<Hypercore<M>>>,
 }
 
 /// A node in the tree
@@ -288,4 +292,16 @@ impl<M: CoreMem> Hyperbee<M> {
             node = node.get_child(child_index).await?;
         }
     }
+}
+
+pub async fn load_from_storage_dir(
+    storage_dir: &str,
+) -> Result<Hyperbee<random_access_disk::RandomAccessDisk>, HyperbeeError> {
+    let path = Path::new(storage_dir).to_owned();
+    let storage = Storage::new_disk(&path, false).await.unwrap();
+    let hc = HypercoreBuilder::new(storage).build().await.unwrap();
+    Ok(HyperbeeBuilder::default()
+        .core(Arc::new(RwLock::new(hc)))
+        .build()?
+        .into())
 }
