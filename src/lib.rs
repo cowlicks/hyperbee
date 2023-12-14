@@ -132,26 +132,6 @@ struct Pointers {
     levels: Vec<Level>,
 }
 
-/// The function we use to get key's keys, key's values, and TreeNodes out of the core
-/// Getting a key's key:
-/// get_block(core, key.seq).await?.unwrap().key
-/// Getting a key's value:
-/// get_block(core, key.seq).await?.unwrap().value
-/// Getting a child as TreeNode:
-/// get_block(core, child.seq).await?.unwrap().get_tree_node(child.offset)
-async fn get_block<M: CoreMem>(
-    blocks: &Arc<RwLock<Blocks<M>>>,
-    seq: u64,
-) -> Result<Option<BlockEntry>, HyperbeeError> {
-    match blocks.write().await.core.get(seq).await? {
-        Some(core_block) => {
-            let node = Node::decode(&core_block[..])?;
-            Ok(Some(BlockEntry::new(seq, node)))
-        }
-        None => Ok(None),
-    }
-}
-
 impl Key {
     fn new(seq: u64, value: Option<Vec<u8>>) -> Self {
         Key { seq, value }
