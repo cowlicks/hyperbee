@@ -199,7 +199,7 @@ impl<M: CoreMem> TreeNode<M> {
         }
         Ok(self
             .blocks
-            .write()
+            .read()
             .await
             .get(&key.seq)
             .await?
@@ -216,7 +216,7 @@ impl<M: CoreMem> TreeNode<M> {
         let seq = &self.keys[index].seq;
         Ok(self
             .blocks
-            .write()
+            .read()
             .await
             .get(seq)
             .await?
@@ -230,7 +230,7 @@ impl<M: CoreMem> TreeNode<M> {
     async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
         let child = &self.children[index];
         self.blocks
-            .write()
+            .read()
             .await
             .get(&child.seq)
             .await?
@@ -321,7 +321,9 @@ pub async fn load_from_storage_dir(
 ) -> Result<Hyperbee<random_access_disk::RandomAccessDisk>, HyperbeeError> {
     let path = Path::new(storage_dir).to_owned();
     let storage = Storage::new_disk(&path, false).await.unwrap();
-    let hc = HypercoreBuilder::new(storage).build().await.unwrap();
+    let hc = Arc::new(RwLock::new(
+        HypercoreBuilder::new(storage).build().await.unwrap(),
+    ));
     let blocks = BlocksBuilder::default().core(hc).build().unwrap();
     Ok(HyperbeeBuilder::default()
         .blocks(Arc::new(RwLock::new(blocks)))
