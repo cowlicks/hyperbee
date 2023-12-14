@@ -94,8 +94,7 @@ impl<M: CoreMem> Blocks<M> {
         match self.core.get(seq).await? {
             Some(core_block) => {
                 let node = Node::decode(&core_block[..])?;
-                todo!()
-                //Ok(Some(BlockEntry::new(seq, node)))
+                Ok(Some(BlockEntry::new(seq, node)))
             }
             None => Ok(None),
         }
