@@ -69,7 +69,7 @@ struct BlockEntry<M: CoreMem> {
 
 /// A node in the tree
 #[derive(Debug)]
-struct TreeNode<M: CoreMem> {
+pub struct TreeNode<M: CoreMem> {
     block: BlockEntry<M>,
     keys: Vec<Key>,
     children: Vec<Child>,
@@ -81,8 +81,6 @@ struct TreeNode<M: CoreMem> {
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
     core: Arc<RwLock<Hypercore<M>>>,
-    #[builder(default)]
-    root: Option<TreeNode<M>>,
 }
 
 #[derive(Clone, Debug)]
@@ -140,7 +138,7 @@ impl Level {
 
 impl Pointers {
     fn new<B: Buf>(buf: B) -> Result<Self, DecodeError> {
-        let levels = YoloIndex::decode(buf)?
+        let levels: Vec<_> = YoloIndex::decode(buf)?
             .levels
             .iter()
             .map(|level| {
@@ -183,6 +181,7 @@ impl<M: CoreMem> TreeNode<M> {
         if let Some(value) = &key.value {
             return Ok(value.clone());
         }
+        // current block contains the key
         if key.seq == self.block.seq {
             Ok(self.block.key.clone())
         } else {
@@ -302,6 +301,5 @@ pub async fn load_from_storage_dir(
     let hc = HypercoreBuilder::new(storage).build().await.unwrap();
     Ok(HyperbeeBuilder::default()
         .core(Arc::new(RwLock::new(hc)))
-        .build()?
-        .into())
+        .build()?)
 }
