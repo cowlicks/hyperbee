@@ -52,7 +52,7 @@ struct Child {
 
 #[derive(Clone, Debug)]
 /// A block off the Hypercore
-struct BlockEntry<M: CoreMem> {
+pub struct BlockEntry<M: CoreMem> {
     /// index in the hypercore
     seq: u64,
     /// Pointers::new(Node::new(hypercore.get(seq)).index))
@@ -64,7 +64,15 @@ struct BlockEntry<M: CoreMem> {
     /// Node::new(hypercore.get(seq)).value
     value: Option<Vec<u8>>,
     /// Our reference to the Hypercore
-    core: Arc<RwLock<Hypercore<M>>>,
+    blocks: Arc<RwLock<Blocks<M>>>,
+}
+
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned", derive(Debug))]
+pub struct Blocks<M: CoreMem> {
+    #[builder(default)]
+    cache: BTreeMap<u64, Arc<RwLock<BlockEntry<M>>>>,
+    core: Hypercore<M>,
 }
 
 /// A node in the tree
@@ -80,7 +88,9 @@ pub struct TreeNode<M: CoreMem> {
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
-    core: Arc<RwLock<Hypercore<M>>>,
+    blocks: Arc<RwLock<Blocks<M>>>,
+    //#[builder(default)]
+    //root: Option<TreeNode<M>>,
 }
 
 #[derive(Clone, Debug)]
@@ -102,13 +112,13 @@ struct Pointers {
 /// Getting a child as TreeNode:
 /// get_block(core, child.seq).await?.unwrap().get_tree_node(child.offset)
 async fn get_block<M: CoreMem>(
-    core: &Arc<RwLock<Hypercore<M>>>,
+    blocks: &Arc<RwLock<Blocks<M>>>,
     seq: u64,
 ) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
-    match core.write().await.get(seq).await? {
+    match blocks.write().await.core.get(seq).await? {
         Some(core_block) => {
             let node = Node::decode(&core_block[..])?;
-            Ok(Some(BlockEntry::new(seq, node, core.clone())))
+            Ok(Some(BlockEntry::new(seq, node, blocks.clone())))
         }
         None => Ok(None),
     }
@@ -185,7 +195,7 @@ impl<M: CoreMem> TreeNode<M> {
         if key.seq == self.block.seq {
             Ok(self.block.key.clone())
         } else {
-            Ok(get_block(&self.block.core, key.seq)
+            Ok(get_block(&self.block.blocks, key.seq)
                 .await?
                 .ok_or(HyperbeeError::NoKeyAtSeqError(key.seq))?
                 .key)
@@ -197,7 +207,7 @@ impl<M: CoreMem> TreeNode<M> {
         index: usize,
     ) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
         let seq = &self.keys[index].seq;
-        match get_block(&self.block.core, *seq).await? {
+        match get_block(&self.block.blocks, *seq).await? {
             Some(block) => Ok(block.value.map(|v| (block.seq, v))),
             None => Err(HyperbeeError::NoValueAtSeqError(*seq)),
         }
@@ -205,7 +215,7 @@ impl<M: CoreMem> TreeNode<M> {
 
     async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
         let child = &self.children[index];
-        let child_block = get_block(&self.block.core, child.seq)
+        let child_block = get_block(&self.block.blocks, child.seq)
             .await?
             .ok_or(HyperbeeError::NoChildAtSeqError(child.seq))?;
         child_block.get_tree_node(child.offset)
@@ -213,14 +223,14 @@ impl<M: CoreMem> TreeNode<M> {
 }
 
 impl<M: CoreMem> BlockEntry<M> {
-    fn new(seq: u64, entry: Node, core: Arc<RwLock<Hypercore<M>>>) -> Self {
+    fn new(seq: u64, entry: Node, blocks: Arc<RwLock<Blocks<M>>>) -> Self {
         BlockEntry {
             seq,
             _index: Option::None,
             index_buffer: entry.index,
             key: entry.key,
             value: entry.value,
-            core,
+            blocks,
         }
     }
 
@@ -245,11 +255,11 @@ impl<M: CoreMem> BlockEntry<M> {
 impl<M: CoreMem> Hyperbee<M> {
     /// trying to duplicate Js Hb.versinon
     pub async fn version(&self) -> u64 {
-        self.core.read().await.info().length
+        self.blocks.read().await.core.info().length
     }
     /// Gets the root of the tree
     async fn get_root(&mut self, _ensure_header: bool) -> Result<TreeNode<M>, HyperbeeError> {
-        let block = get_block(&self.core, self.version().await - 1)
+        let block = get_block(&self.blocks, self.version().await - 1)
             .await?
             .ok_or(HyperbeeError::NoRootError())?;
         block.get_tree_node(0)
@@ -299,7 +309,8 @@ pub async fn load_from_storage_dir(
     let path = Path::new(storage_dir).to_owned();
     let storage = Storage::new_disk(&path, false).await.unwrap();
     let hc = HypercoreBuilder::new(storage).build().await.unwrap();
+    let blocks = BlocksBuilder::default().core(hc).build().unwrap();
     Ok(HyperbeeBuilder::default()
-        .core(Arc::new(RwLock::new(hc)))
+        .blocks(Arc::new(RwLock::new(blocks)))
         .build()?)
 }
