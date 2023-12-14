@@ -271,7 +271,7 @@ impl<M: CoreMem> Hyperbee<M> {
         self.blocks.read().await.info().await.length
     }
     /// Gets the root of the tree
-    async fn get_root(&mut self, _ensure_header: bool) -> Result<TreeNode<M>, HyperbeeError> {
+    async fn get_root(&mut self) -> Result<TreeNode<M>, HyperbeeError> {
         //
         self.blocks
             .read()
@@ -285,7 +285,7 @@ impl<M: CoreMem> Hyperbee<M> {
 
     /// Get the value associated with a key
     pub async fn get(&mut self, key: &Vec<u8>) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
-        let mut node = self.get_root(false).await?;
+        let mut node = self.get_root().await?;
         loop {
             // TODO do this with a binary search
             // find the matching key, or next child
