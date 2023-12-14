@@ -31,6 +31,8 @@ pub enum HyperbeeError {
     NoValueAtSeqError(u64),
     #[error("No child at seq  `{0}`")]
     NoChildAtSeqError(u64),
+    #[error("No block at seq  `{0}`")]
+    NoBlockAtSeqError(u64),
     #[error("There was an error building the hyperbee")]
     HyperbeeBuilderError(#[from] HyperbeeBuilderError),
     //#[error("There was an error building the block cache")]
@@ -52,7 +54,7 @@ struct Child {
 
 #[derive(Clone, Debug)]
 /// A block off the Hypercore
-pub struct BlockEntry<M: CoreMem> {
+pub struct BlockEntry {
     /// index in the hypercore
     seq: u64,
     /// Pointers::new(Node::new(hypercore.get(seq)).index))
@@ -63,26 +65,50 @@ pub struct BlockEntry<M: CoreMem> {
     key: Vec<u8>,
     /// Node::new(hypercore.get(seq)).value
     value: Option<Vec<u8>>,
-    /// Our reference to the Hypercore
-    blocks: Arc<RwLock<Blocks<M>>>,
 }
 
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Blocks<M: CoreMem> {
     #[builder(default)]
-    cache: BTreeMap<u64, Arc<RwLock<BlockEntry<M>>>>,
+    cache: BTreeMap<u64, Arc<RwLock<BlockEntry>>>,
     core: Hypercore<M>,
+}
+
+impl<M: CoreMem> Blocks<M> {
+    async fn get(&mut self, seq: u64) -> Result<Arc<RwLock<BlockEntry>>, HyperbeeError> {
+        match self.cache.get(&seq) {
+            Some(be) => Ok(be.clone()),
+            None => {
+                let be = self
+                    .get_block(seq)
+                    .await?
+                    .ok_or(HyperbeeError::NoBlockAtSeqError(seq))?;
+                let be = Arc::new(RwLock::new(be));
+                self.cache.insert(seq, be.clone());
+                Ok(be)
+            }
+        }
+    }
+    async fn get_block(&mut self, seq: u64) -> Result<Option<BlockEntry>, HyperbeeError> {
+        match self.core.get(seq).await? {
+            Some(core_block) => {
+                let node = Node::decode(&core_block[..])?;
+                todo!()
+                //Ok(Some(BlockEntry::new(seq, node)))
+            }
+            None => Ok(None),
+        }
+    }
 }
 
 /// A node in the tree
 #[derive(Debug)]
 pub struct TreeNode<M: CoreMem> {
-    block: BlockEntry<M>,
+    block: BlockEntry,
     keys: Vec<Key>,
     children: Vec<Child>,
-    //offset: u64,
-    //changed: bool,
+    blocks: Arc<RwLock<Blocks<M>>>,
 }
 
 #[derive(Debug, Builder)]
@@ -114,11 +140,12 @@ struct Pointers {
 async fn get_block<M: CoreMem>(
     blocks: &Arc<RwLock<Blocks<M>>>,
     seq: u64,
-) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
+) -> Result<Option<BlockEntry>, HyperbeeError> {
     match blocks.write().await.core.get(seq).await? {
         Some(core_block) => {
             let node = Node::decode(&core_block[..])?;
-            Ok(Some(BlockEntry::new(seq, node, blocks.clone())))
+            todo!()
+            //Ok(Some(BlockEntry::new(seq, node)))
         }
         None => Ok(None),
     }
@@ -177,13 +204,17 @@ impl Pointers {
 }
 
 impl<M: CoreMem> TreeNode<M> {
-    fn new(block: BlockEntry<M>, keys: Vec<Key>, children: Vec<Child>, _offset: u64) -> Self {
+    fn new(
+        block: BlockEntry,
+        keys: Vec<Key>,
+        children: Vec<Child>,
+        blocks: Arc<RwLock<Blocks<M>>>,
+    ) -> Self {
         TreeNode {
             block,
             keys,
             children,
-            //offset,
-            //changed: false,
+            blocks,
         }
     }
     async fn get_key(&self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
@@ -195,7 +226,7 @@ impl<M: CoreMem> TreeNode<M> {
         if key.seq == self.block.seq {
             Ok(self.block.key.clone())
         } else {
-            Ok(get_block(&self.block.blocks, key.seq)
+            Ok(get_block(&self.blocks, key.seq)
                 .await?
                 .ok_or(HyperbeeError::NoKeyAtSeqError(key.seq))?
                 .key)
@@ -207,7 +238,7 @@ impl<M: CoreMem> TreeNode<M> {
         index: usize,
     ) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
         let seq = &self.keys[index].seq;
-        match get_block(&self.block.blocks, *seq).await? {
+        match get_block(&self.blocks, *seq).await? {
             Some(block) => Ok(block.value.map(|v| (block.seq, v))),
             None => Err(HyperbeeError::NoValueAtSeqError(*seq)),
         }
@@ -215,22 +246,21 @@ impl<M: CoreMem> TreeNode<M> {
 
     async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
         let child = &self.children[index];
-        let child_block = get_block(&self.block.blocks, child.seq)
+        let child_block = get_block(&self.blocks, child.seq)
             .await?
             .ok_or(HyperbeeError::NoChildAtSeqError(child.seq))?;
-        child_block.get_tree_node(child.offset)
+        child_block.get_tree_node(child.offset, self.blocks.clone())
     }
 }
 
-impl<M: CoreMem> BlockEntry<M> {
-    fn new(seq: u64, entry: Node, blocks: Arc<RwLock<Blocks<M>>>) -> Self {
+impl BlockEntry {
+    fn new(seq: u64, entry: Node) -> Self {
         BlockEntry {
             seq,
             _index: Option::None,
             index_buffer: entry.index,
             key: entry.key,
             value: entry.value,
-            blocks,
         }
     }
 
@@ -239,14 +269,18 @@ impl<M: CoreMem> BlockEntry<M> {
     }
 
     /// offset is the offset of the node within the hypercore block
-    fn get_tree_node(self, offset: u64) -> Result<TreeNode<M>, HyperbeeError> {
+    fn get_tree_node<M: CoreMem>(
+        self,
+        offset: u64,
+        blocks: Arc<RwLock<Blocks<M>>>,
+    ) -> Result<TreeNode<M>, HyperbeeError> {
         let pointers = Pointers::new(&self.index_buffer[..])?;
         let node_data = pointers.get(offset as usize);
         Ok(TreeNode::new(
             self,
             node_data.keys.clone(),
             node_data.children.clone(),
-            offset,
+            blocks,
         ))
     }
 }
@@ -262,7 +296,7 @@ impl<M: CoreMem> Hyperbee<M> {
         let block = get_block(&self.blocks, self.version().await - 1)
             .await?
             .ok_or(HyperbeeError::NoRootError())?;
-        block.get_tree_node(0)
+        block.get_tree_node(0, self.blocks.clone())
     }
 
     /// Get the value associated with a key
