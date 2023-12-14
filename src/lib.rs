@@ -202,12 +202,7 @@ impl Pointers {
 }
 
 impl<M: CoreMem> TreeNode<M> {
-    fn new(
-        block: BlockEntry,
-        keys: Vec<Key>,
-        children: Vec<Child>,
-        blocks: Arc<RwLock<Blocks<M>>>,
-    ) -> Self {
+    fn new(keys: Vec<Key>, children: Vec<Child>, blocks: Arc<RwLock<Blocks<M>>>) -> Self {
         TreeNode {
             keys,
             children,
@@ -259,14 +254,7 @@ impl<M: CoreMem> TreeNode<M> {
             .await?
             .read()
             .await
-            .clone()
             .get_tree_node(child.offset, self.blocks.clone())?)
-        /*
-        let child_block = get_block(&self.blocks, child.seq)
-            .await?
-            .ok_or(HyperbeeError::NoChildAtSeqError(child.seq))?;
-        child_block.get_tree_node(child.offset, self.blocks.clone())
-        )*/
     }
 }
 
@@ -281,20 +269,15 @@ impl BlockEntry {
         }
     }
 
-    fn is_target(&self, key: &[u8]) -> bool {
-        key == self.key
-    }
-
     /// offset is the offset of the node within the hypercore block
     fn get_tree_node<M: CoreMem>(
-        self,
+        &self,
         offset: u64,
         blocks: Arc<RwLock<Blocks<M>>>,
     ) -> Result<TreeNode<M>, HyperbeeError> {
         let pointers = Pointers::new(&self.index_buffer[..])?;
         let node_data = pointers.get(offset as usize);
         Ok(TreeNode::new(
-            self,
             node_data.keys.clone(),
             node_data.children.clone(),
             blocks,
