@@ -104,7 +104,6 @@ impl<M: CoreMem> Blocks<M> {
 /// A node in the tree
 #[derive(Debug)]
 pub struct TreeNode<M: CoreMem> {
-    block: BlockEntry,
     keys: Vec<Key>,
     children: Vec<Child>,
     blocks: Arc<RwLock<Blocks<M>>>,
@@ -114,6 +113,7 @@ pub struct TreeNode<M: CoreMem> {
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
     blocks: Arc<RwLock<Blocks<M>>>,
+    // TODO add root here so tree is not dropped after each .get()
     //#[builder(default)]
     //root: Option<TreeNode<M>>,
 }
@@ -209,7 +209,6 @@ impl<M: CoreMem> TreeNode<M> {
         blocks: Arc<RwLock<Blocks<M>>>,
     ) -> Self {
         TreeNode {
-            block,
             keys,
             children,
             blocks,
@@ -220,20 +219,16 @@ impl<M: CoreMem> TreeNode<M> {
         if let Some(value) = &key.value {
             return Ok(value.clone());
         }
-        if key.seq == self.block.seq {
-            Ok(self.block.key.clone())
-        } else {
-            Ok(self
-                .blocks
-                .write()
-                .await
-                .get(&key.seq)
-                .await?
-                .read()
-                .await
-                .key
-                .clone())
-        }
+        Ok(self
+            .blocks
+            .write()
+            .await
+            .get(&key.seq)
+            .await?
+            .read()
+            .await
+            .key
+            .clone())
     }
 
     async fn get_value_of_key(
@@ -325,13 +320,8 @@ impl<M: CoreMem> Hyperbee<M> {
     pub async fn get(&mut self, key: &Vec<u8>) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
         let mut node = self.get_root(false).await?;
         loop {
-            //
-            //if node.block.is_target(key) {
-            //    return Ok(node.block.value.map(|v| (node.block.seq, v)));
-            //}
-
-            // find the matching key, or next child
             // TODO do this with a binary search
+            // find the matching key, or next child
             let child_index: usize = 'found: {
                 for i in 0..node.keys.len() {
                     let val = node.get_key(i).await?;
