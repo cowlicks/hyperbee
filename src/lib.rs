@@ -76,25 +76,25 @@ pub struct Blocks<M: CoreMem> {
 }
 
 impl<M: CoreMem> Blocks<M> {
-    async fn get(&mut self, seq: u64) -> Result<Arc<RwLock<BlockEntry>>, HyperbeeError> {
+    async fn get(&mut self, seq: &u64) -> Result<Arc<RwLock<BlockEntry>>, HyperbeeError> {
         match self.cache.get(&seq) {
             Some(be) => Ok(be.clone()),
             None => {
                 let be = self
-                    .get_block(seq)
+                    ._get_block(seq)
                     .await?
-                    .ok_or(HyperbeeError::NoBlockAtSeqError(seq))?;
+                    .ok_or(HyperbeeError::NoBlockAtSeqError(*seq))?;
                 let be = Arc::new(RwLock::new(be));
-                self.cache.insert(seq, be.clone());
+                self.cache.insert(*seq, be.clone());
                 Ok(be)
             }
         }
     }
-    async fn get_block(&mut self, seq: u64) -> Result<Option<BlockEntry>, HyperbeeError> {
-        match self.core.get(seq).await? {
+    async fn _get_block(&mut self, seq: &u64) -> Result<Option<BlockEntry>, HyperbeeError> {
+        match self.core.get(*seq).await? {
             Some(core_block) => {
                 let node = Node::decode(&core_block[..])?;
-                Ok(Some(BlockEntry::new(seq, node)))
+                Ok(Some(BlockEntry::new(*seq, node)))
             }
             None => Ok(None),
         }
@@ -143,8 +143,7 @@ async fn get_block<M: CoreMem>(
     match blocks.write().await.core.get(seq).await? {
         Some(core_block) => {
             let node = Node::decode(&core_block[..])?;
-            todo!()
-            //Ok(Some(BlockEntry::new(seq, node)))
+            Ok(Some(BlockEntry::new(seq, node)))
         }
         None => Ok(None),
     }
@@ -221,14 +220,19 @@ impl<M: CoreMem> TreeNode<M> {
         if let Some(value) = &key.value {
             return Ok(value.clone());
         }
-        // current block contains the key
         if key.seq == self.block.seq {
             Ok(self.block.key.clone())
         } else {
-            Ok(get_block(&self.blocks, key.seq)
+            Ok(self
+                .blocks
+                .write()
+                .await
+                .get(&key.seq)
                 .await?
-                .ok_or(HyperbeeError::NoKeyAtSeqError(key.seq))?
-                .key)
+                .read()
+                .await
+                .key
+                .clone())
         }
     }
 
@@ -237,18 +241,37 @@ impl<M: CoreMem> TreeNode<M> {
         index: usize,
     ) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
         let seq = &self.keys[index].seq;
-        match get_block(&self.blocks, *seq).await? {
-            Some(block) => Ok(block.value.map(|v| (block.seq, v))),
-            None => Err(HyperbeeError::NoValueAtSeqError(*seq)),
-        }
+        Ok(self
+            .blocks
+            .write()
+            .await
+            .get(seq)
+            .await?
+            .read()
+            .await
+            .value
+            .clone()
+            .map(|v| (*seq, v)))
     }
 
     async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
         let child = &self.children[index];
+        Ok(self
+            .blocks
+            .write()
+            .await
+            .get(&child.seq)
+            .await?
+            .read()
+            .await
+            .clone()
+            .get_tree_node(child.offset, self.blocks.clone())?)
+        /*
         let child_block = get_block(&self.blocks, child.seq)
             .await?
             .ok_or(HyperbeeError::NoChildAtSeqError(child.seq))?;
         child_block.get_tree_node(child.offset, self.blocks.clone())
+        )*/
     }
 }
 
@@ -302,10 +325,10 @@ impl<M: CoreMem> Hyperbee<M> {
     pub async fn get(&mut self, key: &Vec<u8>) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
         let mut node = self.get_root(false).await?;
         loop {
-            // check if this is our guy
-            if node.block.is_target(key) {
-                return Ok(node.block.value.map(|v| (node.block.seq, v)));
-            }
+            //
+            //if node.block.is_target(key) {
+            //    return Ok(node.block.value.map(|v| (node.block.seq, v)));
+            //}
 
             // find the matching key, or next child
             // TODO do this with a binary search
