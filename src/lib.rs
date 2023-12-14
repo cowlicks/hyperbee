@@ -48,19 +48,15 @@ struct Key {
 #[derive(Clone, Debug)]
 struct Child {
     seq: u64,
-    offset: u64,             // correct?
-    _value: Option<Vec<u8>>, // correct?
+    offset: u64,
+    _value: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug)]
 /// A block off the Hypercore
 pub struct BlockEntry {
-    /// index in the hypercore
-    seq: u64,
     /// Pointers::new(Node::new(hypercore.get(seq)).index))
-    _index: Option<Pointers>,
-    /// Node::new(hypercore.get(seq)).index
-    index_buffer: Vec<u8>,
+    index: Pointers,
     /// Node::new(hypercore.get(seq)).key
     key: Vec<u8>,
     /// Node::new(hypercore.get(seq)).value
@@ -71,33 +67,40 @@ pub struct BlockEntry {
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Blocks<M: CoreMem> {
     #[builder(default)]
-    cache: BTreeMap<u64, Arc<RwLock<BlockEntry>>>,
-    core: Hypercore<M>,
+    cache: Arc<RwLock<BTreeMap<u64, Arc<RwLock<BlockEntry>>>>>,
+    core: Arc<RwLock<Hypercore<M>>>,
 }
 
 impl<M: CoreMem> Blocks<M> {
-    async fn get(&mut self, seq: &u64) -> Result<Arc<RwLock<BlockEntry>>, HyperbeeError> {
-        match self.cache.get(&seq) {
-            Some(be) => Ok(be.clone()),
+    pub async fn get(&self, seq: &u64) -> Result<Arc<RwLock<BlockEntry>>, HyperbeeError> {
+        match self._get_from_cache(seq).await {
+            Some(block) => Ok(block.clone()),
             None => {
                 let be = self
-                    ._get_block(seq)
+                    ._get_from_core(seq)
                     .await?
                     .ok_or(HyperbeeError::NoBlockAtSeqError(*seq))?;
                 let be = Arc::new(RwLock::new(be));
-                self.cache.insert(*seq, be.clone());
+                self.cache.write().await.insert(*seq, be.clone());
                 Ok(be)
             }
         }
     }
-    async fn _get_block(&mut self, seq: &u64) -> Result<Option<BlockEntry>, HyperbeeError> {
-        match self.core.get(*seq).await? {
+    async fn _get_from_cache(&self, seq: &u64) -> Option<Arc<RwLock<BlockEntry>>> {
+        self.cache.read().await.get(seq).map(|x| x.clone())
+    }
+
+    async fn _get_from_core(&self, seq: &u64) -> Result<Option<BlockEntry>, HyperbeeError> {
+        match self.core.write().await.get(*seq).await? {
             Some(core_block) => {
                 let node = Node::decode(&core_block[..])?;
-                Ok(Some(BlockEntry::new(*seq, node)))
+                Ok(Some(BlockEntry::new(node)?))
             }
             None => Ok(None),
         }
+    }
+    async fn info(&self) -> hypercore::Info {
+        self.core.read().await.info()
     }
 }
 
