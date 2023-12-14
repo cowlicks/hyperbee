@@ -49,7 +49,7 @@ struct Key {
 struct Child {
     seq: u64,
     offset: u64,
-    _value: Option<Vec<u8>>,
+    node: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug)]
@@ -117,8 +117,8 @@ pub struct TreeNode<M: CoreMem> {
 pub struct Hyperbee<M: CoreMem> {
     blocks: Arc<RwLock<Blocks<M>>>,
     // TODO add root here so tree is not dropped after each .get()
-    //#[builder(default)]
-    //root: Option<TreeNode<M>>,
+    #[builder(default)]
+    root: Option<Arc<TreeNode<M>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -139,12 +139,8 @@ impl Key {
 }
 
 impl Child {
-    fn new(seq: u64, offset: u64, _value: Option<Vec<u8>>) -> Self {
-        Child {
-            seq,
-            offset,
-            _value,
-        }
+    fn new(seq: u64, offset: u64, node: Option<Vec<u8>>) -> Self {
+        Child { seq, offset, node }
     }
 }
 
@@ -271,16 +267,24 @@ impl<M: CoreMem> Hyperbee<M> {
         self.blocks.read().await.info().await.length
     }
     /// Gets the root of the tree
-    async fn get_root(&mut self) -> Result<TreeNode<M>, HyperbeeError> {
-        //
-        self.blocks
-            .read()
-            .await
-            .get(&(self.version().await - 1))
-            .await?
-            .read()
-            .await
-            .get_tree_node(0, self.blocks.clone())
+    async fn get_root(&mut self) -> Result<Arc<TreeNode<M>>, HyperbeeError> {
+        match &self.root {
+            Some(root) => Ok(root.clone()),
+            None => {
+                let root = self
+                    .blocks
+                    .read()
+                    .await
+                    .get(&(self.version().await - 1))
+                    .await?
+                    .read()
+                    .await
+                    .get_tree_node(0, self.blocks.clone())?;
+                let root = Arc::new(root);
+                self.root = Some(root.clone());
+                Ok(root)
+            }
+        }
     }
 
     /// Get the value associated with a key
@@ -311,7 +315,7 @@ impl<M: CoreMem> Hyperbee<M> {
             }
 
             // get next node
-            node = node.get_child(child_index).await?;
+            node = node.get_child(child_index).await?.into();
         }
     }
 }
