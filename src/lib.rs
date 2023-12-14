@@ -229,27 +229,24 @@ impl<M: CoreMem> TreeNode<M> {
 
     async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
         let child = &self.children[index];
-        Ok(self
-            .blocks
+        self.blocks
             .write()
             .await
             .get(&child.seq)
             .await?
             .read()
             .await
-            .get_tree_node(child.offset, self.blocks.clone())?)
+            .get_tree_node(child.offset, self.blocks.clone())
     }
 }
 
 impl BlockEntry {
-    fn new(seq: u64, entry: Node) -> Self {
-        BlockEntry {
-            seq,
-            _index: Option::None,
-            index_buffer: entry.index,
+    fn new(entry: Node) -> Result<Self, HyperbeeError> {
+        Ok(BlockEntry {
+            index: Pointers::new(&entry.index[..])?,
             key: entry.key,
             value: entry.value,
-        }
+        })
     }
 
     /// offset is the offset of the node within the hypercore block
@@ -258,8 +255,7 @@ impl BlockEntry {
         offset: u64,
         blocks: Arc<RwLock<Blocks<M>>>,
     ) -> Result<TreeNode<M>, HyperbeeError> {
-        let pointers = Pointers::new(&self.index_buffer[..])?;
-        let node_data = pointers.get(offset as usize);
+        let node_data = self.index.get(offset as usize);
         Ok(TreeNode::new(
             node_data.keys.clone(),
             node_data.children.clone(),
@@ -272,14 +268,19 @@ impl BlockEntry {
 impl<M: CoreMem> Hyperbee<M> {
     /// trying to duplicate Js Hb.versinon
     pub async fn version(&self) -> u64 {
-        self.blocks.read().await.core.info().length
+        self.blocks.read().await.info().await.length
     }
     /// Gets the root of the tree
     async fn get_root(&mut self, _ensure_header: bool) -> Result<TreeNode<M>, HyperbeeError> {
-        let block = get_block(&self.blocks, self.version().await - 1)
+        //
+        self.blocks
+            .read()
+            .await
+            .get(&(self.version().await - 1))
             .await?
-            .ok_or(HyperbeeError::NoRootError())?;
-        block.get_tree_node(0, self.blocks.clone())
+            .read()
+            .await
+            .get_tree_node(0, self.blocks.clone())
     }
 
     /// Get the value associated with a key
