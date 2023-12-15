@@ -6,7 +6,7 @@ pub mod messages {
 
 use derive_builder::Builder;
 use hypercore::{Hypercore, HypercoreBuilder, HypercoreError, Storage};
-use messages::{Node, YoloIndex};
+use messages::{Node as NodeSchema, YoloIndex};
 use prost::{bytes::Buf, DecodeError, Message};
 use random_access_storage::RandomAccess;
 use thiserror::Error;
@@ -52,9 +52,8 @@ pub struct BlockEntry {
     value: Option<Vec<u8>>,
 }
 
-// TODO use these everywhere
 type Shared<T> = Arc<RwLock<T>>;
-type SharedNode<T> = Shared<TreeNode<T>>;
+type SharedNode<T> = Shared<Node<T>>;
 type SharedBlock = Shared<BlockEntry>;
 
 #[derive(Debug, Builder)]
@@ -73,19 +72,19 @@ struct Children<M: CoreMem> {
 
 /// A node in the tree
 #[derive(Debug)]
-pub struct TreeNode<M: CoreMem> {
+pub struct Node<M: CoreMem> {
     keys: Vec<Key>,
     children: Children<M>,
-    blocks: Arc<RwLock<Blocks<M>>>,
+    blocks: Shared<Blocks<M>>,
 }
 
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
-    blocks: Arc<RwLock<Blocks<M>>>,
+    blocks: Shared<Blocks<M>>,
     // TODO add root here so tree is not dropped after each .get()
     #[builder(default)]
-    root: Option<Arc<RwLock<TreeNode<M>>>>,
+    root: Option<SharedNode<M>>,
 }
 
 #[derive(Clone, Debug)]
@@ -144,7 +143,7 @@ impl Pointers {
 }
 
 impl<M: CoreMem> Blocks<M> {
-    pub async fn get(&self, seq: &u64) -> Result<Arc<RwLock<BlockEntry>>, HyperbeeError> {
+    pub async fn get(&self, seq: &u64) -> Result<Shared<BlockEntry>, HyperbeeError> {
         match self._get_from_cache(seq).await {
             Some(block) => Ok(block),
             None => {
@@ -158,14 +157,14 @@ impl<M: CoreMem> Blocks<M> {
             }
         }
     }
-    async fn _get_from_cache(&self, seq: &u64) -> Option<Arc<RwLock<BlockEntry>>> {
+    async fn _get_from_cache(&self, seq: &u64) -> Option<Shared<BlockEntry>> {
         self.cache.read().await.get(seq).cloned()
     }
 
     async fn _get_from_core(&self, seq: &u64) -> Result<Option<BlockEntry>, HyperbeeError> {
         match self.core.write().await.get(*seq).await? {
             Some(core_block) => {
-                let node = Node::decode(&core_block[..])?;
+                let node = NodeSchema::decode(&core_block[..])?;
                 Ok(Some(BlockEntry::new(node)?))
             }
             None => Ok(None),
@@ -177,13 +176,13 @@ impl<M: CoreMem> Blocks<M> {
 }
 
 impl<M: CoreMem> Children<M> {
-    fn new(blocks: Arc<RwLock<Blocks<M>>>, children: Vec<Child>) -> Self {
+    fn new(blocks: Shared<Blocks<M>>, children: Vec<Child>) -> Self {
         Self {
             blocks,
             children: RwLock::new(children.into_iter().map(|c| (c, Option::None)).collect()),
         }
     }
-    async fn get_child(&self, index: usize) -> Result<Arc<RwLock<TreeNode<M>>>, HyperbeeError> {
+    async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
         let child_data = match &self.children.read().await[index] {
             (_, Some(node)) => return Ok(node.clone()),
             (child_data, None) => child_data.clone(),
@@ -204,9 +203,9 @@ impl<M: CoreMem> Children<M> {
     }
 }
 
-impl<M: CoreMem> TreeNode<M> {
-    fn new(keys: Vec<Key>, children: Vec<Child>, blocks: Arc<RwLock<Blocks<M>>>) -> Self {
-        TreeNode {
+impl<M: CoreMem> Node<M> {
+    fn new(keys: Vec<Key>, children: Vec<Child>, blocks: Shared<Blocks<M>>) -> Self {
+        Node {
             keys,
             children: Children::new(blocks.clone(), children),
             blocks,
@@ -247,13 +246,13 @@ impl<M: CoreMem> TreeNode<M> {
             .map(|v| (*seq, v)))
     }
 
-    async fn get_child(&self, index: usize) -> Result<Arc<RwLock<TreeNode<M>>>, HyperbeeError> {
+    async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
         self.children.get_child(index).await
     }
 }
 
 impl BlockEntry {
-    fn new(entry: Node) -> Result<Self, HyperbeeError> {
+    fn new(entry: NodeSchema) -> Result<Self, HyperbeeError> {
         Ok(BlockEntry {
             index: Pointers::new(&entry.index[..])?,
             key: entry.key,
@@ -265,10 +264,10 @@ impl BlockEntry {
     fn get_tree_node<M: CoreMem>(
         &self,
         offset: u64,
-        blocks: Arc<RwLock<Blocks<M>>>,
-    ) -> Result<TreeNode<M>, HyperbeeError> {
+        blocks: Shared<Blocks<M>>,
+    ) -> Result<Node<M>, HyperbeeError> {
         let node_data = self.index.get(offset as usize);
-        Ok(TreeNode::new(
+        Ok(Node::new(
             node_data.keys.clone(),
             node_data.children.clone(),
             blocks,
@@ -283,7 +282,7 @@ impl<M: CoreMem> Hyperbee<M> {
         self.blocks.read().await.info().await.length
     }
     /// Gets the root of the tree
-    async fn get_root(&mut self) -> Result<Arc<RwLock<TreeNode<M>>>, HyperbeeError> {
+    async fn get_root(&mut self) -> Result<Shared<Node<M>>, HyperbeeError> {
         match &self.root {
             Some(root) => Ok(root.clone()),
             None => {
