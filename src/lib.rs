@@ -49,7 +49,6 @@ struct Key {
 struct Child {
     seq: u64,
     offset: u64,
-    node: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug)]
@@ -71,44 +70,18 @@ pub struct Blocks<M: CoreMem> {
     core: Arc<RwLock<Hypercore<M>>>,
 }
 
-impl<M: CoreMem> Blocks<M> {
-    pub async fn get(&self, seq: &u64) -> Result<Arc<RwLock<BlockEntry>>, HyperbeeError> {
-        match self._get_from_cache(seq).await {
-            Some(block) => Ok(block.clone()),
-            None => {
-                let be = self
-                    ._get_from_core(seq)
-                    .await?
-                    .ok_or(HyperbeeError::NoBlockAtSeqError(*seq))?;
-                let be = Arc::new(RwLock::new(be));
-                self.cache.write().await.insert(*seq, be.clone());
-                Ok(be)
-            }
-        }
-    }
-    async fn _get_from_cache(&self, seq: &u64) -> Option<Arc<RwLock<BlockEntry>>> {
-        self.cache.read().await.get(seq).map(|x| x.clone())
-    }
-
-    async fn _get_from_core(&self, seq: &u64) -> Result<Option<BlockEntry>, HyperbeeError> {
-        match self.core.write().await.get(*seq).await? {
-            Some(core_block) => {
-                let node = Node::decode(&core_block[..])?;
-                Ok(Some(BlockEntry::new(node)?))
-            }
-            None => Ok(None),
-        }
-    }
-    async fn info(&self) -> hypercore::Info {
-        self.core.read().await.info()
-    }
+type ChildPointersWithNodes<M> = RwLock<Vec<(Child, Option<Arc<RwLock<TreeNode<M>>>>)>>;
+#[derive(Debug)]
+struct Children<M: CoreMem> {
+    blocks: Arc<RwLock<Blocks<M>>>,
+    children: ChildPointersWithNodes<M>,
 }
 
 /// A node in the tree
 #[derive(Debug)]
 pub struct TreeNode<M: CoreMem> {
     keys: Vec<Key>,
-    children: Vec<Child>,
+    children: Children<M>,
     blocks: Arc<RwLock<Blocks<M>>>,
 }
 
@@ -118,7 +91,7 @@ pub struct Hyperbee<M: CoreMem> {
     blocks: Arc<RwLock<Blocks<M>>>,
     // TODO add root here so tree is not dropped after each .get()
     #[builder(default)]
-    root: Option<Arc<TreeNode<M>>>,
+    root: Option<Arc<RwLock<TreeNode<M>>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -139,8 +112,8 @@ impl Key {
 }
 
 impl Child {
-    fn new(seq: u64, offset: u64, node: Option<Vec<u8>>) -> Self {
-        Child { seq, offset, node }
+    fn new(seq: u64, offset: u64) -> Self {
+        Child { seq, offset }
     }
 }
 
@@ -163,11 +136,7 @@ impl Pointers {
                     .collect();
                 let mut children = vec![];
                 for i in (0..(level.children.len())).step_by(2) {
-                    children.push(Child::new(
-                        level.children[i],
-                        level.children[i + 1],
-                        Option::None,
-                    ));
+                    children.push(Child::new(level.children[i], level.children[i + 1]));
                 }
                 Level::new(keys, children)
             })
@@ -180,11 +149,72 @@ impl Pointers {
     }
 }
 
+impl<M: CoreMem> Blocks<M> {
+    pub async fn get(&self, seq: &u64) -> Result<Arc<RwLock<BlockEntry>>, HyperbeeError> {
+        match self._get_from_cache(seq).await {
+            Some(block) => Ok(block),
+            None => {
+                let be = self
+                    ._get_from_core(seq)
+                    .await?
+                    .ok_or(HyperbeeError::NoBlockAtSeqError(*seq))?;
+                let be = Arc::new(RwLock::new(be));
+                self.cache.write().await.insert(*seq, be.clone());
+                Ok(be)
+            }
+        }
+    }
+    async fn _get_from_cache(&self, seq: &u64) -> Option<Arc<RwLock<BlockEntry>>> {
+        self.cache.read().await.get(seq).cloned()
+    }
+
+    async fn _get_from_core(&self, seq: &u64) -> Result<Option<BlockEntry>, HyperbeeError> {
+        match self.core.write().await.get(*seq).await? {
+            Some(core_block) => {
+                let node = Node::decode(&core_block[..])?;
+                Ok(Some(BlockEntry::new(node)?))
+            }
+            None => Ok(None),
+        }
+    }
+    async fn info(&self) -> hypercore::Info {
+        self.core.read().await.info()
+    }
+}
+
+impl<M: CoreMem> Children<M> {
+    fn new(blocks: Arc<RwLock<Blocks<M>>>, children: Vec<Child>) -> Self {
+        Self {
+            blocks,
+            children: RwLock::new(children.into_iter().map(|c| (c, Option::None)).collect()),
+        }
+    }
+    async fn get_child(&self, index: usize) -> Result<Arc<RwLock<TreeNode<M>>>, HyperbeeError> {
+        let child_data = match &self.children.read().await[index] {
+            (_, Some(node)) => return Ok(node.clone()),
+            (child_data, None) => child_data.clone(),
+        };
+        let block = self.blocks.read().await.get(&child_data.seq).await?;
+        let node = Arc::new(RwLock::new(
+            block
+                .read()
+                .await
+                .get_tree_node(child_data.offset, self.blocks.clone())?,
+        ));
+        self.children.write().await[index].1 = Some(node.clone());
+        Ok(node)
+    }
+
+    async fn is_empty(&self) -> bool {
+        self.children.read().await.is_empty()
+    }
+}
+
 impl<M: CoreMem> TreeNode<M> {
     fn new(keys: Vec<Key>, children: Vec<Child>, blocks: Arc<RwLock<Blocks<M>>>) -> Self {
         TreeNode {
             keys,
-            children,
+            children: Children::new(blocks.clone(), children),
             blocks,
         }
     }
@@ -223,16 +253,8 @@ impl<M: CoreMem> TreeNode<M> {
             .map(|v| (*seq, v)))
     }
 
-    async fn get_child(&self, index: usize) -> Result<TreeNode<M>, HyperbeeError> {
-        let child = &self.children[index];
-        self.blocks
-            .read()
-            .await
-            .get(&child.seq)
-            .await?
-            .read()
-            .await
-            .get_tree_node(child.offset, self.blocks.clone())
+    async fn get_child(&self, index: usize) -> Result<Arc<RwLock<TreeNode<M>>>, HyperbeeError> {
+        self.children.get_child(index).await
     }
 }
 
@@ -267,7 +289,7 @@ impl<M: CoreMem> Hyperbee<M> {
         self.blocks.read().await.info().await.length
     }
     /// Gets the root of the tree
-    async fn get_root(&mut self) -> Result<Arc<TreeNode<M>>, HyperbeeError> {
+    async fn get_root(&mut self) -> Result<Arc<RwLock<TreeNode<M>>>, HyperbeeError> {
         match &self.root {
             Some(root) => Ok(root.clone()),
             None => {
@@ -280,7 +302,7 @@ impl<M: CoreMem> Hyperbee<M> {
                     .read()
                     .await
                     .get_tree_node(0, self.blocks.clone())?;
-                let root = Arc::new(root);
+                let root = Arc::new(RwLock::new(root));
                 self.root = Some(root.clone());
                 Ok(root)
             }
@@ -293,29 +315,36 @@ impl<M: CoreMem> Hyperbee<M> {
         loop {
             // TODO do this with a binary search
             // find the matching key, or next child
-            let child_index: usize = 'found: {
-                for i in 0..node.keys.len() {
-                    let val = node.get_key(i).await?;
-                    // found matching child
-                    if *key < val {
-                        break 'found i;
+            let next_node = {
+                let read_node = node.read().await;
+                let child_index: usize = 'found: {
+                    for i in 0..read_node.keys.len() {
+                        let val = read_node.get_key(i).await?;
+                        // found matching child
+                        if *key < val {
+                            break 'found i;
+                        }
+                        // found matching key
+                        if val == *key {
+                            return read_node.get_value_of_key(i).await;
+                        }
                     }
-                    // found matching key
-                    if val == *key {
-                        return node.get_value_of_key(i).await;
-                    }
+                    // key is greater than all of this nodes keys, take last child, which has index
+                    // of node.keys.len()
+                    read_node.keys.len()
+                };
+
+                // leaf node with no match
+                if read_node.children.is_empty().await {
+                    return Ok(None);
                 }
-                // key is greater than all of this nodes keys, take last child
-                node.keys.len()
+
+                // get next node
+                read_node.get_child(child_index).await?.clone()
             };
 
-            // leaf node with no match
-            if node.children.is_empty() {
-                return Ok(None);
-            }
-
-            // get next node
-            node = node.get_child(child_index).await?.into();
+            // swap current node with the next one
+            node = next_node;
         }
     }
 }
