@@ -52,19 +52,23 @@ pub struct BlockEntry {
     value: Option<Vec<u8>>,
 }
 
+// TODO use these everywhere
+type Shared<T> = Arc<RwLock<T>>;
+type SharedNode<T> = Shared<TreeNode<T>>;
+type SharedBlock = Shared<BlockEntry>;
+
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Blocks<M: CoreMem> {
     #[builder(default)]
-    cache: Arc<RwLock<BTreeMap<u64, Arc<RwLock<BlockEntry>>>>>,
-    core: Arc<RwLock<Hypercore<M>>>,
+    cache: Shared<BTreeMap<u64, SharedBlock>>,
+    core: Shared<Hypercore<M>>,
 }
 
-type ChildPointersWithNodes<M> = RwLock<Vec<(Child, Option<Arc<RwLock<TreeNode<M>>>>)>>;
 #[derive(Debug)]
 struct Children<M: CoreMem> {
-    blocks: Arc<RwLock<Blocks<M>>>,
-    children: ChildPointersWithNodes<M>,
+    blocks: Shared<Blocks<M>>,
+    children: RwLock<Vec<(Child, Option<SharedNode<M>>)>>,
 }
 
 /// A node in the tree
