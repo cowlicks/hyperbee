@@ -23,20 +23,10 @@ pub enum HyperbeeError {
     HypercoreError(#[from] HypercoreError),
     #[error("There was an error decoding Hypercore data")]
     DecodeError(#[from] DecodeError),
-    #[error("Hyperbee has no root")]
-    NoRootError(),
-    #[error("No key at seq  `{0}`")]
-    NoKeyAtSeqError(u64),
-    #[error("No key at seq  `{0}`")]
-    NoValueAtSeqError(u64),
-    #[error("No child at seq  `{0}`")]
-    NoChildAtSeqError(u64),
     #[error("No block at seq  `{0}`")]
     NoBlockAtSeqError(u64),
     #[error("There was an error building the hyperbee")]
     HyperbeeBuilderError(#[from] HyperbeeBuilderError),
-    //#[error("There was an error building the block cache")]
-    //BlocksBuilderError(#[from] BlocksBuilderError),
 }
 
 #[derive(Clone, Debug)]
