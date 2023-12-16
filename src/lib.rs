@@ -44,11 +44,11 @@ struct Child {
 #[derive(Clone, Debug)]
 /// A block off the Hypercore
 pub struct BlockEntry {
-    /// Pointers::new(Node::new(hypercore.get(seq)).index))
+    /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
     index: Pointers,
-    /// Node::new(hypercore.get(seq)).key
+    /// NodeSchema::new(hypercore.get(seq)).key
     key: Vec<u8>,
-    /// Node::new(hypercore.get(seq)).value
+    /// NodeSchema::new(hypercore.get(seq)).value
     value: Option<Vec<u8>>,
 }
 
@@ -203,6 +203,47 @@ impl<M: CoreMem> Children<M> {
     }
 }
 
+async fn nearest_node<M: CoreMem>(
+    node: SharedNode<M>,
+    key: &Vec<u8>,
+) -> Result<(bool, Vec<SharedNode<M>>, Vec<usize>), HyperbeeError> {
+    let mut current_node = node;
+    let mut node_path: Vec<SharedNode<M>> = vec![];
+    let mut child_idxs: Vec<usize> = vec![];
+    loop {
+        node_path.push(current_node.clone());
+        let next_node = {
+            let read_node = current_node.read().await;
+            let child_index: usize = 'found: {
+                for i in 0..read_node.keys.len() {
+                    let val = read_node.get_key(i).await?;
+                    // found matching child
+                    if *key < val {
+                        child_idxs.push(i.clone());
+                        break 'found i;
+                    }
+                    // found matching key
+                    if val == *key {
+                        child_idxs.push(i.clone());
+                        return Ok((true, node_path, child_idxs));
+                    }
+                }
+                // key is greater than all of this nodes keys, take last child, which has index
+                // of node.keys.len()
+                child_idxs.push(read_node.keys.len());
+                read_node.keys.len()
+            };
+
+            // leaf node with no match
+            if read_node.children.is_empty().await {
+                return Ok((false, node_path, child_idxs));
+            }
+
+            read_node.get_child(child_index).await?
+        };
+        current_node = next_node;
+    }
+}
 impl<M: CoreMem> Node<M> {
     fn new(keys: Vec<Key>, children: Vec<Child>, blocks: Shared<Blocks<M>>) -> Self {
         Node {
@@ -211,6 +252,7 @@ impl<M: CoreMem> Node<M> {
             blocks,
         }
     }
+
     async fn get_key(&self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
         let key = &self.keys[index];
         if let Some(value) = &key.value {
@@ -275,9 +317,8 @@ impl BlockEntry {
     }
 }
 
-// TODO use builder pattern macros for Hyperbee opts
 impl<M: CoreMem> Hyperbee<M> {
-    /// trying to duplicate Js Hb.versinon
+    /// Trying to duplicate Js Hb.version
     pub async fn version(&self) -> u64 {
         self.blocks.read().await.info().await.length
     }
@@ -302,43 +343,19 @@ impl<M: CoreMem> Hyperbee<M> {
         }
     }
 
-    /// Get the value associated with a key
     pub async fn get(&mut self, key: &Vec<u8>) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
-        let mut node = self.get_root().await?;
-        loop {
-            // TODO do this with a binary search
-            // find the matching key, or next child
-            let next_node = {
-                let read_node = node.read().await;
-                let child_index: usize = 'found: {
-                    for i in 0..read_node.keys.len() {
-                        let val = read_node.get_key(i).await?;
-                        // found matching child
-                        if *key < val {
-                            break 'found i;
-                        }
-                        // found matching key
-                        if val == *key {
-                            return read_node.get_value_of_key(i).await;
-                        }
-                    }
-                    // key is greater than all of this nodes keys, take last child, which has index
-                    // of node.keys.len()
-                    read_node.keys.len()
-                };
-
-                // leaf node with no match
-                if read_node.children.is_empty().await {
-                    return Ok(None);
-                }
-
-                // get next node
-                read_node.get_child(child_index).await?.clone()
-            };
-
-            // swap current node with the next one
-            node = next_node;
+        let node = self.get_root().await?;
+        let (matched, path, indexes) = nearest_node(node, key).await?;
+        if matched {
+            return path
+                .last()
+                .unwrap()
+                .read()
+                .await
+                .get_value_of_key(*indexes.last().unwrap())
+                .await;
         }
+        Ok(None)
     }
 }
 
