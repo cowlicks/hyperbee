@@ -11,7 +11,7 @@ use prost::{bytes::Buf, DecodeError, Message};
 use random_access_storage::RandomAccess;
 use thiserror::Error;
 
-use std::{collections::BTreeMap, fmt::Debug, path::Path, sync::Arc};
+use std::{collections::BTreeMap, fmt::Debug, num::TryFromIntError, path::Path, sync::Arc};
 use tokio::sync::RwLock;
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
@@ -27,6 +27,8 @@ pub enum HyperbeeError {
     NoBlockAtSeqError(u64),
     #[error("There was an error building the hyperbee")]
     HyperbeeBuilderError(#[from] HyperbeeBuilderError),
+    #[error("Converting a u64 value [{0}] to usize failed. This is possibly a 32bit platform. Got error {1}")]
+    U64ToUsizeConversionError(u64, TryFromIntError),
 }
 
 #[derive(Clone, Debug)]
@@ -143,18 +145,20 @@ impl Pointers {
 }
 
 impl<M: CoreMem> Blocks<M> {
+    /// # Errors
+    /// when the provided `seq` is not in the Hypercore
+    /// when the data in the Hypercore block cannot be decoded
     pub async fn get(&self, seq: &u64) -> Result<Shared<BlockEntry>, HyperbeeError> {
-        match self._get_from_cache(seq).await {
-            Some(block) => Ok(block),
-            None => {
-                let be = self
-                    ._get_from_core(seq)
-                    .await?
-                    .ok_or(HyperbeeError::NoBlockAtSeqError(*seq))?;
-                let be = Arc::new(RwLock::new(be));
-                self.cache.write().await.insert(*seq, be.clone());
-                Ok(be)
-            }
+        if let Some(block) = self._get_from_cache(seq).await {
+            Ok(block)
+        } else {
+            let block_entry = self
+                ._get_from_core(seq)
+                .await?
+                .ok_or(HyperbeeError::NoBlockAtSeqError(*seq))?;
+            let block_entry = Arc::new(RwLock::new(block_entry));
+            self.cache.write().await.insert(*seq, block_entry.clone());
+            Ok(block_entry)
         }
     }
     async fn _get_from_cache(&self, seq: &u64) -> Option<Shared<BlockEntry>> {
@@ -219,12 +223,12 @@ async fn nearest_node<M: CoreMem>(
                     let val = read_node.get_key(i).await?;
                     // found matching child
                     if *key < val {
-                        child_idxs.push(i.clone());
+                        child_idxs.push(i);
                         break 'found i;
                     }
                     // found matching key
                     if val == *key {
-                        child_idxs.push(i.clone());
+                        child_idxs.push(i);
                         return Ok((true, node_path, child_idxs));
                     }
                 }
@@ -244,6 +248,7 @@ async fn nearest_node<M: CoreMem>(
         current_node = next_node;
     }
 }
+
 impl<M: CoreMem> Node<M> {
     fn new(keys: Vec<Key>, children: Vec<Child>, blocks: Shared<Blocks<M>>) -> Self {
         Node {
@@ -308,7 +313,10 @@ impl BlockEntry {
         offset: u64,
         blocks: Shared<Blocks<M>>,
     ) -> Result<Node<M>, HyperbeeError> {
-        let node_data = self.index.get(offset as usize);
+        let node_data = self.index.get(
+            usize::try_from(offset)
+                .map_err(|e| HyperbeeError::U64ToUsizeConversionError(offset, e))?,
+        );
         Ok(Node::new(
             node_data.keys.clone(),
             node_data.children.clone(),
@@ -343,22 +351,35 @@ impl<M: CoreMem> Hyperbee<M> {
         }
     }
 
+    /// Get the value corresponding to the provided `key` from the Hyperbee
+    /// # Errors
+    /// When `Hyperbee.get_root` fails
     pub async fn get(&mut self, key: &Vec<u8>) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
         let node = self.get_root().await?;
         let (matched, path, indexes) = nearest_node(node, key).await?;
         if matched {
             return path
                 .last()
-                .unwrap()
+                .expect("Since `matched` was true, there must be at least one node in `path`")
                 .read()
                 .await
-                .get_value_of_key(*indexes.last().unwrap())
+                .get_value_of_key(*indexes.last().expect(
+                    "Since `matched` was true, there must be at least one node in `indexes`",
+                ))
                 .await;
         }
         Ok(None)
     }
 }
 
+/// helper for creating a Hyperbee
+/// # Panics
+/// when storage path is incorrect
+/// when Hypercore failse to build
+/// when Blocks fails to build
+///
+/// # Errors
+/// when Hyperbee fails to build
 pub async fn load_from_storage_dir(
     storage_dir: &str,
 ) -> Result<Hyperbee<random_access_disk::RandomAccessDisk>, HyperbeeError> {
