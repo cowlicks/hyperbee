@@ -3,6 +3,7 @@
 pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
+pub mod traverse;
 
 use derive_builder::Builder;
 use hypercore::{Hypercore, HypercoreBuilder, HypercoreError, Storage};
@@ -32,7 +33,7 @@ pub enum HyperbeeError {
 }
 
 #[derive(Clone, Debug)]
-struct Key {
+pub struct Key {
     seq: u64,
     value: Option<Vec<u8>>,
 }
@@ -75,7 +76,7 @@ struct Children<M: CoreMem> {
 /// A node in the tree
 #[derive(Debug)]
 pub struct Node<M: CoreMem> {
-    keys: Vec<Key>,
+    pub keys: Vec<Key>,
     children: Children<M>,
     blocks: Shared<Blocks<M>>,
 }
@@ -331,7 +332,7 @@ impl<M: CoreMem> Hyperbee<M> {
         self.blocks.read().await.info().await.length
     }
     /// Gets the root of the tree
-    async fn get_root(&mut self) -> Result<Shared<Node<M>>, HyperbeeError> {
+    pub async fn get_root(&mut self) -> Result<Shared<Node<M>>, HyperbeeError> {
         match &self.root {
             Some(root) => Ok(root.clone()),
             None => {
