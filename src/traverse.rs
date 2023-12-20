@@ -13,9 +13,9 @@ type PinnedFut<T> = Pin<Box<dyn Future<Output = T>>>;
 /// Struct used for iterating over hyperbee with a Stream
 pub struct Traverse<M: CoreMem> {
     root: SharedNode<M>,
-    n_leafs_and_children: Option<PinnedFut<(usize, usize)>>,
+    n_keys_and_children: Option<PinnedFut<(usize, usize)>>,
     iter: Option<Box<dyn Iterator<Item = usize>>>,
-    next_leaf: Option<PinnedFut<TreeItem>>,
+    next_key: Option<PinnedFut<TreeItem>>,
     next_child: Option<PinnedFut<Result<Traverse<M>, HyperbeeError>>>,
     child_stream: Option<Pin<Box<Traverse<M>>>>,
 }
@@ -24,16 +24,16 @@ impl<M: CoreMem> Traverse<M> {
     fn new(root: SharedNode<M>) -> Self {
         Traverse {
             root,
-            n_leafs_and_children: Option::None,
+            n_keys_and_children: Option::None,
             iter: Option::None,
-            next_leaf: Option::None,
+            next_key: Option::None,
             next_child: Option::None,
             child_stream: Option::None,
         }
     }
 }
 
-async fn n_leafs_and_children<M: CoreMem>(node: SharedNode<M>) -> (usize, usize) {
+async fn get_n_keys_and_children<M: CoreMem>(node: SharedNode<M>) -> (usize, usize) {
     (
         node.read().await.keys.len(),
         node.read().await.children.children.read().await.len(),
@@ -59,11 +59,11 @@ async fn get_child_stream<M: CoreMem>(
 impl<M: CoreMem + 'static> Stream for Traverse<M> {
     type Item = TreeItem;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // getting next leaf value
-        if let Some(leaf_fut) = &mut self.next_leaf {
-            match leaf_fut.poll(cx) {
+        // getting next key & value
+        if let Some(key_fut) = &mut self.next_key {
+            match key_fut.poll(cx) {
                 Poll::Ready(out) => {
-                    self.next_leaf = None;
+                    self.next_key = None;
                     return Poll::Ready(Some(out));
                 }
                 Poll::Pending => return Poll::Pending,
@@ -79,9 +79,10 @@ impl<M: CoreMem + 'static> Stream for Traverse<M> {
                         self.child_stream = Some(Box::pin(stream));
                     }
                     Err(e) => {
+                        // Push error into stream
                         return Poll::Ready(Some(Err(HyperbeeError::GetChildInTraverseError(
                             Box::new(e),
-                        ))))
+                        ))));
                     }
                 }
             }
@@ -105,10 +106,10 @@ impl<M: CoreMem + 'static> Stream for Traverse<M> {
         // set up prerequisites to get the iterator we need
         let iter = match &mut self.iter {
             None => {
-                match &mut self.n_leafs_and_children {
+                match &mut self.n_keys_and_children {
                     None => {
-                        self.n_leafs_and_children =
-                            Some(Box::pin(n_leafs_and_children(self.root.clone())));
+                        self.n_keys_and_children =
+                            Some(Box::pin(get_n_keys_and_children(self.root.clone())));
                     }
                     Some(fut) => match fut.poll(cx) {
                         Poll::Ready((n_keys, n_children)) => {
@@ -132,10 +133,10 @@ impl<M: CoreMem + 'static> Stream for Traverse<M> {
             if index % 2 == 0 {
                 self.next_child = Some(Box::pin(get_child_stream(self.root.clone(), index >> 1)));
             } else {
-                self.next_leaf = Some(Box::pin(get_key_and_value(self.root.clone(), index >> 1)));
+                self.next_key = Some(Box::pin(get_key_and_value(self.root.clone(), index >> 1)));
             }
             cx.waker().wake_by_ref();
-            // start waiting for next_leaf or next_child
+            // start waiting for next_key or next_child
             return Poll::Pending;
         }
         cx.waker().wake_by_ref();
