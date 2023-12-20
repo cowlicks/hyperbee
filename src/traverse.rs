@@ -1,31 +1,34 @@
-use futures_lite::future::FutureExt;
+use super::{CoreMem, HyperbeeError, SharedNode};
+use futures_lite::{future::FutureExt, StreamExt};
 use std::{
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
-
-use super::{CoreMem, HyperbeeError, SharedNode};
 use tokio_stream::Stream;
 
-// TODO is this needed
-#[pin_project::pin_project]
+type PinnedFut<T> = Pin<Box<dyn Future<Output = T>>>;
+
+// TODO add options for gt lt gte lte, reverse, and versions for just key/seq
+/// Struct used for iterating over hyperbee with a Stream
 pub struct Traverse<M: CoreMem> {
     root: SharedNode<M>,
-    n_leafs_and_children: (
-        Option<Pin<Box<dyn Future<Output = (usize, usize)>>>>,
-        Option<(usize, usize)>,
-    ),
-    next_leaf: Option<Pin<Box<dyn Future<Output = Result<Vec<u8>, HyperbeeError>>>>>,
-    current_index: usize,
+    n_leafs_and_children: Option<PinnedFut<(usize, usize)>>,
+    iter: Option<Box<dyn Iterator<Item = usize>>>,
+    next_leaf: Option<PinnedFut<TreeItem>>,
+    next_child: Option<PinnedFut<Result<Traverse<M>, HyperbeeError>>>,
+    child_stream: Option<Pin<Box<Traverse<M>>>>,
 }
+
 impl<M: CoreMem> Traverse<M> {
     fn new(root: SharedNode<M>) -> Self {
         Traverse {
             root,
-            n_leafs_and_children: (Option::None, Option::None),
+            n_leafs_and_children: Option::None,
+            iter: Option::None,
             next_leaf: Option::None,
-            current_index: 0,
+            next_child: Option::None,
+            child_stream: Option::None,
         }
     }
 }
@@ -37,62 +40,105 @@ async fn n_leafs_and_children<M: CoreMem>(node: SharedNode<M>) -> (usize, usize)
     )
 }
 
-async fn next_leaf<M: CoreMem>(
+type TreeItem = Result<(Vec<u8>, Option<(u64, Vec<u8>)>), HyperbeeError>;
+
+async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> TreeItem {
+    let key = node.read().await.get_key(index).await?;
+    let value = node.read().await.get_value_of_key(index).await?;
+    Ok((key, value))
+}
+
+async fn get_child_stream<M: CoreMem>(
     node: SharedNode<M>,
     index: usize,
-) -> Result<Vec<u8>, HyperbeeError> {
-    node.read().await.get_key(index).await
+) -> Result<Traverse<M>, HyperbeeError> {
+    let child = node.read().await.get_child(index).await?;
+    Ok(Traverse::new(child))
 }
 
 impl<M: CoreMem + 'static> Stream for Traverse<M> {
-    type Item = Result<Vec<u8>, HyperbeeError>;
-    // create n_leafs_and_children future
-    // wait for ^
-    // store n_leafs_and_children
-
-    // TODO use thunk pattern here
-    // https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=8547cdc5267a4271812b2562483f2ceb
+    type Item = TreeItem;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if let Some((n_leafs, n_children)) = self.n_leafs_and_children.1 {
-            if self.current_index == n_leafs {
-                // done
-                return Poll::Ready(None);
-            }
-            if self.next_leaf.is_none() {
-                self.next_leaf = Some(Box::pin(next_leaf(self.root.clone(), self.current_index)));
-            }
-            // always true
-            if let Some(next_leaf_fut) = &mut self.next_leaf {
-                if let Poll::Ready(result) = next_leaf_fut.poll(cx) {
+        // getting next leaf value
+        if let Some(leaf_fut) = &mut self.next_leaf {
+            match leaf_fut.poll(cx) {
+                Poll::Ready(out) => {
                     self.next_leaf = None;
-                    self.current_index += 1;
-                    return Poll::Ready(Some(result));
+                    return Poll::Ready(Some(out));
+                }
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+
+        // setting up next child stream
+        if let Some(child_fut) = &mut self.next_child {
+            if let Poll::Ready(out) = child_fut.poll(cx) {
+                match out {
+                    Ok(stream) => {
+                        self.next_child = None;
+                        self.child_stream = Some(Box::pin(stream));
+                    }
+                    Err(_) => {
+                        // TODO
+                        panic!("What do I do here");
+                    }
                 }
             }
+            // waiting for child stream to resolve
+            cx.waker().wake_by_ref();
             return Poll::Pending;
         }
 
-        if self.n_leafs_and_children.0.is_none() {
-            self.n_leafs_and_children.0 = Some(Box::pin(n_leafs_and_children(self.root.clone())));
-        }
-        if let Some(n_leafs_and_children_fut) = &mut self.n_leafs_and_children.0 {
-            // This future was completed but I polled it again :(
-            match n_leafs_and_children_fut.poll(cx) {
-                Poll::Ready(n_leafs_and_children_val) => {
-                    println!("n_children future ready! {:?}", n_leafs_and_children_val);
-                    self.n_leafs_and_children.1 = Some(n_leafs_and_children_val);
-                    // TODO there must be another poll on a new future here or poll next wont be
-                    // called
-                    cx.waker().wake_by_ref();
-                    return Poll::Pending;
-                }
-                Poll::Pending => {
-                    println!("n_children future NOT ready!");
-                    return Poll::Pending;
+        // pull from child stream
+        if let Some(stream) = &mut self.child_stream {
+            if let Poll::Ready(out_opt) = stream.poll_next(cx) {
+                match out_opt {
+                    None => self.child_stream = None,
+                    Some(out) => return Poll::Ready(Some(out)),
                 }
             }
+            // waiting for next stream item to resolve
+            return Poll::Pending;
         }
-        return Poll::Pending;
+
+        // set up prerequisites to get the iterator we need
+        let iter = match &mut self.iter {
+            None => {
+                match &mut self.n_leafs_and_children {
+                    None => {
+                        self.n_leafs_and_children =
+                            Some(Box::pin(n_leafs_and_children(self.root.clone())));
+                    }
+                    Some(fut) => match fut.poll(cx) {
+                        Poll::Ready((n_keys, n_children)) => {
+                            let iter: Box<dyn Iterator<Item = usize>> = if n_children != 0 {
+                                Box::new(0..(n_keys * 2 + 1))
+                            } else {
+                                Box::new((1..(n_keys * 2 + 1)).step_by(2))
+                            };
+                            self.iter = Some(iter);
+                        }
+                        Poll::Pending => (),
+                    },
+                }
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Some(iter) => iter,
+        };
+
+        if let Some(index) = iter.next() {
+            if index % 2 == 0 {
+                self.next_child = Some(Box::pin(get_child_stream(self.root.clone(), index >> 1)));
+            } else {
+                self.next_leaf = Some(Box::pin(get_key_and_value(self.root.clone(), index >> 1)));
+            }
+            cx.waker().wake_by_ref();
+            // start waiting for next_leaf or next_child
+            return Poll::Pending;
+        }
+        cx.waker().wake_by_ref();
+        Poll::Ready(None)
     }
 }
 
