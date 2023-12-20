@@ -210,13 +210,23 @@ impl<M: CoreMem> Children<M> {
     }
 }
 
+/// Descend through tree to the node nearest (or matching) the provided key
+/// Returns a tuple that describes the path we took. It looks like `(matched, node_path, index_path)`
+/// * `matched` is a bool that indicates if the key was matched
+/// * `node_path` is a `Vec` of nodes that we passed through, in order. Starting with the provided `node`
+/// argument, ending with last node.
+/// * `index_path` is a `Vec` of indexes which corresponds to the index of the child node that we
+/// passed through. If `matched` is true the matching key is at:
+/// ```Rust
+/// let matching_key = node_path.last()?.keys[index_path.last()?]
+/// ```
 async fn nearest_node<M: CoreMem>(
     node: SharedNode<M>,
     key: &Vec<u8>,
 ) -> Result<(bool, Vec<SharedNode<M>>, Vec<usize>), HyperbeeError> {
     let mut current_node = node;
     let mut node_path: Vec<SharedNode<M>> = vec![];
-    let mut child_idxs: Vec<usize> = vec![];
+    let mut index_path: Vec<usize> = vec![];
     loop {
         node_path.push(current_node.clone());
         let next_node = {
@@ -226,24 +236,24 @@ async fn nearest_node<M: CoreMem>(
                     let val = read_node.get_key(i).await?;
                     // found matching child
                     if *key < val {
-                        child_idxs.push(i);
+                        index_path.push(i);
                         break 'found i;
                     }
                     // found matching key
                     if val == *key {
-                        child_idxs.push(i);
-                        return Ok((true, node_path, child_idxs));
+                        index_path.push(i);
+                        return Ok((true, node_path, index_path));
                     }
                 }
                 // key is greater than all of this nodes keys, take last child, which has index
                 // of node.keys.len()
-                child_idxs.push(read_node.keys.len());
+                index_path.push(read_node.keys.len());
                 read_node.keys.len()
             };
 
             // leaf node with no match
             if read_node.children.is_empty().await {
-                return Ok((false, node_path, child_idxs));
+                return Ok((false, node_path, index_path));
             }
 
             read_node.get_child(child_index).await?
