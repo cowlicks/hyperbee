@@ -6,12 +6,11 @@ async fn basic() -> Result<(), Box<dyn std::error::Error>> {
     let stop = 25;
     let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
     for i in start..stop {
-        println!("{i}");
         let key = i.to_string();
         let expected = (stop - i).to_string();
-        let (seq, res) = hb.get(&key.as_bytes().to_vec()).await?.unwrap();
+        let (_seq, res) = hb.get(&key.as_bytes().to_vec()).await?.unwrap();
         let res = std::str::from_utf8(&res).unwrap();
-        dbg!(seq, res);
+        println!("k {i}, v {res}");
         assert_eq!(res, expected);
     }
     Ok(())
@@ -31,7 +30,8 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
     let start = 0;
     let stop = 25;
     let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
-    let expected: Vec<Vec<u8>> = (start..stop).map(|i| i.to_string().into()).collect();
+    let mut expected: Vec<Vec<u8>> = (start..stop).map(|i| i.to_string().into()).collect();
+    expected.sort();
     let mut result = vec![];
     let root = hb.get_root().await?;
     let stream = hyperbee_rs::traverse::traverse(root);
@@ -39,7 +39,14 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(x) = stream.next().await {
         result.push(x?);
     }
-    dbg!(&result);
+    let result: Vec<String> = result
+        .into_iter()
+        .map(|x| String::from_utf8(x.0).unwrap())
+        .collect();
+    let expected: Vec<String> = expected
+        .into_iter()
+        .map(|x| String::from_utf8(x).unwrap())
+        .collect();
     assert_eq!(result, expected);
     Ok(())
 }
