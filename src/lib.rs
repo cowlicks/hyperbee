@@ -30,6 +30,8 @@ pub enum HyperbeeError {
     HyperbeeBuilderError(#[from] HyperbeeBuilderError),
     #[error("Converting a u64 value [{0}] to usize failed. This is possibly a 32bit platform. Got error {1}")]
     U64ToUsizeConversionError(u64, TryFromIntError),
+    #[error("Could not traverse child node. Got error: {0}")]
+    GetChildInTraverseError(Box<dyn std::error::Error>),
 }
 
 #[derive(Clone, Debug)]

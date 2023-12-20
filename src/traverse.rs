@@ -73,14 +73,15 @@ impl<M: CoreMem + 'static> Stream for Traverse<M> {
         // setting up next child stream
         if let Some(child_fut) = &mut self.next_child {
             if let Poll::Ready(out) = child_fut.poll(cx) {
+                self.next_child = None;
                 match out {
                     Ok(stream) => {
-                        self.next_child = None;
                         self.child_stream = Some(Box::pin(stream));
                     }
-                    Err(_) => {
-                        // TODO
-                        panic!("What do I do here");
+                    Err(e) => {
+                        return Poll::Ready(Some(Err(HyperbeeError::GetChildInTraverseError(
+                            Box::new(e),
+                        ))))
                     }
                 }
             }
