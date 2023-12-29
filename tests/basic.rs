@@ -33,7 +33,10 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
     let mut expected: Vec<Vec<u8>> = (start..stop).map(|i| i.to_string().into()).collect();
     expected.sort();
     let mut result = vec![];
-    let root = hb.get_root().await?;
+    let root = hb
+        .get_root(false)
+        .await?
+        .expect("Root should be written already");
     let stream = hyperbee_rs::traverse::traverse(root);
     tokio::pin!(stream);
     while let Some(x) = stream.next().await {

@@ -3,20 +3,31 @@
 pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
+pub mod put;
 pub mod traverse;
 
 use derive_builder::Builder;
-use hypercore::{Hypercore, HypercoreBuilder, HypercoreError, Storage};
-use messages::{Node as NodeSchema, YoloIndex};
-use prost::{bytes::Buf, DecodeError, Message};
+use hypercore::{AppendOutcome, Hypercore, HypercoreBuilder, HypercoreError, Storage};
+use messages::{yolo_index, Header, Node as NodeSchema, YoloIndex};
+use prost::{bytes::Buf, DecodeError, EncodeError, Message};
 use random_access_storage::RandomAccess;
 use thiserror::Error;
 
-use std::{collections::BTreeMap, fmt::Debug, num::TryFromIntError, path::Path, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    fmt::Debug,
+    num::TryFromIntError,
+    ops::{Range, RangeBounds},
+    path::Path,
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
 impl<T: RandomAccess + Debug + Send> CoreMem for T {}
+
+static PROTOCOL: &str = "hyperbee";
+static MAX_KEYS: usize = 4;
 
 #[derive(Error, Debug)]
 pub enum HyperbeeError {
@@ -32,18 +43,31 @@ pub enum HyperbeeError {
     U64ToUsizeConversionError(u64, TryFromIntError),
     #[error("Could not traverse child node. Got error: {0}")]
     GetChildInTraverseError(Box<dyn std::error::Error>),
+    #[error("There was an error encoding a YoloIndex {0}")]
+    YoloIndexEncodingError(EncodeError),
+    #[error("There was an error encoding a messages::Node {0}")]
+    NodeEncodingError(EncodeError),
 }
 
 #[derive(Clone, Debug)]
+/// Pointer used within a [`Node`] to point to it's keys.
 pub struct Key {
+    /// Index of the key's "key" within the [`hypercore::Hypercore`].
     seq: u64,
+    // TODO this is not getting used anywhere
+    /// Value of the key's "key". NB: it is not the "value" corresponding to the value in a `(key,
+    /// value)` pair
     value: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug)]
-struct Child {
-    seq: u64,
-    offset: u64,
+/// Pointer used within a [`Node`] to point to it's child nodes.
+pub struct Child {
+    /// Index of the `Node` within the [`hypercore::Hypercore`].
+    pub seq: u64,
+    /// Index of the `Node` within the [`messages::Node::index`].
+    /// NB: offset = 0, is the topmost node
+    pub offset: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -180,6 +204,9 @@ impl<M: CoreMem> Blocks<M> {
     async fn info(&self) -> hypercore::Info {
         self.core.read().await.info()
     }
+    async fn append(&self, value: &Vec<u8>) -> Result<AppendOutcome, HyperbeeError> {
+        Ok(self.core.write().await.append(value).await?)
+    }
 }
 
 impl<M: CoreMem> Children<M> {
@@ -189,6 +216,17 @@ impl<M: CoreMem> Children<M> {
             children: RwLock::new(children.into_iter().map(|c| (c, Option::None)).collect()),
         }
     }
+    async fn insert(&self, index: usize, new_children: Vec<Child>) {
+        if new_children.is_empty() {
+            return;
+        }
+
+        self.children.write().await.splice(
+            index..(index + 1),
+            new_children.iter().map(|c| (c.clone(), Option::None)),
+        );
+    }
+
     async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
         let child_data = match &self.children.read().await[index] {
             (_, Some(node)) => return Ok(node.clone()),
@@ -203,6 +241,27 @@ impl<M: CoreMem> Children<M> {
         ));
         self.children.write().await[index].1 = Some(node.clone());
         Ok(node)
+    }
+
+    async fn get_children(&self) -> Vec<Child> {
+        self.children
+            .read()
+            .await
+            .iter()
+            .map(|(c, _)| c.clone())
+            .collect()
+    }
+
+    async fn splice<R: RangeBounds<usize>>(
+        &self,
+        range: R,
+        replace_with: Vec<(Child, Option<SharedNode<M>>)>,
+    ) -> Vec<(Child, Option<SharedNode<M>>)> {
+        self.children
+            .write()
+            .await
+            .splice(range, replace_with)
+            .collect()
     }
 
     async fn is_empty(&self) -> bool {
@@ -271,6 +330,19 @@ impl<M: CoreMem> Node<M> {
         }
     }
 
+    async fn to_level(&self) -> yolo_index::Level {
+        yolo_index::Level {
+            keys: self.keys.iter().map(|k| k.seq.clone()).collect(),
+            children: self
+                .children
+                .get_children()
+                .await
+                .iter()
+                .map(|c| c.seq.clone())
+                .collect(),
+        }
+    }
+
     async fn get_key(&self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
         let key = &self.keys[index];
         if let Some(value) = &key.value {
@@ -309,6 +381,12 @@ impl<M: CoreMem> Node<M> {
     async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
         self.children.get_child(index).await
     }
+
+    async fn _insert(&mut self, key_ref: Key, children: Vec<Child>, range: Range<usize>) {
+        self.keys.splice(range.clone(), vec![key_ref]);
+        self.children.insert(range.start, children).await;
+        // TODO handle children
+    }
 }
 
 impl BlockEntry {
@@ -344,22 +422,30 @@ impl<M: CoreMem> Hyperbee<M> {
         self.blocks.read().await.info().await.length
     }
     /// Gets the root of the tree
-    pub async fn get_root(&mut self) -> Result<Shared<Node<M>>, HyperbeeError> {
+    /// enuser_header if true, write the hyperbee header onto the hypercore, if it does not exist
+    /// write_root: if true write an empty root node, if one does not exist
+    pub async fn get_root(
+        &mut self,
+        ensure_header: bool,
+    ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
         match &self.root {
-            Some(root) => Ok(root.clone()),
+            Some(root) => Ok(Some(root.clone())),
             None => {
-                let root = self
-                    .blocks
-                    .read()
-                    .await
-                    .get(&(self.version().await - 1))
+                let blocks = self.blocks.read().await;
+                let version = self.version().await;
+                if version == 0 && ensure_header {
+                    self.ensure_header().await?;
+                    return Ok(None);
+                }
+                let root = blocks
+                    .get(&(version - 1))
                     .await?
                     .read()
                     .await
                     .get_tree_node(0, self.blocks.clone())?;
                 let root = Arc::new(RwLock::new(root));
                 self.root = Some(root.clone());
-                Ok(root)
+                Ok(Some(root))
             }
         }
     }
@@ -368,7 +454,10 @@ impl<M: CoreMem> Hyperbee<M> {
     /// # Errors
     /// When `Hyperbee.get_root` fails
     pub async fn get(&mut self, key: &Vec<u8>) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
-        let node = self.get_root().await?;
+        let node = match self.get_root(false).await? {
+            None => return Ok(None),
+            Some(node) => node,
+        };
         let (matched, path, indexes) = nearest_node(node, key).await?;
         if matched {
             return path
@@ -382,6 +471,22 @@ impl<M: CoreMem> Hyperbee<M> {
                 .await;
         }
         Ok(None)
+    }
+
+    async fn ensure_header(&self) -> Result<bool, HyperbeeError> {
+        if self.blocks.read().await.info().await.length != 0 {
+            return Ok(false);
+        }
+        let header = Header {
+            protocol: PROTOCOL.to_string(),
+            metadata: None, // TODO this is this.tree.metadata in js. What should go here.
+        };
+        // TODO get this working
+        let mut buf = vec![];
+        header.encode(&mut buf).unwrap();
+        let _ = self.blocks.read().await.append(&buf).await?;
+        // write header
+        return Ok(true);
     }
 }
 
