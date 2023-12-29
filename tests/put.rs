@@ -55,3 +55,20 @@ async fn basic_put_with_replace() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn multilevel_put() -> Result<(), Box<dyn std::error::Error>> {
+    let mut hb = in_memory_hyperbee().await?;
+    for i in 0..10 {
+        let key = vec![i as u8];
+        let val = vec![i as u8];
+        hb.put(&key, Some(val.clone())).await?;
+        for j in 0..(i + 1) {
+            let key = vec![j];
+            let val = vec![j];
+            let res = hb.get(&key).await?.unwrap();
+            assert_eq!(res.1, val);
+        }
+    }
+    Ok(())
+}
