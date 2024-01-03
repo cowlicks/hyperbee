@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
-use crate::SharedNode;
+use crate::{Blocks, SharedNode};
 
 use super::{
     messages::{yolo_index, Node as NodeSchema, YoloIndex},
     nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, Key, Node, MAX_KEYS,
 };
+use hypercore::AppendOutcome;
 use prost::Message;
 use tokio::sync::RwLock;
 
@@ -59,7 +60,53 @@ impl<M: CoreMem> Changes<M> {
             offset: self.nodes.len().try_into().expect("TODO"),
         }
     }
+
+    fn add_root(&mut self, root: SharedNode<M>) -> Child {
+        self.root = Some(root);
+        Child {
+            seq: self.seq,
+            offset: 0,
+        }
+    }
 }
+
+impl<M: CoreMem> Blocks<M> {
+    async fn add_changes(&self, changes: Changes<M>) -> Result<AppendOutcome, HyperbeeError> {
+        let Changes {
+            seq: _,
+            key,
+            value,
+            nodes,
+            root,
+        } = changes;
+
+        let mut new_nodes = vec![];
+        // encode nodes
+        // TODO ensure root
+        new_nodes.push(root.unwrap().read().await.to_level().await);
+        for node in nodes.into_iter() {
+            new_nodes.push(node.read().await.to_level().await);
+        }
+
+        let index = YoloIndex { levels: new_nodes };
+
+        let mut index_buf = vec![];
+        YoloIndex::encode(&index, &mut index_buf)
+            .map_err(HyperbeeError::YoloIndexEncodingError)?;
+
+        let node_schema = NodeSchema {
+            key,
+            value,
+            index: index_buf,
+        };
+
+        let mut node_schema_buf = vec![];
+        NodeSchema::encode(&node_schema, &mut node_schema_buf)
+            .map_err(HyperbeeError::NodeEncodingError)?;
+        self.append(&node_schema_buf).await
+    }
+}
+
 async fn propagate_changes_up_tree<M: CoreMem>(
     node_schema: NodeSchema,
     mut node_path: Vec<SharedNode<M>>,
@@ -69,11 +116,11 @@ async fn propagate_changes_up_tree<M: CoreMem>(
     let _node = node_path.pop().expect("should be checked before call ");
     let _index = index_path.pop().expect("should be checked before call ");
 
-    return node_schema;
+    node_schema
 }
 
 impl<M: CoreMem> Node<M> {
-    async fn split(&mut self) -> (Node<M>, Key, Node<M>) {
+    async fn split(&mut self) -> (SharedNode<M>, Key, SharedNode<M>) {
         let median_index = self.keys.len() >> 1;
 
         let left = Node::new(
@@ -97,7 +144,11 @@ impl<M: CoreMem> Node<M> {
                 .collect(),
             self.blocks.clone(),
         );
-        (left, mid_key, right)
+        (
+            Arc::new(RwLock::new(left)),
+            mid_key,
+            Arc::new(RwLock::new(right)),
+        )
     }
 }
 impl<M: CoreMem> Hyperbee<M> {
@@ -122,7 +173,7 @@ impl<M: CoreMem> Hyperbee<M> {
                 };
                 let mut index = vec![];
                 YoloIndex::encode(&p, &mut index)
-                    .map_err(|e| HyperbeeError::YoloIndexEncodingError(e))?;
+                    .map_err(HyperbeeError::YoloIndexEncodingError)?;
                 let node_schema = NodeSchema {
                     key: key.clone(),
                     value,
@@ -130,7 +181,7 @@ impl<M: CoreMem> Hyperbee<M> {
                 };
                 let mut block = vec![];
                 NodeSchema::encode(&node_schema, &mut block)
-                    .map_err(|e| HyperbeeError::NodeEncodingError(e))?;
+                    .map_err(HyperbeeError::NodeEncodingError)?;
                 self.blocks.read().await.append(&block).await?;
                 return Ok((false, 1));
             }
@@ -140,22 +191,31 @@ impl<M: CoreMem> Hyperbee<M> {
         let (matched, mut node_path, mut index_path) = nearest_node(root, key).await?;
 
         let seq = self.version().await;
-        let changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
+        let mut changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
 
         // TODO get this when me make NodeSchema
         let mut cur_key = Key {
             seq,
             value: Some(key.clone()),
         };
-        let mut children: Vec<SharedNode<M>> = vec![];
+        let mut children: Vec<Child> = vec![];
 
         loop {
             let cur_node = match node_path.pop() {
                 None => {
+                    let new_root = Arc::new(RwLock::new(Node::new(
+                        vec![cur_key.clone()],
+                        children,
+                        self.blocks.clone(),
+                    )));
+
+                    self.root = Some(new_root.clone());
                     // create a new root
                     // put chlidren in node_schema then put the below thing
-                    //let r = Node::new(vec![cur_key], children, self.blocks.clone());
-                    todo!();
+                    changes.add_root(new_root);
+                    let outcome = self.blocks.read().await.add_changes(changes).await?;
+
+                    return Ok((true, outcome.length));
                 }
                 Some(cur_node) => cur_node,
             };
@@ -181,7 +241,7 @@ impl<M: CoreMem> Hyperbee<M> {
 
                 let mut index = vec![];
                 YoloIndex::encode(&p, &mut index)
-                    .map_err(|e| HyperbeeError::YoloIndexEncodingError(e))?;
+                    .map_err(HyperbeeError::YoloIndexEncodingError)?;
                 let node_schema = NodeSchema {
                     key: key.clone(),
                     value,
@@ -196,7 +256,7 @@ impl<M: CoreMem> Hyperbee<M> {
 
                 let mut block = vec![];
                 NodeSchema::encode(&node_schema, &mut block)
-                    .map_err(|e| HyperbeeError::NodeEncodingError(e))?;
+                    .map_err(HyperbeeError::NodeEncodingError)?;
 
                 let outcome = self.blocks.read().await.append(&block).await?;
                 // TODO propagateChangesUpTree
@@ -208,13 +268,15 @@ impl<M: CoreMem> Hyperbee<M> {
                 .await
                 ._insert(cur_key, vec![], cur_index..cur_index)
                 .await;
+
             let (left, mid_key, right) = cur_node.write().await.split().await;
             // add left/right to node_schema and get child pointers
-            cur_key = mid_key;
-            children = vec![Arc::new(RwLock::new(left)), Arc::new(RwLock::new(right))];
 
-            // must split node
-            todo!()
+            children = vec![
+                changes.add_node(left.clone()),
+                changes.add_node(right.clone()),
+            ];
+            cur_key = mid_key;
         }
     }
 }

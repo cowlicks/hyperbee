@@ -204,7 +204,7 @@ impl<M: CoreMem> Blocks<M> {
     async fn info(&self) -> hypercore::Info {
         self.core.read().await.info()
     }
-    async fn append(&self, value: &Vec<u8>) -> Result<AppendOutcome, HyperbeeError> {
+    async fn append(&self, value: &[u8]) -> Result<AppendOutcome, HyperbeeError> {
         Ok(self.core.write().await.append(value).await?)
     }
 }
@@ -336,13 +336,13 @@ impl<M: CoreMem> Node<M> {
 
     async fn to_level(&self) -> yolo_index::Level {
         yolo_index::Level {
-            keys: self.keys.iter().map(|k| k.seq.clone()).collect(),
+            keys: self.keys.iter().map(|k| k.seq).collect(),
             children: self
                 .children
                 .get_children()
                 .await
                 .iter()
-                .map(|c| c.seq.clone())
+                .map(|c| c.seq)
                 .collect(),
         }
     }
@@ -490,7 +490,7 @@ impl<M: CoreMem> Hyperbee<M> {
         header.encode(&mut buf).unwrap();
         let _ = self.blocks.read().await.append(&buf).await?;
         // write header
-        return Ok(true);
+        Ok(true)
     }
 }
 

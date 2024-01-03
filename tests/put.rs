@@ -20,8 +20,8 @@ async fn in_memory_hyperbee(
 async fn basic_put() -> Result<(), Box<dyn std::error::Error>> {
     let mut hb = in_memory_hyperbee().await?;
     for i in 0..4 {
-        let key = vec![i as u8];
-        let val = vec![i as u8];
+        let key = vec![i];
+        let val = vec![i];
         hb.put(&key, Some(val.clone())).await?;
         for j in 0..(i + 1) {
             let key = vec![j];
@@ -38,12 +38,12 @@ async fn basic_put() -> Result<(), Box<dyn std::error::Error>> {
 async fn basic_put_with_replace() -> Result<(), Box<dyn std::error::Error>> {
     let mut hb = in_memory_hyperbee().await?;
     for i in 0..4 {
-        let key = vec![i as u8];
-        let val = vec![i as u8];
+        let key = vec![i];
+        let val = vec![i];
         // initial values
         hb.put(&key, Some(val.clone())).await?;
         // replace replace with val + 1
-        let val = vec![i + 1 as u8];
+        let val = vec![i + 1_u8];
         hb.put(&key, Some(val.clone())).await?;
         for j in 0..(i + 1) {
             let key = vec![j];
@@ -60,8 +60,8 @@ async fn basic_put_with_replace() -> Result<(), Box<dyn std::error::Error>> {
 async fn multilevel_put() -> Result<(), Box<dyn std::error::Error>> {
     let mut hb = in_memory_hyperbee().await?;
     for i in 0..10 {
-        let key = vec![i as u8];
-        let val = vec![i as u8];
+        let key = vec![i];
+        let val = vec![i];
         hb.put(&key, Some(val.clone())).await?;
         for j in 0..(i + 1) {
             let key = vec![j];
