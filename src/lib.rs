@@ -257,6 +257,10 @@ impl<M: CoreMem> Children<M> {
         range: R,
         replace_with: Vec<(Child, Option<SharedNode<M>>)>,
     ) -> Vec<(Child, Option<SharedNode<M>>)> {
+        // leaf node do nothing
+        if self.children.read().await.is_empty() {
+            return vec![];
+        }
         self.children
             .write()
             .await
