@@ -35,6 +35,7 @@ const propagateChangesUpTree = (path, children, batch) => {
     return propagate_changes_up_tree(node_schema, node_path, index_path, chidren_seq (TODO)).await;
  */
 
+#[derive(Debug)]
 struct Changes<M: CoreMem> {
     seq: u64,
     key: Vec<u8>,
@@ -91,8 +92,7 @@ impl<M: CoreMem> Blocks<M> {
         let index = YoloIndex { levels: new_nodes };
 
         let mut index_buf = vec![];
-        YoloIndex::encode(&index, &mut index_buf)
-            .map_err(HyperbeeError::YoloIndexEncodingError)?;
+        YoloIndex::encode(&index, &mut index_buf).map_err(HyperbeeError::YoloIndexEncodingError)?;
 
         let node_schema = NodeSchema {
             key,
@@ -172,8 +172,7 @@ impl<M: CoreMem> Hyperbee<M> {
                     }],
                 };
                 let mut index = vec![];
-                YoloIndex::encode(&p, &mut index)
-                    .map_err(HyperbeeError::YoloIndexEncodingError)?;
+                YoloIndex::encode(&p, &mut index).map_err(HyperbeeError::YoloIndexEncodingError)?;
                 let node_schema = NodeSchema {
                     key: key.clone(),
                     value,
