@@ -10,31 +10,6 @@ use hypercore::AppendOutcome;
 use prost::Message;
 use tokio::sync::RwLock;
 
-/*
-const propagateChangesUpTree = (path, children, batch) => {
-  const [node, ni] = path.shift()
-  node.children.splice(ni + 1, 1, ...children)
-  const newNodeRef = node.store(batch);
-  if (path.length > 0) {
-    return propagateChangesUpTree(path, [newNodeRef], batch)
-  }
-  return batch
-}
-
-  This can't actually follow trees/appendtree::propagateChangesUpTree
-  because all nodes up a branch must be contained in a NodeSchema
-
-  it should
-  take a node from node_schema:
-    node = node_path.pop()
-  insert children_seq:
-    node.children.insert(index_path.pop(), children_seq)
-  insert this node:
-    node_schema.index.push(node)
-  if paths.length != 0:
-    return propagate_changes_up_tree(node_schema, node_path, index_path, chidren_seq (TODO)).await;
- */
-
 #[derive(Debug)]
 struct Changes<M: CoreMem> {
     seq: u64,
