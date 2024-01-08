@@ -82,8 +82,12 @@ impl<M: CoreMem> Blocks<M> {
     }
 }
 
+/// Add the given `children` to the next node in `node_path` at the next index in `index_path`.
+/// This creates a new node, with which we call:
+/// propagate_changes_up_tree(changes, node_path, node_index, vec![new_node]);
+/// This continues until we reach the root.
 async fn propagate_changes_up_tree<M: CoreMem>(
-    node_schema: NodeSchema,
+    mut changes: Changes<M>,
     mut node_path: Vec<SharedNode<M>>,
     mut index_path: Vec<usize>,
     _children_seq: Vec<u64>,
