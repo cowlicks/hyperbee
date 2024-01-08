@@ -243,25 +243,19 @@ impl<M: CoreMem> Hyperbee<M> {
                 };
 
                 let mut index = vec![];
-                YoloIndex::encode(&p, &mut index)
-                    .map_err(HyperbeeError::YoloIndexEncodingError)?;
-                let node_schema = NodeSchema {
-                    key: key.clone(),
-                    value,
-                    index,
-                };
+                YoloIndex::encode(&p, &mut index).map_err(HyperbeeError::YoloIndexEncodingError)?;
 
-                let node_schema = if !node_path.is_empty() {
-                    propagate_changes_up_tree(node_schema, node_path, index_path, vec![]).await
+                if !node_path.is_empty() {
+                    changes.add_node(cur_node);
+                    let changes =
+                        propagate_changes_up_tree(changes, node_path, index_path, children).await;
+                    let outcome = self.blocks.read().await.add_changes(changes).await?;
+                    return Ok((matched, outcome.length));
                 } else {
-                    node_schema
+                    changes.add_root(cur_node);
                 };
 
-                let mut block = vec![];
-                NodeSchema::encode(&node_schema, &mut block)
-                    .map_err(HyperbeeError::NodeEncodingError)?;
-
-                let outcome = self.blocks.read().await.append(&block).await?;
+                let outcome = self.blocks.read().await.add_changes(changes).await?;
                 // TODO propagateChangesUpTree
                 return Ok((matched, outcome.length));
             }
