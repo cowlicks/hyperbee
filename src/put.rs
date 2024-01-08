@@ -90,12 +90,37 @@ async fn propagate_changes_up_tree<M: CoreMem>(
     mut changes: Changes<M>,
     mut node_path: Vec<SharedNode<M>>,
     mut index_path: Vec<usize>,
-    _children_seq: Vec<u64>,
-) -> NodeSchema {
-    let _node = node_path.pop().expect("should be checked before call ");
-    let _index = index_path.pop().expect("should be checked before call ");
-
-    node_schema
+    children: Vec<Child>,
+) -> Changes<M> {
+    let mut cur_children = children;
+    loop {
+        if node_path.is_empty() {
+            break;
+        }
+        // this should add children to node
+        // add node to changes, as root or node, and redo loop if not root
+        let node = node_path.pop().expect("should be checked before call ");
+        let index = index_path.pop().expect("should be checked before call ");
+        cur_children = node
+            .read()
+            .await
+            .children
+            .splice(
+                (index)..(index + 1),
+                // TODO is there a way to use Some(node) here?
+                cur_children.into_iter().map(|c| (c, None)).collect(),
+            )
+            .await
+            .into_iter()
+            .map(|(c, _)| c)
+            .collect();
+        if node_path.is_empty() {
+            changes.add_root(node);
+        } else {
+            changes.add_node(node);
+        }
+    }
+    changes
 }
 
 impl<M: CoreMem> Node<M> {
