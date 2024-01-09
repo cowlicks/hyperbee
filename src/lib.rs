@@ -334,6 +334,14 @@ impl<M: CoreMem> Node<M> {
         }
     }
 
+    pub async fn n_keys(&self) -> usize {
+        self.keys.len()
+    }
+
+    pub async fn n_children(&self) -> usize {
+        self.children.children.read().await.len()
+    }
+
     async fn to_level(&self) -> yolo_index::Level {
         yolo_index::Level {
             keys: self.keys.iter().map(|k| k.seq).collect(),
