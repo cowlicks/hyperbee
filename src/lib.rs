@@ -349,10 +349,10 @@ impl<M: CoreMem> Node<M> {
             let mut out = 1;
             let mut cur_child = self.get_child(0).await?;
             loop {
+                out += 1;
                 if cur_child.read().await.n_children().await == 0 {
                     return Ok(out);
                 }
-                out += 1;
                 let next_child = cur_child.read().await.get_child(0).await?;
                 cur_child = next_child;
             }
