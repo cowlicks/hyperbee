@@ -76,9 +76,38 @@ async function with_replaced_values() {
   await copyTestData(DATA_DIR_NAME);
 }
 
+async function more_height() {
+  const start = 0
+  const stop = 5**5;
+  const DATA_DIR_NAME = 'more_height';
+  const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
+
+
+  await rmTestData(DATA_DIR_NAME);
+  const core = new Hypercore(PATH_TO_DATA_DIR)
+  const db = new Hyperbee(core)
+  await db.ready()
+
+  for (let i = start; i < stop; i += 1) {
+    const key = String(i);
+    const value = String(stop - i)
+    await db.put(key, value);
+  }
+  for (let i = start; i < stop; i += 1) {
+    const key = String(i);
+    const value = String(stop - i)
+    const res = await db.get(key);
+    if (res.value.toString() !== value) {
+      console.error(`Could not get ${key} instead go ${res.value.toString()}`)
+    }
+  }
+  await copyTestData(DATA_DIR_NAME);
+}
+
 async function run() {
   await basic();
   await with_replaced_values();
+  await more_height();
 }
 
 run()

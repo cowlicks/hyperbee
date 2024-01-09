@@ -25,6 +25,18 @@ async fn no_key() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
+async fn height() -> Result<(), Box<dyn std::error::Error>> {
+    let mut hb = hyperbee_rs::load_from_storage_dir("./test_data/more_height/").await?;
+    let root = hb
+        .get_root(false)
+        .await?
+        .expect("Root should be written already");
+    let result = root.read().await.height().await?;
+    assert_eq!(result, 5);
+    Ok(())
+}
+
+#[tokio::test]
 async fn stream() -> Result<(), Box<dyn std::error::Error>> {
     use tokio_stream::StreamExt;
     let start = 0;

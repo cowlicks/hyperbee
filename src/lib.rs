@@ -342,6 +342,23 @@ impl<M: CoreMem> Node<M> {
         self.children.children.read().await.len()
     }
 
+    pub async fn height(&self) -> Result<usize, HyperbeeError> {
+        if self.n_children().await == 0 {
+            Ok(1)
+        } else {
+            let mut out = 1;
+            let mut cur_child = self.get_child(0).await?;
+            loop {
+                if cur_child.read().await.n_children().await == 0 {
+                    return Ok(out);
+                }
+                out += 1;
+                let next_child = cur_child.read().await.get_child(0).await?;
+                cur_child = next_child;
+            }
+        }
+    }
+
     async fn to_level(&self) -> yolo_index::Level {
         yolo_index::Level {
             keys: self.keys.iter().map(|k| k.seq).collect(),
