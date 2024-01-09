@@ -25,7 +25,7 @@ pub struct Traverse<M: CoreMem> {
     iter: Option<Box<dyn Iterator<Item = usize>>>,
 
     /// Future holding the next key
-    next_key: Option<PinnedFut<TreeItem>>,
+    next_key: Option<PinnedFut<KeyData>>,
     /// Future holding the next child
     next_child: Option<PinnedFut<Result<Traverse<M>, HyperbeeError>>>,
     /// Another instance of [`Traverse`] from a child node.
@@ -53,10 +53,11 @@ async fn get_n_keys_and_children<M: CoreMem>(node: SharedNode<M>) -> (usize, usi
     )
 }
 
+type KeyData = Result<(Vec<u8>, Option<(u64, Vec<u8>)>), HyperbeeError>;
 ///Result<(key, Option<(value_seq, value)>)>
-type TreeItem = Result<(Vec<u8>, Option<(u64, Vec<u8>)>), HyperbeeError>;
+type TreeItem<M> = (KeyData, SharedNode<M>);
 
-async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> TreeItem {
+async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> KeyData {
     let key = node.read().await.get_key(index).await?;
     let value = node.read().await.get_value_of_key(index).await?;
     Ok((key, value))
@@ -71,14 +72,14 @@ async fn get_child_stream<M: CoreMem>(
 }
 
 impl<M: CoreMem + 'static> Stream for Traverse<M> {
-    type Item = TreeItem;
+    type Item = TreeItem<M>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // getting next key & value
         if let Some(key_fut) = &mut self.next_key {
             match key_fut.poll(cx) {
                 Poll::Ready(out) => {
                     self.next_key = None;
-                    return Poll::Ready(Some(out));
+                    return Poll::Ready(Some((out, self.root.clone())));
                 }
                 Poll::Pending => return Poll::Pending,
             }
@@ -94,9 +95,10 @@ impl<M: CoreMem + 'static> Stream for Traverse<M> {
                     }
                     Err(e) => {
                         // Push error into stream
-                        return Poll::Ready(Some(Err(HyperbeeError::GetChildInTraverseError(
-                            Box::new(e),
-                        ))));
+                        return Poll::Ready(Some((
+                            Err(HyperbeeError::GetChildInTraverseError(Box::new(e))),
+                            self.root.clone(),
+                        )));
                     }
                 }
             }

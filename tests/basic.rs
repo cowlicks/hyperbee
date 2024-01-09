@@ -40,7 +40,8 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
     let stream = hyperbee_rs::traverse::traverse(root);
     tokio::pin!(stream);
     while let Some(x) = stream.next().await {
-        result.push(x?);
+        let (key_data, _node) = x;
+        result.push(key_data?);
     }
     let result: Vec<String> = result
         .into_iter()
