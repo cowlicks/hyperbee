@@ -1,4 +1,6 @@
 static HYPERBEE_STORAGE_DIR: &str = "./test_data/basic";
+static HYPERBEE_STORAGE_DIR_MORE_HEIGHT: &str = "./test_data/more_height";
+static HYPERBEE_STORAGE_DIR_SMALL: &str = "./test_data/alphabet";
 
 #[tokio::test]
 async fn basic() -> Result<(), Box<dyn std::error::Error>> {
@@ -57,12 +59,54 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn height() -> Result<(), Box<dyn std::error::Error>> {
-    let mut hb = hyperbee_rs::load_from_storage_dir("./test_data/more_height/").await?;
+    let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR_MORE_HEIGHT).await?;
     let root = hb
         .get_root(false)
         .await?
         .expect("Root should be written already");
     let result = root.read().await.height().await?;
     assert_eq!(result, 5);
+    Ok(())
+}
+
+#[tokio::test]
+async fn print() -> Result<(), Box<dyn std::error::Error>> {
+    let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR_SMALL).await?;
+    let root = hb
+        .get_root(false)
+        .await?
+        .expect("Root should be written already");
+    let result = hyperbee_rs::traverse::print(root).await?;
+    println!("{result}");
+    assert_eq!(
+        result,
+        "\ta
+\tb
+\tc
+\td
+e
+\tf
+\tg
+\th
+\ti
+j
+\tk
+\tl
+\tm
+\tn
+o
+\tp
+\tq
+\tr
+\ts
+t
+\tu
+\tv
+\tw
+\tx
+\ty
+\tz
+"
+    );
     Ok(())
 }

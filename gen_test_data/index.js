@@ -104,10 +104,33 @@ async function more_height() {
   await copyTestData(DATA_DIR_NAME);
 }
 
+async function alphabet() {
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  const start = 0
+  const stop = letters.length;
+  const DATA_DIR_NAME = 'alphabet';
+  const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
+
+
+  await rmTestData(DATA_DIR_NAME);
+  const core = new Hypercore(PATH_TO_DATA_DIR)
+  const db = new Hyperbee(core)
+  await db.ready()
+
+  for (let i = start; i < stop; i += 1) {
+    const key = letters[i];
+    const value = key;
+    await db.put(key, value);
+  }
+  await copyTestData(DATA_DIR_NAME);
+}
+
+
 async function run() {
   await basic();
   await with_replaced_values();
   await more_height();
+  await alphabet();
 }
 
 run()

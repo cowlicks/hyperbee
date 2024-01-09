@@ -163,3 +163,21 @@ impl<M: CoreMem + 'static> Stream for Traverse<M> {
 pub fn traverse<M: CoreMem>(node: SharedNode<M>) -> Traverse<M> {
     Traverse::new(node)
 }
+
+static LEADER: &str = "\t";
+
+pub async fn print<M: CoreMem + 'static>(node: SharedNode<M>) -> Result<String, HyperbeeError> {
+    let starting_height = node.read().await.height().await?;
+    let mut out = "".to_string();
+    let stream = traverse(node);
+    tokio::pin!(stream);
+    while let Some((key_data, node)) = stream.next().await {
+        let h = node.read().await.height().await?;
+        out += &LEADER.repeat(starting_height - h);
+        let k = key_data?.0;
+        let decoded_k = String::from_utf8(k)?;
+        out += &decoded_k;
+        out += "\n";
+    }
+    return Ok(out);
+}

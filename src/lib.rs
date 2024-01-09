@@ -19,6 +19,7 @@ use std::{
     num::TryFromIntError,
     ops::{Range, RangeBounds},
     path::Path,
+    string::FromUtf8Error,
     sync::Arc,
 };
 use tokio::sync::RwLock;
@@ -47,6 +48,8 @@ pub enum HyperbeeError {
     YoloIndexEncodingError(EncodeError),
     #[error("There was an error encoding a messages::Node {0}")]
     NodeEncodingError(EncodeError),
+    #[error("There was an error decoding a key")]
+    KeyFromUtf8Error(#[from] FromUtf8Error),
 }
 
 #[derive(Clone, Debug)]
