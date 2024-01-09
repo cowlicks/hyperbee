@@ -53,3 +53,29 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(result, expected);
     Ok(())
 }
+
+#[tokio::test]
+async fn node_stream() -> Result<(), Box<dyn std::error::Error>> {
+    use tokio_stream::StreamExt;
+    let start = 0;
+    let stop = 25;
+    let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
+    let root = hb
+        .get_root(false)
+        .await?
+        .expect("Root should be written already");
+    let stream = hyperbee_rs::traverse::traverse_nodes(root);
+    tokio::pin!(stream);
+    let mut node_count = 0;
+    let mut key_count = 0;
+    while let Some(Ok(node)) = stream.next().await {
+        node_count += 1;
+        let n_keys = node.read().await.n_keys().await;
+        let key_count = node.read().await.n_keys().await;
+        let n_children = node.read().await.n_children().await;
+        dbg!(n_keys, n_children);
+    }
+    dbg!(node_count);
+    assert!(false);
+    Ok(())
+}
