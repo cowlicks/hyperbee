@@ -10,13 +10,25 @@ use tokio_stream::Stream;
 type PinnedFut<T> = Pin<Box<dyn Future<Output = T>>>;
 
 // TODO add options for gt lt gte lte, reverse, and versions for just key/seq
-/// Struct used for iterating over hyperbee with a Stream
+/// Struct used for iterating over hyperbee with a Stream.
+/// Each iteration yields the key it's value, and the "seq" for the value (the index of the value
+/// in the hypercore).
 pub struct Traverse<M: CoreMem> {
     root: SharedNode<M>,
+    /// Option holding (number_of_keys, number_of_children) for this node
     n_keys_and_children: Option<PinnedFut<(usize, usize)>>,
+
+    /// Iterator over this node's keys and children.
+    /// For a yielded value `i`. Even `i`'s are for children, odd are for keys.
+    /// The index to the current key/child within the keys/children is geven by `i >> 1`.
+    /// Leaf nodes get an iterator that on yields odd values.
     iter: Option<Box<dyn Iterator<Item = usize>>>,
+
+    /// Future holding the next key
     next_key: Option<PinnedFut<TreeItem>>,
+    /// Future holding the next child
     next_child: Option<PinnedFut<Result<Traverse<M>, HyperbeeError>>>,
+    /// Another instance of [`Traverse`] from a child node.
     child_stream: Option<Pin<Box<Traverse<M>>>>,
 }
 
@@ -33,6 +45,7 @@ impl<M: CoreMem> Traverse<M> {
     }
 }
 
+/// Return the tuple (number_of_keys, number_of_children) for the given node
 async fn get_n_keys_and_children<M: CoreMem>(node: SharedNode<M>) -> (usize, usize) {
     (
         node.read().await.keys.len(),
@@ -40,6 +53,7 @@ async fn get_n_keys_and_children<M: CoreMem>(node: SharedNode<M>) -> (usize, usi
     )
 }
 
+///Result<(key, Option<(value_seq, value)>)>
 type TreeItem = Result<(Vec<u8>, Option<(u64, Vec<u8>)>), HyperbeeError>;
 
 async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> TreeItem {
