@@ -7,16 +7,16 @@ use std::{
 };
 use tokio_stream::Stream;
 
-type PinnedFut<T> = Pin<Box<dyn Future<Output = T>>>;
+type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
 // TODO add options for gt lt gte lte, reverse, and versions for just key/seq
 /// Struct used for iterating over hyperbee with a Stream.
 /// Each iteration yields the key it's value, and the "seq" for the value (the index of the value
 /// in the hypercore).
-pub struct Traverse<M: CoreMem> {
+pub struct Traverse<'a, M: CoreMem> {
     root: SharedNode<M>,
     /// Option holding (number_of_keys, number_of_children) for this node
-    n_keys_and_children: Option<PinnedFut<(usize, usize)>>,
+    n_keys_and_children: Option<PinnedFut<'a, (usize, usize)>>,
 
     /// Iterator over this node's keys and children.
     /// For a yielded value `i`. Even `i`'s are for children, odd are for keys.
@@ -25,14 +25,14 @@ pub struct Traverse<M: CoreMem> {
     iter: Option<Box<dyn Iterator<Item = usize>>>,
 
     /// Future holding the next key
-    next_key: Option<PinnedFut<KeyData>>,
+    next_key: Option<PinnedFut<'a, KeyData>>,
     /// Future holding the next child
-    next_child: Option<PinnedFut<Result<Traverse<M>, HyperbeeError>>>,
+    next_child: Option<PinnedFut<'a, Result<Traverse<'a, M>, HyperbeeError>>>,
     /// Another instance of [`Traverse`] from a child node.
-    child_stream: Option<Pin<Box<Traverse<M>>>>,
+    child_stream: Option<Pin<Box<Traverse<'a, M>>>>,
 }
 
-impl<M: CoreMem> Traverse<M> {
+impl<M: CoreMem> Traverse<'_, M> {
     fn new(root: SharedNode<M>) -> Self {
         Traverse {
             root,
@@ -63,15 +63,15 @@ async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> Key
     Ok((key, value))
 }
 
-async fn get_child_stream<M: CoreMem>(
+async fn get_child_stream<'a, M: CoreMem>(
     node: SharedNode<M>,
     index: usize,
-) -> Result<Traverse<M>, HyperbeeError> {
+) -> Result<Traverse<'a, M>, HyperbeeError> {
     let child = node.read().await.get_child(index).await?;
     Ok(Traverse::new(child))
 }
 
-impl<M: CoreMem + 'static> Stream for Traverse<M> {
+impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
     type Item = TreeItem<M>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // getting next key & value
@@ -160,13 +160,13 @@ impl<M: CoreMem + 'static> Stream for Traverse<M> {
     }
 }
 
-pub fn traverse<M: CoreMem>(node: SharedNode<M>) -> Traverse<M> {
+pub fn traverse<'a, M: CoreMem>(node: SharedNode<M>) -> Traverse<'a, M> {
     Traverse::new(node)
 }
 
 static LEADER: &str = "\t";
 
-pub async fn print<M: CoreMem + 'static>(node: SharedNode<M>) -> Result<String, HyperbeeError> {
+pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeError> {
     let starting_height = node.read().await.height().await?;
     let mut out = "".to_string();
     let stream = traverse(node);
