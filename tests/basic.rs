@@ -72,10 +72,6 @@ async fn height() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn print() -> Result<(), Box<dyn std::error::Error>> {
     let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR_SMALL).await?;
-    let root = hb
-        .get_root(false)
-        .await?
-        .expect("Root should be written already");
     let result = hb.print().await?;
     println!("{result}");
     assert_eq!(

@@ -57,6 +57,26 @@ async fn basic_put_with_replace() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
+async fn print_put() -> Result<(), Box<dyn std::error::Error>> {
+    let mut hb = in_memory_hyperbee().await?;
+    for i in 0..3 {
+        let is = i.to_string();
+        let key = is.clone().as_bytes().to_vec();
+        let val = is.clone().as_bytes().to_vec();
+        hb.put(&key, Some(val.clone())).await?;
+    }
+    let tree = hb.print().await?;
+    assert_eq!(
+        tree,
+        "0
+1
+2
+"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn multilevel_put() -> Result<(), Box<dyn std::error::Error>> {
     let mut hb = in_memory_hyperbee().await?;
     for i in 0..10 {
