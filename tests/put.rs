@@ -80,12 +80,19 @@ async fn print_put() -> Result<(), Box<dyn std::error::Error>> {
 async fn multilevel_put() -> Result<(), Box<dyn std::error::Error>> {
     let mut hb = in_memory_hyperbee().await?;
     for i in 0..10 {
-        let key = vec![i];
-        let val = vec![i];
+        let is = i.to_string();
+        let key = is.clone().as_bytes().to_vec();
+        let val = is.clone().as_bytes().to_vec();
+        println!("Put {i}");
         hb.put(&key, Some(val.clone())).await?;
+        let tree = hb.print().await?;
+        println!("{tree}");
+
         for j in 0..(i + 1) {
-            let key = vec![j];
-            let val = vec![j];
+            let js = j.to_string();
+            let key = js.clone().as_bytes().to_vec();
+            let val = js.clone().as_bytes().to_vec();
+            println!("Get {j}");
             let res = hb.get(&key).await?.unwrap();
             assert_eq!(res.1, val);
         }
