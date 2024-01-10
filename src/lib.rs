@@ -50,6 +50,8 @@ pub enum HyperbeeError {
     NodeEncodingError(EncodeError),
     #[error("There was an error decoding a key")]
     KeyFromUtf8Error(#[from] FromUtf8Error),
+    #[error("The tree has no root so this operation failed")]
+    NoRootError,
 }
 
 #[derive(Clone, Debug)]
@@ -519,6 +521,15 @@ impl<M: CoreMem> Hyperbee<M> {
         let _ = self.blocks.read().await.append(&buf).await?;
         // write header
         Ok(true)
+    }
+
+    pub async fn print(&mut self) -> Result<String, HyperbeeError> {
+        let root = self
+            .get_root(false)
+            .await?
+            .ok_or(HyperbeeError::NoRootError)?;
+        let out = traverse::print(root).await?;
+        Ok(out)
     }
 }
 

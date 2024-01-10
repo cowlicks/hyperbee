@@ -76,7 +76,7 @@ async fn print() -> Result<(), Box<dyn std::error::Error>> {
         .get_root(false)
         .await?
         .expect("Root should be written already");
-    let result = hyperbee_rs::traverse::print(root).await?;
+    let result = hb.print().await?;
     println!("{result}");
     assert_eq!(
         result,
