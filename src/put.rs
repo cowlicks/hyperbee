@@ -238,13 +238,6 @@ impl<M: CoreMem> Hyperbee<M> {
                     ._insert(cur_key, vec![], cur_index..stop)
                     .await;
 
-                let p = YoloIndex {
-                    levels: vec![cur_node.read().await.to_level().await],
-                };
-
-                let mut index = vec![];
-                YoloIndex::encode(&p, &mut index).map_err(HyperbeeError::YoloIndexEncodingError)?;
-
                 if !node_path.is_empty() {
                     changes.add_node(cur_node);
                     let changes =
