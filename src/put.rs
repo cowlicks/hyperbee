@@ -239,9 +239,10 @@ impl<M: CoreMem> Hyperbee<M> {
                     .await;
 
                 if !node_path.is_empty() {
-                    changes.add_node(cur_node);
+                    let child = changes.add_node(cur_node);
                     let changes =
-                        propagate_changes_up_tree(changes, node_path, index_path, children).await;
+                        propagate_changes_up_tree(changes, node_path, index_path, vec![child])
+                            .await;
                     let outcome = self.blocks.read().await.add_changes(changes).await?;
                     return Ok((matched, outcome.length));
                 } else {
