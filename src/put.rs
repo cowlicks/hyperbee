@@ -235,7 +235,7 @@ impl<M: CoreMem> Hyperbee<M> {
                 cur_node
                     .write()
                     .await
-                    ._insert(cur_key, vec![], cur_index..stop)
+                    ._insert(cur_key, children, cur_index..stop)
                     .await;
 
                 if !node_path.is_empty() {
@@ -254,6 +254,7 @@ impl<M: CoreMem> Hyperbee<M> {
                 return Ok((matched, outcome.length));
             }
 
+            // No room in leaf for another key. So we split.
             cur_node
                 .write()
                 .await
