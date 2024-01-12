@@ -316,10 +316,10 @@ async fn nearest_node<M: CoreMem>(
     loop {
         node_path.push(current_node.clone());
         let next_node = {
-            let read_node = current_node.read().await;
             let child_index: usize = 'found: {
-                for i in 0..read_node.keys.len() {
-                    let val = read_node.get_key(i).await?;
+                let n_keys = current_node.read().await.keys.len();
+                for i in 0..n_keys {
+                    let val = current_node.write().await.get_key(i).await?;
                     // found matching child
                     if *key < val {
                         index_path.push(i);
@@ -328,21 +328,23 @@ async fn nearest_node<M: CoreMem>(
                     // found matching key
                     if val == *key {
                         index_path.push(i);
+                        debug!("Found match");
                         return Ok((true, node_path, index_path));
                     }
                 }
                 // key is greater than all of this nodes keys, take last child, which has index
                 // of node.keys.len()
-                index_path.push(read_node.keys.len());
-                read_node.keys.len()
+                index_path.push(n_keys);
+                n_keys
             };
 
             // leaf node with no match
-            if read_node.children.is_empty().await {
+            if current_node.read().await.children.is_empty().await {
+                info!("Reached leaf. Returning");
                 return Ok((false, node_path, index_path));
             }
 
-            read_node.get_child(child_index).await?
+            current_node.read().await.get_child(child_index).await?
         };
         current_node = next_node;
     }
@@ -394,12 +396,12 @@ impl<M: CoreMem> Node<M> {
         }
     }
 
-    async fn get_key(&self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
-        let key = &self.keys[index];
+    async fn get_key(&mut self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
+        let key = &mut self.keys[index];
         if let Some(value) = &key.value {
             return Ok(value.clone());
         }
-        Ok(self
+        let value = self
             .blocks
             .read()
             .await
@@ -408,7 +410,9 @@ impl<M: CoreMem> Node<M> {
             .read()
             .await
             .key
-            .clone())
+            .clone();
+        key.value = Some(value.clone());
+        Ok(value)
     }
 
     async fn get_value_of_key(
