@@ -19,3 +19,6 @@ tokio-stream = "0.1.14"
 
 [build-dependencies]
 prost-build = "0.12.1"
+
+[dev-dependencies]
+random-access-memory = "3.0.0"
