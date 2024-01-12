@@ -365,15 +365,14 @@ impl<M: CoreMem> Node<M> {
     }
 
     async fn to_level(&self) -> yolo_index::Level {
+        let mut children = vec![];
+        for c in self.children.get_children().await.iter() {
+            children.push(c.seq);
+            children.push(c.offset);
+        }
         yolo_index::Level {
             keys: self.keys.iter().map(|k| k.seq).collect(),
-            children: self
-                .children
-                .get_children()
-                .await
-                .iter()
-                .map(|c| c.seq)
-                .collect(),
+            children,
         }
     }
 
