@@ -161,6 +161,7 @@ impl<M: CoreMem> Node<M> {
     }
 }
 impl<M: CoreMem> Hyperbee<M> {
+    #[tracing::instrument(skip(self))]
     pub async fn put(
         &mut self,
         key: &Vec<u8>,
