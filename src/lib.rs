@@ -91,7 +91,7 @@ type Shared<T> = Arc<RwLock<T>>;
 type SharedNode<T> = Shared<Node<T>>;
 type SharedBlock = Shared<BlockEntry>;
 
-#[derive(Debug, Builder)]
+#[derive(Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Blocks<M: CoreMem> {
     #[builder(default)]
@@ -99,6 +99,11 @@ pub struct Blocks<M: CoreMem> {
     core: Shared<Hypercore<M>>,
 }
 
+impl<M: CoreMem> std::fmt::Debug for Blocks<M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Blocks").finish()
+    }
+}
 #[derive(Debug)]
 struct Children<M: CoreMem> {
     blocks: Shared<Blocks<M>>,
