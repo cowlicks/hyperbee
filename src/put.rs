@@ -31,9 +31,14 @@ impl<M: CoreMem> Changes<M> {
     }
     fn add_node(&mut self, node: SharedNode<M>) -> Child {
         self.nodes.push(node);
+        let offset: u64 = self
+            .nodes
+            .len()
+            .try_into()
+            .expect("TODO usize to seq (u64)");
         Child {
             seq: self.seq,
-            offset: self.nodes.len().try_into().expect("TODO"),
+            offset,
         }
     }
 
