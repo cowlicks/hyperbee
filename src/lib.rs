@@ -16,6 +16,7 @@ use thiserror::Error;
 use std::{
     collections::BTreeMap,
     fmt::Debug,
+    io::Write,
     num::TryFromIntError,
     ops::{Range, RangeBounds},
     path::Path,
@@ -211,6 +212,18 @@ impl<M: CoreMem> Blocks<M> {
     }
     async fn append(&self, value: &[u8]) -> Result<AppendOutcome, HyperbeeError> {
         Ok(self.core.write().await.append(value).await?)
+    }
+    async fn format_core(&self) -> Result<String, HyperbeeError> {
+        let l = {
+            let core = self.core.read().await;
+            core.info().length
+        };
+        let mut out = Vec::new();
+        for i in 1..l {
+            let x = self._get_from_core(&i).await;
+            let _ = write!(out, "{:?}\n", x.unwrap().unwrap());
+        }
+        Ok(String::from_utf8(out).unwrap())
     }
 }
 
@@ -529,6 +542,10 @@ impl<M: CoreMem> Hyperbee<M> {
             .ok_or(HyperbeeError::NoRootError)?;
         let out = traverse::print(root).await?;
         Ok(out)
+    }
+
+    pub async fn print_blocks(&self) -> Result<String, HyperbeeError> {
+        self.blocks.read().await.format_core().await
     }
 }
 
