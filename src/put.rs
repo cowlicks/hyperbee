@@ -265,7 +265,7 @@ impl<M: CoreMem> Hyperbee<M> {
             cur_node
                 .write()
                 .await
-                ._insert(cur_key, vec![], cur_index..cur_index)
+                ._insert(cur_key, children, cur_index..cur_index)
                 .await;
 
             let (left, mid_key, right) = cur_node.write().await.split().await;
