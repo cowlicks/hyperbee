@@ -9,9 +9,10 @@ use super::{
 use hypercore::AppendOutcome;
 use prost::Message;
 use tokio::sync::RwLock;
+use tracing::info;
 
-#[derive(Debug)]
-struct Changes<M: CoreMem> {
+#[derive(Debug, Default)]
+pub struct Changes<M: CoreMem> {
     seq: u64,
     key: Vec<u8>,
     value: Option<Vec<u8>>,

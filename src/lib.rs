@@ -10,6 +10,7 @@ use derive_builder::Builder;
 use hypercore::{AppendOutcome, Hypercore, HypercoreBuilder, HypercoreError, Storage};
 use messages::{yolo_index, Header, Node as NodeSchema, YoloIndex};
 use prost::{bytes::Buf, DecodeError, EncodeError, Message};
+use put::Changes;
 use random_access_storage::RandomAccess;
 use thiserror::Error;
 
@@ -97,6 +98,8 @@ pub struct Blocks<M: CoreMem> {
     #[builder(default)]
     cache: Shared<BTreeMap<u64, SharedBlock>>,
     core: Shared<Hypercore<M>>,
+    #[builder(default)]
+    changes: Option<Changes<M>>,
 }
 
 impl<M: CoreMem> std::fmt::Debug for Blocks<M> {
