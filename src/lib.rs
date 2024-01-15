@@ -3,21 +3,20 @@
 pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
+pub mod blocks;
 pub mod put;
 pub mod traverse;
 
+use blocks::{Blocks, BlocksBuilder};
 use derive_builder::Builder;
-use hypercore::{AppendOutcome, Hypercore, HypercoreBuilder, HypercoreError, Storage};
+use hypercore::{HypercoreBuilder, HypercoreError, Storage};
 use messages::{yolo_index, Header, Node as NodeSchema, YoloIndex};
 use prost::{bytes::Buf, DecodeError, EncodeError, Message};
-use put::Changes;
 use random_access_storage::RandomAccess;
 use thiserror::Error;
 
 use std::{
-    collections::BTreeMap,
     fmt::Debug,
-    io::Write,
     num::TryFromIntError,
     ops::{Range, RangeBounds},
     path::Path,
@@ -25,6 +24,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
+use tracing::{debug, info};
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
 impl<T: RandomAccess + Debug + Send> CoreMem for T {}
@@ -92,21 +92,6 @@ type Shared<T> = Arc<RwLock<T>>;
 type SharedNode<T> = Shared<Node<T>>;
 type SharedBlock = Shared<BlockEntry>;
 
-#[derive(Builder)]
-#[builder(pattern = "owned", derive(Debug))]
-pub struct Blocks<M: CoreMem> {
-    #[builder(default)]
-    cache: Shared<BTreeMap<u64, SharedBlock>>,
-    core: Shared<Hypercore<M>>,
-    #[builder(default)]
-    changes: Option<Changes<M>>,
-}
-
-impl<M: CoreMem> std::fmt::Debug for Blocks<M> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Blocks").finish()
-    }
-}
 #[derive(Debug)]
 struct Children<M: CoreMem> {
     blocks: Shared<Blocks<M>>,
@@ -124,7 +109,7 @@ pub struct Node<M: CoreMem> {
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
-    blocks: Shared<Blocks<M>>,
+    pub blocks: Shared<Blocks<M>>,
     // TODO add root here so tree is not dropped after each .get()
     #[builder(default)]
     root: Option<SharedNode<M>>,
@@ -185,56 +170,6 @@ impl Pointers {
     }
 }
 
-impl<M: CoreMem> Blocks<M> {
-    /// # Errors
-    /// when the provided `seq` is not in the Hypercore
-    /// when the data in the Hypercore block cannot be decoded
-    pub async fn get(&self, seq: &u64) -> Result<Shared<BlockEntry>, HyperbeeError> {
-        if let Some(block) = self._get_from_cache(seq).await {
-            Ok(block)
-        } else {
-            let block_entry = self
-                ._get_from_core(seq)
-                .await?
-                .ok_or(HyperbeeError::NoBlockAtSeqError(*seq))?;
-            let block_entry = Arc::new(RwLock::new(block_entry));
-            self.cache.write().await.insert(*seq, block_entry.clone());
-            Ok(block_entry)
-        }
-    }
-    async fn _get_from_cache(&self, seq: &u64) -> Option<Shared<BlockEntry>> {
-        self.cache.read().await.get(seq).cloned()
-    }
-
-    async fn _get_from_core(&self, seq: &u64) -> Result<Option<BlockEntry>, HyperbeeError> {
-        match self.core.write().await.get(*seq).await? {
-            Some(core_block) => {
-                let node = NodeSchema::decode(&core_block[..])?;
-                Ok(Some(BlockEntry::new(node)?))
-            }
-            None => Ok(None),
-        }
-    }
-    async fn info(&self) -> hypercore::Info {
-        self.core.read().await.info()
-    }
-    async fn append(&self, value: &[u8]) -> Result<AppendOutcome, HyperbeeError> {
-        Ok(self.core.write().await.append(value).await?)
-    }
-    async fn format_core(&self) -> Result<String, HyperbeeError> {
-        let l = {
-            let core = self.core.read().await;
-            core.info().length
-        };
-        let mut out = Vec::new();
-        for i in 1..l {
-            let x = self._get_from_core(&i).await;
-            let _ = write!(out, "{:?}\n", x.unwrap().unwrap());
-        }
-        Ok(String::from_utf8(out).unwrap())
-    }
-}
-
 impl<M: CoreMem> Children<M> {
     fn new(blocks: Shared<Blocks<M>>, children: Vec<Child>) -> Self {
         Self {
@@ -242,13 +177,19 @@ impl<M: CoreMem> Children<M> {
             children: RwLock::new(children.into_iter().map(|c| (c, Option::None)).collect()),
         }
     }
+    #[tracing::instrument(ret, skip(self))]
     async fn insert(&self, index: usize, new_children: Vec<Child>) {
+        info!("from children insert");
         if new_children.is_empty() {
             return;
         }
 
+        let replace_split_child = match new_children.is_empty() {
+            true => 0,
+            false => 1,
+        };
         self.children.write().await.splice(
-            index..(index + 1),
+            index..(index + replace_split_child),
             new_children.iter().map(|c| (c.clone(), Option::None)),
         );
     }

@@ -1,4 +1,4 @@
-use hyperbee_rs::{BlocksBuilder, Hyperbee, HyperbeeBuilder, HyperbeeError};
+use hyperbee_rs::{blocks::BlocksBuilder, Hyperbee, HyperbeeBuilder, HyperbeeError};
 use hypercore::{HypercoreBuilder, Storage};
 
 use std::sync::Arc;
