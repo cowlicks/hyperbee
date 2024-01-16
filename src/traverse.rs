@@ -59,7 +59,7 @@ type KeyData = Result<(Vec<u8>, Option<(u64, Vec<u8>)>), HyperbeeError>;
 type TreeItem<M> = (KeyData, SharedNode<M>);
 
 async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> KeyData {
-    let key = node.read().await.get_key(index).await?;
+    let key = node.write().await.get_key(index).await?;
     let value = node.read().await.get_value_of_key(index).await?;
     Ok((key, value))
 }
