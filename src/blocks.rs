@@ -1,10 +1,12 @@
 use derive_builder::Builder;
 use hypercore::{AppendOutcome, Hypercore};
 use tokio::sync::RwLock;
+use tracing::info;
 
 use crate::{
-    messages::Node as NodeSchema, put::Changes, BlockEntry, CoreMem, HyperbeeError, Shared,
-    SharedBlock,
+    messages::{Node as NodeSchema, YoloIndex},
+    put::Changes,
+    BlockEntry, CoreMem, HyperbeeError, Shared, SharedBlock,
 };
 use prost::Message;
 use std::{collections::BTreeMap, io::Write, sync::Arc};
@@ -25,11 +27,37 @@ impl<M: CoreMem> std::fmt::Debug for Blocks<M> {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct BlocksGetOptions {
+    with_changes: bool,
+}
+
+/*
+ * add blocks._get(key, { with_changes })
+ * blocks.get calls this
+ */
 impl<M: CoreMem> Blocks<M> {
     /// # Errors
     /// when the provided `seq` is not in the Hypercore
     /// when the data in the Hypercore block cannot be decoded
-    pub async fn get(&self, seq: &u64) -> Result<Shared<BlockEntry>, HyperbeeError> {
+    #[tracing::instrument(skip(self))]
+    pub async fn get(
+        &self,
+        seq: &u64,
+        opts: BlocksGetOptions,
+    ) -> Result<Shared<BlockEntry>, HyperbeeError> {
+        // check if seq is == self.core.info.length + 1
+        // if so take changes and do something like:
+        // changes.clone().to_block_entry()
+        if opts.with_changes
+            && (self.core.read().await.info().length == *seq && self.changes.is_some())
+        {
+            return self
+                ._get_from_changes()
+                .await
+                .map(|b| Arc::new(RwLock::new(b)))
+                .ok_or(HyperbeeError::NoBlockAtSeqError(*seq));
+        }
         if let Some(block) = self._get_from_cache(seq).await {
             Ok(block)
         } else {

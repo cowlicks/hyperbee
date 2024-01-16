@@ -7,7 +7,7 @@ pub mod blocks;
 pub mod put;
 pub mod traverse;
 
-use blocks::{Blocks, BlocksBuilder};
+use blocks::{Blocks, BlocksBuilder, BlocksGetOptions};
 use derive_builder::Builder;
 use hypercore::{HypercoreBuilder, HypercoreError, Storage};
 use messages::{yolo_index, Header, Node as NodeSchema, YoloIndex};
@@ -199,7 +199,12 @@ impl<M: CoreMem> Children<M> {
             (_, Some(node)) => return Ok(node.clone()),
             (child_data, None) => child_data.clone(),
         };
-        let block = self.blocks.read().await.get(&child_data.seq).await?;
+        let block = self
+            .blocks
+            .read()
+            .await
+            .get(&child_data.seq, BlocksGetOptions::default())
+            .await?;
         let node = Arc::new(RwLock::new(
             block
                 .read()
@@ -349,7 +354,7 @@ impl<M: CoreMem> Node<M> {
             .blocks
             .read()
             .await
-            .get(&key.seq)
+            .get(&key.seq, BlocksGetOptions::default())
             .await?
             .read()
             .await
@@ -368,7 +373,7 @@ impl<M: CoreMem> Node<M> {
             .blocks
             .read()
             .await
-            .get(seq)
+            .get(seq, BlocksGetOptions::default())
             .await?
             .read()
             .await
@@ -437,7 +442,7 @@ impl<M: CoreMem> Hyperbee<M> {
                     return Ok(None);
                 }
                 let root = blocks
-                    .get(&(version - 1))
+                    .get(&(version - 1), BlocksGetOptions::default())
                     .await?
                     .read()
                     .await

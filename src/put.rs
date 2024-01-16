@@ -14,10 +14,10 @@ use tracing::info;
 #[derive(Debug, Default)]
 pub struct Changes<M: CoreMem> {
     seq: u64,
-    key: Vec<u8>,
-    value: Option<Vec<u8>>,
-    nodes: Vec<SharedNode<M>>,
-    root: Option<SharedNode<M>>,
+    pub key: Vec<u8>,
+    pub value: Option<Vec<u8>>,
+    pub nodes: Vec<SharedNode<M>>,
+    pub root: Option<SharedNode<M>>,
 }
 
 impl<M: CoreMem> Changes<M> {
