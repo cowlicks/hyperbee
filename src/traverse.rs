@@ -6,6 +6,7 @@ use std::{
     task::{Context, Poll},
 };
 use tokio_stream::Stream;
+use tracing::debug;
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
@@ -73,6 +74,7 @@ async fn get_child_stream<'a, M: CoreMem>(
 
 impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
     type Item = TreeItem<M>;
+    #[tracing::instrument(skip(self, cx))]
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // getting next key & value
         if let Some(key_fut) = &mut self.next_key {

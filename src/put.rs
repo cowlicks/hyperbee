@@ -1,15 +1,13 @@
 use std::sync::Arc;
 
-use crate::{Blocks, SharedNode};
+use crate::{BlockEntry, Shared, SharedNode};
 
 use super::{
     messages::{yolo_index, Node as NodeSchema, YoloIndex},
     nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, Key, Node, MAX_KEYS,
 };
-use hypercore::AppendOutcome;
 use prost::Message;
 use tokio::sync::RwLock;
-use tracing::info;
 
 #[derive(Debug, Default)]
 pub struct Changes<M: CoreMem> {

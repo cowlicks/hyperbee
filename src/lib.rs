@@ -24,7 +24,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::info;
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
 impl<T: RandomAccess + Debug + Send> CoreMem for T {}
@@ -255,6 +255,7 @@ impl<M: CoreMem> Children<M> {
 /// ```Rust
 /// let matching_key = node_path.last()?.keys[index_path.last()?]
 /// ```
+#[tracing::instrument(skip(node))]
 async fn nearest_node<M: CoreMem>(
     node: SharedNode<M>,
     key: &Vec<u8>,
@@ -277,7 +278,6 @@ async fn nearest_node<M: CoreMem>(
                     // found matching key
                     if val == *key {
                         index_path.push(i);
-                        debug!("Found match");
                         return Ok((true, node_path, index_path));
                     }
                 }

@@ -32,10 +32,6 @@ pub struct BlocksGetOptions {
     with_changes: bool,
 }
 
-/*
- * add blocks._get(key, { with_changes })
- * blocks.get calls this
- */
 impl<M: CoreMem> Blocks<M> {
     /// # Errors
     /// when the provided `seq` is not in the Hypercore
