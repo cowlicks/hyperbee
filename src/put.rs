@@ -44,47 +44,18 @@ impl<M: CoreMem> Changes<M> {
     }
 
     fn add_root(&mut self, root: SharedNode<M>) -> Child {
+        if self.root.is_some() {
+            panic!("We should never be replacing a root on a changes");
+        }
         self.root = Some(root);
         Child {
             seq: self.seq,
             offset: 0,
         }
     }
-}
 
-impl<M: CoreMem> Blocks<M> {
-    async fn add_changes(&self, changes: Changes<M>) -> Result<AppendOutcome, HyperbeeError> {
-        let Changes {
-            seq: _,
-            key,
-            value,
-            nodes,
-            root,
-        } = changes;
-
-        let mut new_nodes = vec![];
-        // encode nodes
-        // TODO ensure root
-        new_nodes.push(root.unwrap().read().await.to_level().await);
-        for node in nodes.into_iter() {
-            new_nodes.push(node.read().await.to_level().await);
-        }
-
-        let index = YoloIndex { levels: new_nodes };
-
-        let mut index_buf = vec![];
-        YoloIndex::encode(&index, &mut index_buf).map_err(HyperbeeError::YoloIndexEncodingError)?;
-
-        let node_schema = NodeSchema {
-            key,
-            value,
-            index: index_buf,
-        };
-
-        let mut node_schema_buf = vec![];
-        NodeSchema::encode(&node_schema, &mut node_schema_buf)
-            .map_err(HyperbeeError::NodeEncodingError)?;
-        self.append(&node_schema_buf).await
+    fn as_block_entry(&self) -> Shared<BlockEntry> {
+        todo!()
     }
 }
 

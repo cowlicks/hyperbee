@@ -73,4 +73,38 @@ impl<M: CoreMem> Blocks<M> {
         }
         Ok(String::from_utf8(out).unwrap())
     }
+    pub async fn add_changes(&self, changes: Changes<M>) -> Result<AppendOutcome, HyperbeeError> {
+        let Changes {
+            key,
+            value,
+            nodes,
+            root,
+            ..
+        } = changes;
+
+        info!("adding changes with n_nodes = {}", nodes.len());
+        let mut new_nodes = vec![];
+        // encode nodes
+        // TODO ensure root
+        new_nodes.push(root.unwrap().read().await.to_level().await);
+        for node in nodes.into_iter() {
+            new_nodes.push(node.read().await.to_level().await);
+        }
+
+        let index = YoloIndex { levels: new_nodes };
+
+        let mut index_buf = vec![];
+        YoloIndex::encode(&index, &mut index_buf).map_err(HyperbeeError::YoloIndexEncodingError)?;
+
+        let node_schema = NodeSchema {
+            key,
+            value,
+            index: index_buf,
+        };
+
+        let mut node_schema_buf = vec![];
+        NodeSchema::encode(&node_schema, &mut node_schema_buf)
+            .map_err(HyperbeeError::NodeEncodingError)?;
+        self.append(&node_schema_buf).await
+    }
 }
