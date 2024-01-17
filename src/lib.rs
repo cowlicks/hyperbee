@@ -372,28 +372,29 @@ impl<M: CoreMem> Node<M> {
     async fn get_value_of_key(
         &self,
         index: usize,
-    ) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
+    ) -> Result<(u64, Option<Vec<u8>>), HyperbeeError> {
         match &self.keys[index] {
             Key {
                 seq,
                 keys_value: Some(value),
                 ..
-            } => Ok(value.clone().map(|v| (*seq, v))),
+            } => Ok((*seq, value.clone())),
             Key {
                 seq,
                 keys_value: None,
                 ..
-            } => Ok(self
-                .blocks
-                .read()
-                .await
-                .get(seq)
-                .await?
-                .read()
-                .await
-                .value
-                .clone()
-                .map(|v| (*seq, v))),
+            } => Ok((
+                *seq,
+                self.blocks
+                    .read()
+                    .await
+                    .get(seq)
+                    .await?
+                    .read()
+                    .await
+                    .value
+                    .clone(),
+            )),
         }
     }
 
@@ -472,22 +473,26 @@ impl<M: CoreMem> Hyperbee<M> {
     /// Get the value corresponding to the provided `key` from the Hyperbee
     /// # Errors
     /// When `Hyperbee.get_root` fails
-    pub async fn get(&mut self, key: &Vec<u8>) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
+    pub async fn get(
+        &mut self,
+        key: &Vec<u8>,
+    ) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
         let node = match self.get_root(false).await? {
             None => return Ok(None),
             Some(node) => node,
         };
         let (matched, path, indexes) = nearest_node(node, key).await?;
         if matched {
-            return path
-                .last()
-                .expect("Since `matched` was true, there must be at least one node in `path`")
-                .read()
-                .await
-                .get_value_of_key(*indexes.last().expect(
-                    "Since `matched` was true, there must be at least one node in `indexes`",
-                ))
-                .await;
+            return Ok(Some(
+                path.last()
+                    .expect("Since `matched` was true, there must be at least one node in `path`")
+                    .read()
+                    .await
+                    .get_value_of_key(*indexes.last().expect(
+                        "Since `matched` was true, there must be at least one node in `indexes`",
+                    ))
+                    .await?,
+            ));
         }
         Ok(None)
     }

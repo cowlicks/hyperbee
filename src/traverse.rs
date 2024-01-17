@@ -10,6 +10,9 @@ use tracing::debug;
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
+type KeyData = Result<(Vec<u8>, (u64, Option<Vec<u8>>)), HyperbeeError>;
+type TreeItem<M> = (KeyData, SharedNode<M>);
+
 // TODO add options for gt lt gte lte, reverse, and versions for just key/seq
 /// Struct used for iterating over hyperbee with a Stream.
 /// Each iteration yields the key it's value, and the "seq" for the value (the index of the value
@@ -53,10 +56,6 @@ async fn get_n_keys_and_children<M: CoreMem>(node: SharedNode<M>) -> (usize, usi
         node.read().await.n_children().await,
     )
 }
-
-type KeyData = Result<(Vec<u8>, Option<(u64, Vec<u8>)>), HyperbeeError>;
-///Result<(key, Option<(value_seq, value)>)>
-type TreeItem<M> = (KeyData, SharedNode<M>);
 
 async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> KeyData {
     let key = node.write().await.get_key(index).await?;

@@ -25,7 +25,7 @@ async fn basic_put() -> Result<(), Box<dyn std::error::Error>> {
         hb.put(&key, Some(val.clone())).await?;
         for j in 0..(i + 1) {
             let key = vec![j];
-            let val = vec![j];
+            let val = Some(key.clone());
             let res = hb.get(&key).await?.unwrap();
             dbg!(&res);
             assert_eq!(res.1, val);
@@ -47,7 +47,7 @@ async fn basic_put_with_replace() -> Result<(), Box<dyn std::error::Error>> {
         hb.put(&key, Some(val.clone())).await?;
         for j in 0..(i + 1) {
             let key = vec![j];
-            let val = vec![j + 1];
+            let val = Some(vec![j + 1]);
             let res = hb.get(&key).await?.unwrap();
             dbg!(&res, &key, &val);
             assert_eq!(res.1, val);

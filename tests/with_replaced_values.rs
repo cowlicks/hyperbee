@@ -10,6 +10,7 @@ async fn with_replaced_values() -> Result<(), Box<dyn std::error::Error>> {
         let expected = (i * 2).to_string();
 
         let (seq, res) = hb.get(&key.as_bytes().to_vec()).await?.unwrap();
+        let res = res.unwrap();
         let res = std::str::from_utf8(&res).unwrap();
         println!("i {i} seq {seq} res {res}");
         assert_eq!(res, expected);
