@@ -344,11 +344,14 @@ impl<M: CoreMem> Node<M> {
         }
     }
 
+    #[tracing::instrument(skip(self))]
     async fn get_key(&mut self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
         let key = &mut self.keys[index];
         if let Some(value) = &key.value {
+            info!("has cached value");
             return Ok(value.clone());
         }
+        info!("no cached value");
         let value = self
             .blocks
             .read()
@@ -363,6 +366,8 @@ impl<M: CoreMem> Node<M> {
         Ok(value)
     }
 
+    /// Use given index to get Key.seq, which points to the block in the core where this value
+    /// lives. Load that BlockEntry and return (Key.seq, BlockEntry.value)
     async fn get_value_of_key(
         &self,
         index: usize,
