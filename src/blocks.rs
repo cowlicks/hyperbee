@@ -27,11 +27,6 @@ impl<M: CoreMem> std::fmt::Debug for Blocks<M> {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct BlocksGetOptions {
-    with_changes: bool,
-}
-
 impl<M: CoreMem> Blocks<M> {
     /// # Errors
     /// when the provided `seq` is not in the Hypercore
@@ -45,17 +40,8 @@ impl<M: CoreMem> Blocks<M> {
         // check if seq is == self.core.info.length + 1
         // if so take changes and do something like:
         // changes.clone().to_block_entry()
-        if opts.with_changes
-            && (self.core.read().await.info().length == *seq && self.changes.is_some())
-        {
-            info!("from changes");
-            return self
-                ._get_from_changes()
-                .await
-                .map(|b| Arc::new(RwLock::new(b)))
-                .ok_or(HyperbeeError::NoBlockAtSeqError(*seq));
-        }
         if let Some(block) = self._get_from_cache(seq).await {
+            info!("from cache");
             Ok(block)
         } else {
             info!("from core");
@@ -81,6 +67,7 @@ impl<M: CoreMem> Blocks<M> {
             None => Ok(None),
         }
     }
+
     pub async fn info(&self) -> hypercore::Info {
         self.core.read().await.info()
     }

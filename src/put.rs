@@ -28,6 +28,7 @@ impl<M: CoreMem> Changes<M> {
             root: None,
         }
     }
+
     fn add_node(&mut self, node: SharedNode<M>) -> Child {
         self.nodes.push(node);
         let offset: u64 = self
