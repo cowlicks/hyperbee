@@ -57,11 +57,10 @@ pub enum HyperbeeError {
 }
 
 #[derive(Clone, Debug)]
-/// Pointer used within a [`Node`] to point to it's keys.
+/// Pointer used within a [`Node`] to point to the block where the Key's (key, value) pair is stored.
 pub struct Key {
     /// Index of the key's "key" within the [`hypercore::Hypercore`].
     seq: u64,
-    // TODO this is not getting used anywhere
     /// Value of the key's "key". NB: it is not the "value" corresponding to the value in a `(key,
     /// value)` pair
     value: Option<Vec<u8>>,
