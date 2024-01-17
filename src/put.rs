@@ -51,10 +51,6 @@ impl<M: CoreMem> Changes<M> {
             offset: 0,
         }
     }
-
-    fn as_block_entry(&self) -> Shared<BlockEntry> {
-        todo!()
-    }
 }
 
 /// Add the given `children` to the next node in `node_path` at the next index in `index_path`.
