@@ -31,12 +31,8 @@ impl<M: CoreMem> Blocks<M> {
     /// # Errors
     /// when the provided `seq` is not in the Hypercore
     /// when the data in the Hypercore block cannot be decoded
-    #[tracing::instrument(skip(self, opts))]
-    pub async fn get(
-        &self,
-        seq: &u64,
-        opts: BlocksGetOptions,
-    ) -> Result<Shared<BlockEntry>, HyperbeeError> {
+    #[tracing::instrument(skip(self))]
+    pub async fn get(&self, seq: &u64) -> Result<Shared<BlockEntry>, HyperbeeError> {
         // check if seq is == self.core.info.length + 1
         // if so take changes and do something like:
         // changes.clone().to_block_entry()

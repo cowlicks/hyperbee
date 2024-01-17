@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{BlockEntry, Shared, SharedNode};
+use crate::SharedNode;
 
 use super::{
     messages::{yolo_index, Node as NodeSchema, YoloIndex},
