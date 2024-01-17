@@ -36,7 +36,7 @@ impl<M: CoreMem> Blocks<M> {
     /// # Errors
     /// when the provided `seq` is not in the Hypercore
     /// when the data in the Hypercore block cannot be decoded
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, opts))]
     pub async fn get(
         &self,
         seq: &u64,
@@ -48,6 +48,7 @@ impl<M: CoreMem> Blocks<M> {
         if opts.with_changes
             && (self.core.read().await.info().length == *seq && self.changes.is_some())
         {
+            info!("from changes");
             return self
                 ._get_from_changes()
                 .await
@@ -57,6 +58,7 @@ impl<M: CoreMem> Blocks<M> {
         if let Some(block) = self._get_from_cache(seq).await {
             Ok(block)
         } else {
+            info!("from core");
             let block_entry = self
                 ._get_from_core(seq)
                 .await?
