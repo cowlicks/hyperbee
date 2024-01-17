@@ -170,10 +170,7 @@ impl<M: CoreMem> Hyperbee<M> {
         let mut changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
 
         // TODO get this when me make NodeSchema
-        let mut cur_key = Key {
-            seq,
-            value: Some(key.clone()),
-        };
+        let mut cur_key = Key::new(seq, Some(key.clone()), Some(value.clone()));
         let mut children: Vec<Child> = vec![];
 
         loop {

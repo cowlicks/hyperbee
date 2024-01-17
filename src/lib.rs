@@ -63,7 +63,8 @@ pub struct Key {
     seq: u64,
     /// Value of the key's "key". NB: it is not the "value" corresponding to the value in a `(key,
     /// value)` pair
-    value: Option<Vec<u8>>,
+    keys_key: Option<Vec<u8>>,
+    keys_value: Option<Option<Vec<u8>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -126,8 +127,12 @@ struct Pointers {
 }
 
 impl Key {
-    fn new(seq: u64, value: Option<Vec<u8>>) -> Self {
-        Key { seq, value }
+    fn new(seq: u64, keys_key: Option<Vec<u8>>, keys_value: Option<Option<Vec<u8>>>) -> Self {
+        Key {
+            seq,
+            keys_key,
+            keys_value,
+        }
     }
 }
 
@@ -152,7 +157,7 @@ impl Pointers {
                 let keys = level
                     .keys
                     .iter()
-                    .map(|k| Key::new(*k, Option::None))
+                    .map(|k| Key::new(*k, Option::None, Option::None))
                     .collect();
                 let mut children = vec![];
                 for i in (0..(level.children.len())).step_by(2) {
@@ -342,7 +347,7 @@ impl<M: CoreMem> Node<M> {
     #[tracing::instrument(skip(self))]
     async fn get_key(&mut self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
         let key = &mut self.keys[index];
-        if let Some(value) = &key.value {
+        if let Some(value) = &key.keys_key {
             info!("has cached value");
             return Ok(value.clone());
         }
@@ -357,28 +362,39 @@ impl<M: CoreMem> Node<M> {
             .await
             .key
             .clone();
-        key.value = Some(value.clone());
+        key.keys_key = Some(value.clone());
         Ok(value)
     }
 
     /// Use given index to get Key.seq, which points to the block in the core where this value
     /// lives. Load that BlockEntry and return (Key.seq, BlockEntry.value)
+    // TODO this should return Res<(u64, Opt<Vec<u8>>)>
     async fn get_value_of_key(
         &self,
         index: usize,
     ) -> Result<Option<(u64, Vec<u8>)>, HyperbeeError> {
-        let seq = &self.keys[index].seq;
-        Ok(self
-            .blocks
-            .read()
-            .await
-            .get(seq)
-            .await?
-            .read()
-            .await
-            .value
-            .clone()
-            .map(|v| (*seq, v)))
+        match &self.keys[index] {
+            Key {
+                seq,
+                keys_value: Some(value),
+                ..
+            } => Ok(value.clone().map(|v| (*seq, v))),
+            Key {
+                seq,
+                keys_value: None,
+                ..
+            } => Ok(self
+                .blocks
+                .read()
+                .await
+                .get(seq)
+                .await?
+                .read()
+                .await
+                .value
+                .clone()
+                .map(|v| (*seq, v))),
+        }
     }
 
     async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
