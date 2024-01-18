@@ -220,6 +220,10 @@ impl<M: CoreMem> Children<M> {
         Ok(node)
     }
 
+    async fn len(&self) -> usize {
+        self.children.read().await.len()
+    }
+
     async fn get_children(&self) -> Vec<Child> {
         self.children
             .read()
