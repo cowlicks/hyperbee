@@ -17,8 +17,6 @@ pub struct Blocks<M: CoreMem> {
     #[builder(default)]
     cache: Shared<BTreeMap<u64, SharedBlock>>,
     core: Shared<Hypercore<M>>,
-    #[builder(default)]
-    changes: Option<Changes<M>>,
 }
 
 impl<M: CoreMem> std::fmt::Debug for Blocks<M> {
