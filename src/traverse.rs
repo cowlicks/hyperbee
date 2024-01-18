@@ -6,7 +6,6 @@ use std::{
     task::{Context, Poll},
 };
 use tokio_stream::Stream;
-use tracing::debug;
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 

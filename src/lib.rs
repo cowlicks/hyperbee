@@ -281,17 +281,24 @@ async fn nearest_node<M: CoreMem>(
                     let val = current_node.write().await.get_key(i).await?;
                     // found matching child
                     if *key < val {
+                        trace!("key {:?} < val {:?} at index {}", key, val, i);
                         index_path.push(i);
                         break 'found i;
                     }
                     // found matching key
                     if val == *key {
+                        trace!("key {:?} == val {:?} at index {}", key, val, i);
                         index_path.push(i);
                         return Ok((true, node_path, index_path));
                     }
                 }
                 // key is greater than all of this nodes keys, take last child, which has index
                 // of node.keys.len()
+                trace!(
+                    "new key {:?} greater than all in this node index {}",
+                    key,
+                    n_keys
+                );
                 index_path.push(n_keys);
                 n_keys
             };

@@ -59,6 +59,7 @@ impl<M: CoreMem> Changes<M> {
 /// This creates a new node, with which we call:
 /// propagate_changes_up_tree(changes, node_path, node_index, vec![new_node]);
 /// This continues until we reach the root.
+#[tracing::instrument(skip(changes, node_path))]
 async fn propagate_changes_up_tree<M: CoreMem>(
     mut changes: Changes<M>,
     mut node_path: Vec<SharedNode<M>>,
@@ -223,6 +224,7 @@ impl<M: CoreMem> Hyperbee<M> {
                     .await;
 
                 if !node_path.is_empty() {
+                    trace!("inserted into some child");
                     let child = changes.add_node(cur_node);
                     let changes =
                         propagate_changes_up_tree(changes, node_path, index_path, vec![child])
@@ -230,6 +232,7 @@ impl<M: CoreMem> Hyperbee<M> {
                     let outcome = self.blocks.read().await.add_changes(changes).await?;
                     return Ok((matched, outcome.length));
                 } else {
+                    trace!("inserted into root");
                     changes.add_root(cur_node);
                 };
 
