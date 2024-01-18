@@ -8,7 +8,7 @@ use super::{
 };
 use prost::Message;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::trace;
 
 #[derive(Debug, Default)]
 pub struct Changes<M: CoreMem> {
@@ -101,7 +101,7 @@ impl<M: CoreMem> Node<M> {
     async fn split(&mut self) -> (SharedNode<M>, Key, SharedNode<M>) {
         let key_median_index = self.keys.len() >> 1;
         let children_median_index = self.children.len().await >> 1;
-        info!(
+        trace!(
             "
     splitting at key index: {key_median_index}
     splitting at child index: {children_median_index}
@@ -136,12 +136,13 @@ impl<M: CoreMem> Node<M> {
     }
 }
 impl<M: CoreMem> Hyperbee<M> {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(level = "trace", skip(self), ret)]
     pub async fn put(
         &mut self,
         key: &Vec<u8>,
         value: Option<Vec<u8>>,
     ) -> Result<(bool, u64), HyperbeeError> {
+        // Get root and handle when it don't exist
         let root = match self.get_root(true).await? {
             // No root, create it. Insert key & value. Return.
             // NB: we could do two things here:
@@ -177,13 +178,17 @@ impl<M: CoreMem> Hyperbee<M> {
         let seq = self.version().await;
         let mut changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
 
-        // TODO get this when me make NodeSchema
         let mut cur_key = Key::new(seq, Some(key.clone()), Some(value.clone()));
         let mut children: Vec<Child> = vec![];
 
         loop {
             let cur_node = match node_path.pop() {
                 None => {
+                    trace!(
+                        "creating a new root with key = [{}] and children = [{:#?}]",
+                        &cur_key,
+                        &children
+                    );
                     let new_root = Arc::new(RwLock::new(Node::new(
                         vec![cur_key.clone()],
                         children,
@@ -206,6 +211,7 @@ impl<M: CoreMem> Hyperbee<M> {
             // OR there is room on this node to insert the current key
             let room_for_more_keys = cur_node.read().await.keys.len() < MAX_KEYS;
             if matched || room_for_more_keys {
+                trace!("room for more keys or key matched");
                 let stop = match matched {
                     true => cur_index + 1,
                     false => cur_index,
@@ -240,7 +246,6 @@ impl<M: CoreMem> Hyperbee<M> {
                 .await;
 
             let (left, mid_key, right) = cur_node.write().await.split().await;
-            // add left/right to node_schema and get child pointers
 
             children = vec![
                 changes.add_node(left.clone()),

@@ -24,7 +24,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::trace;
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
 impl<T: RandomAccess + Debug + Send> CoreMem for T {}
@@ -181,10 +181,10 @@ impl<M: CoreMem> Children<M> {
             children: RwLock::new(children.into_iter().map(|c| (c, Option::None)).collect()),
         }
     }
-    #[tracing::instrument(ret, skip(self))]
+    #[tracing::instrument(skip(self))]
     async fn insert(&self, index: usize, new_children: Vec<Child>) {
-        info!("from children insert");
         if new_children.is_empty() {
+            trace!("no children to insert, do nothing");
             return;
         }
 
@@ -192,12 +192,18 @@ impl<M: CoreMem> Children<M> {
             true => 0,
             false => 1,
         };
+        trace!(
+            "replacing child @ [{}] with [{}] children.",
+            index,
+            new_children.len()
+        );
         self.children.write().await.splice(
             index..(index + replace_split_child),
             new_children.iter().map(|c| (c.clone(), Option::None)),
         );
     }
 
+    #[tracing::instrument(skip(self))]
     async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
         let child_data = match &self.children.read().await[index] {
             (_, Some(node)) => return Ok(node.clone()),
@@ -288,7 +294,7 @@ async fn nearest_node<M: CoreMem>(
 
             // leaf node with no match
             if current_node.read().await.children.is_empty().await {
-                info!("Reached leaf. Returning");
+                trace!("Reached leaf. Returning");
                 return Ok((false, node_path, index_path));
             }
 
@@ -348,10 +354,10 @@ impl<M: CoreMem> Node<M> {
     async fn get_key(&mut self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
         let key = &mut self.keys[index];
         if let Some(value) = &key.keys_key {
-            info!("has cached value");
+            trace!("has cached value");
             return Ok(value.clone());
         }
-        info!("no cached value");
+        trace!("no cached value");
         let value = self
             .blocks
             .read()
@@ -402,10 +408,12 @@ impl<M: CoreMem> Node<M> {
         self.children.get_child(index).await
     }
 
+    /// Insert a key and it's children into [`self`].
+    #[tracing::instrument(skip(self))]
     async fn _insert(&mut self, key_ref: Key, children: Vec<Child>, range: Range<usize>) {
+        trace!("inserting [{}] children", children.len());
         self.keys.splice(range.clone(), vec![key_ref]);
         self.children.insert(range.start, children).await;
-        // TODO handle children
     }
 }
 

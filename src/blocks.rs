@@ -1,7 +1,7 @@
 use derive_builder::Builder;
 use hypercore::{AppendOutcome, Hypercore};
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::trace;
 
 use crate::{
     messages::{Node as NodeSchema, YoloIndex},
@@ -35,10 +35,10 @@ impl<M: CoreMem> Blocks<M> {
         // if so take changes and do something like:
         // changes.clone().to_block_entry()
         if let Some(block) = self._get_from_cache(seq).await {
-            info!("from cache");
+            trace!("from cache");
             Ok(block)
         } else {
-            info!("from core");
+            trace!("from core");
             let block_entry = self
                 ._get_from_core(seq)
                 .await?
@@ -80,6 +80,7 @@ impl<M: CoreMem> Blocks<M> {
         }
         Ok(String::from_utf8(out).unwrap())
     }
+    #[tracing::instrument(skip(self, changes))]
     pub async fn add_changes(&self, changes: Changes<M>) -> Result<AppendOutcome, HyperbeeError> {
         let Changes {
             key,
@@ -89,7 +90,7 @@ impl<M: CoreMem> Blocks<M> {
             ..
         } = changes;
 
-        info!("adding changes with n_nodes = {}", nodes.len());
+        trace!("adding changes with n_nodes = {}", nodes.len());
         let mut new_nodes = vec![];
         // encode nodes
         // TODO ensure root
