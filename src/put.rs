@@ -64,37 +64,22 @@ async fn propagate_changes_up_tree<M: CoreMem>(
     mut changes: Changes<M>,
     mut node_path: Vec<SharedNode<M>>,
     mut index_path: Vec<usize>,
-    children: Vec<Child>,
+    new_child: Child,
 ) -> Changes<M> {
-    let mut cur_children = children;
+    let mut cur_child = new_child;
     loop {
-        if node_path.is_empty() {
-            break;
-        }
         // this should add children to node
         // add node to changes, as root or node, and redo loop if not root
         let node = node_path.pop().expect("should be checked before call ");
         let index = index_path.pop().expect("should be checked before call ");
-        cur_children = node
-            .read()
-            .await
-            .children
-            .splice(
-                (index)..(index + 1),
-                // TODO is there a way to use Some(node) here?
-                cur_children.into_iter().map(|c| (c, None)).collect(),
-            )
-            .await
-            .into_iter()
-            .map(|(c, _)| c)
-            .collect();
+        node.read().await.children.children.write().await[index].0 = cur_child.clone();
         if node_path.is_empty() {
             changes.add_root(node);
+            return changes;
         } else {
-            changes.add_node(node);
+            cur_child = changes.add_node(node);
         }
     }
-    changes
 }
 
 impl<M: CoreMem> Node<M> {
@@ -227,8 +212,7 @@ impl<M: CoreMem> Hyperbee<M> {
                     trace!("inserted into some child");
                     let child = changes.add_node(cur_node);
                     let changes =
-                        propagate_changes_up_tree(changes, node_path, index_path, vec![child])
-                            .await;
+                        propagate_changes_up_tree(changes, node_path, index_path, child).await;
                     let outcome = self.blocks.read().await.add_changes(changes).await?;
                     return Ok((matched, outcome.length));
                 } else {
