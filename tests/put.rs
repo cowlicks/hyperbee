@@ -1,8 +1,25 @@
 use hyperbee_rs::{blocks::BlocksBuilder, Hyperbee, HyperbeeBuilder, HyperbeeError};
 use hypercore::{HypercoreBuilder, Storage};
+use random_access_memory::RandomAccessMemory;
+use tracing::{info, subscriber::SetGlobalDefaultError};
 
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{OnceCell, RwLock};
+
+static INIT_LOG: OnceCell<Result<(), SetGlobalDefaultError>> = OnceCell::const_new();
+
+async fn setup_logs() {
+    let res = INIT_LOG
+        .get_or_init(|| async {
+            let subscriber = tracing_subscriber::FmtSubscriber::new();
+            tracing::subscriber::set_global_default(subscriber)
+        })
+        .await;
+    match res {
+        Ok(_) => (),
+        Err(e) => panic!("{}", e),
+    }
+}
 
 async fn in_memory_hyperbee(
 ) -> Result<Hyperbee<random_access_memory::RandomAccessMemory>, HyperbeeError> {
