@@ -8,6 +8,7 @@ use super::{
 };
 use prost::Message;
 use tokio::sync::RwLock;
+use tracing::info;
 
 #[derive(Debug, Default)]
 pub struct Changes<M: CoreMem> {
@@ -96,13 +97,20 @@ async fn propagate_changes_up_tree<M: CoreMem>(
 }
 
 impl<M: CoreMem> Node<M> {
+    #[tracing::instrument(skip(self))]
     async fn split(&mut self) -> (SharedNode<M>, Key, SharedNode<M>) {
-        let median_index = self.keys.len() >> 1;
-
+        let key_median_index = self.keys.len() >> 1;
+        let children_median_index = self.children.len().await >> 1;
+        info!(
+            "
+    splitting at key index: {key_median_index}
+    splitting at child index: {children_median_index}
+"
+        );
         let left = Node::new(
-            self.keys.splice(0..median_index, vec![]).collect(),
+            self.keys.splice(0..key_median_index, vec![]).collect(),
             self.children
-                .splice(0..median_index, vec![])
+                .splice(0..children_median_index, vec![])
                 .await
                 .into_iter()
                 .map(|x| x.0)
