@@ -245,7 +245,7 @@ impl<M: CoreMem> Hyperbee<M> {
 
 #[cfg(test)]
 mod test {
-    use crate::test::in_memory_hyperbee;
+    use crate::test::{check_tree, in_memory_hyperbee};
 
     #[tokio::test]
     async fn basic_put() -> Result<(), Box<dyn std::error::Error>> {
@@ -315,6 +315,7 @@ mod test {
             let key = is.clone().as_bytes().to_vec();
             let val = Some(key.clone());
             hb.put(&key, val).await?;
+            hb = check_tree(hb).await?;
             let _ = hb.print().await?;
 
             for j in 0..(i + 1) {

@@ -18,7 +18,7 @@ pub async fn setup_logs() {
         .await;
 }
 
-async fn check_tree<M: CoreMem>(
+pub async fn check_tree<M: CoreMem>(
     mut hb: Hyperbee<M>,
 ) -> Result<Hyperbee<M>, Box<dyn std::error::Error>> {
     let root = hb
