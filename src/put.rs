@@ -242,3 +242,89 @@ impl<M: CoreMem> Hyperbee<M> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::test::in_memory_hyperbee;
+
+    #[tokio::test]
+    async fn basic_put() -> Result<(), Box<dyn std::error::Error>> {
+        let mut hb = in_memory_hyperbee().await?;
+        for i in 0..4 {
+            let key = vec![i];
+            let val = vec![i];
+            hb.put(&key, Some(val.clone())).await?;
+            for j in 0..(i + 1) {
+                let key = vec![j];
+                let val = Some(key.clone());
+                let res = hb.get(&key).await?.unwrap();
+                dbg!(&res);
+                assert_eq!(res.1, val);
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn basic_put_with_replace() -> Result<(), Box<dyn std::error::Error>> {
+        let mut hb = in_memory_hyperbee().await?;
+        for i in 0..4 {
+            let key = vec![i];
+            let val = vec![i];
+            // initial values
+            hb.put(&key, Some(val.clone())).await?;
+            // replace replace with val + 1
+            let val = vec![i + 1_u8];
+            hb.put(&key, Some(val.clone())).await?;
+            for j in 0..(i + 1) {
+                let key = vec![j];
+                let val = Some(vec![j + 1]);
+                let res = hb.get(&key).await?.unwrap();
+                dbg!(&res, &key, &val);
+                assert_eq!(res.1, val);
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn print_put() -> Result<(), Box<dyn std::error::Error>> {
+        let mut hb = in_memory_hyperbee().await?;
+        for i in 0..3 {
+            let is = i.to_string();
+            let key = is.clone().as_bytes().to_vec();
+            let val = is.clone().as_bytes().to_vec();
+            hb.put(&key, Some(val.clone())).await?;
+        }
+        let tree = hb.print().await?;
+        assert_eq!(
+            tree,
+            "0
+1
+2
+"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn unit_put() -> Result<(), Box<dyn std::error::Error>> {
+        let mut hb = in_memory_hyperbee().await?;
+        for i in 0..100 {
+            let is = i.to_string();
+            let key = is.clone().as_bytes().to_vec();
+            let val = Some(key.clone());
+            hb.put(&key, val).await?;
+            let _ = hb.print().await?;
+
+            for j in 0..(i + 1) {
+                let js = j.to_string();
+                let key = js.clone().as_bytes().to_vec();
+                let val = Some(key.clone());
+                let res = hb.get(&key).await?.unwrap();
+                assert_eq!(res.1, val);
+            }
+        }
+        Ok(())
+    }
+}
