@@ -5,6 +5,7 @@ pub mod messages {
 }
 pub mod blocks;
 pub mod put;
+mod test;
 pub mod traverse;
 
 use blocks::{Blocks, BlocksBuilder};
