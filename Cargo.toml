@@ -23,4 +23,5 @@ tracing-subscriber = "0.3.18"
 prost-build = "0.12.1"
 
 [dev-dependencies]
+async-recursion = "1.0.5"
 random-access-memory = "3.0.0"

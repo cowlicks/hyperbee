@@ -245,7 +245,7 @@ impl<M: CoreMem> Hyperbee<M> {
 
 #[cfg(test)]
 mod test {
-    use crate::test::{check_tree, in_memory_hyperbee};
+    use crate::test::{check_tree, in_memory_hyperbee, Rand};
 
     #[tokio::test]
     async fn basic_put() -> Result<(), Box<dyn std::error::Error>> {
@@ -308,7 +308,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn unit_put() -> Result<(), Box<dyn std::error::Error>> {
+    async fn multi_put() -> Result<(), Box<dyn std::error::Error>> {
         let mut hb = in_memory_hyperbee().await?;
         for i in 0..100 {
             let is = i.to_string();
@@ -326,6 +326,39 @@ mod test {
                 assert_eq!(res.1, val);
             }
         }
+        Ok(())
+    }
+    fn i32_key_vec(i: &i32) -> Vec<u8> {
+        i.clone().to_string().as_bytes().to_vec()
+    }
+
+    #[tokio::test]
+    async fn shuffled_put() -> Result<(), Box<dyn std::error::Error>> {
+        let rand = Rand::default();
+        let mut hb = in_memory_hyperbee().await?;
+
+        let keys: Vec<i32> = (0..100).collect();
+        let keys = rand.shuffle(keys);
+        let mut used: Vec<i32> = vec![];
+
+        for i in keys {
+            used.push(i);
+
+            let key = i32_key_vec(&i);
+            let val = Some(key.clone());
+            hb.put(&key, val).await?;
+
+            for j in used.iter() {
+                let key = i32_key_vec(&j);
+                let val = Some(key.clone());
+                let res = hb.get(&key).await?.unwrap();
+                assert_eq!(res.1, val);
+            }
+
+            hb = check_tree(hb).await?;
+            let _ = hb.print().await?;
+        }
+        println!("{}", hb.print().await?);
         Ok(())
     }
 }
