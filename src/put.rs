@@ -349,7 +349,7 @@ mod test {
             hb.put(&key, val).await?;
 
             for j in used.iter() {
-                let key = i32_key_vec(&j);
+                let key = i32_key_vec(j);
                 let val = Some(key.clone());
                 let res = hb.get(&key).await?.unwrap();
                 assert_eq!(res.1, val);

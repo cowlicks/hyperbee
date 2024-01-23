@@ -12,10 +12,10 @@ mod test {
 
     #[tokio::test]
     async fn empty_tree_no_key() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = in_memory_hyperbee().await?;
+        let hb = in_memory_hyperbee().await?;
         let key = vec![1];
         let res = hb.del(&key).await?;
-        assert_eq!(res, false);
+        assert!(!res);
         Ok(())
     }
 }

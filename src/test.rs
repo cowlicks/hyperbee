@@ -174,7 +174,7 @@ impl Rand {
     pub fn rand(&self) -> f64 {
         let count = self.counter.fetch_add(1, self.ordering);
         let x = ((self.seed + count) as f64).sin() * self.sin_scale;
-        return x - x.floor();
+        x - x.floor()
     }
     pub fn rand_int_lt(&self, max: u64) -> u64 {
         (self.rand() * (max as f64)).floor() as u64
@@ -194,7 +194,7 @@ impl Default for Rand {
         Self {
             seed: 42,
             counter: Default::default(),
-            sin_scale: (10_000 as f64),
+            sin_scale: 10_000_f64,
             ordering: Ordering::SeqCst,
         }
     }

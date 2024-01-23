@@ -179,5 +179,5 @@ pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeEr
         out += &decoded_k;
         out += "\n";
     }
-    return Ok(out);
+    Ok(out)
 }
