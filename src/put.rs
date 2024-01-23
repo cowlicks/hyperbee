@@ -125,7 +125,7 @@ impl<M: CoreMem> Hyperbee<M> {
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub async fn put(
         &mut self,
-        key: &Vec<u8>,
+        key: Vec<u8>,
         value: Option<Vec<u8>>,
     ) -> Result<(bool, u64), HyperbeeError> {
         // Get root and handle when it don't exist
@@ -145,11 +145,7 @@ impl<M: CoreMem> Hyperbee<M> {
                 };
                 let mut index = vec![];
                 YoloIndex::encode(&p, &mut index).map_err(HyperbeeError::YoloIndexEncodingError)?;
-                let node_schema = NodeSchema {
-                    key: key.clone(),
-                    value,
-                    index,
-                };
+                let node_schema = NodeSchema { key, value, index };
                 let mut block = vec![];
                 NodeSchema::encode(&node_schema, &mut block)
                     .map_err(HyperbeeError::NodeEncodingError)?;
@@ -159,12 +155,12 @@ impl<M: CoreMem> Hyperbee<M> {
             Some(node) => node,
         };
 
-        let (matched, mut node_path, mut index_path) = nearest_node(root, key).await?;
+        let (matched, mut node_path, mut index_path) = nearest_node(root, &key).await?;
 
         let seq = self.version().await;
         let mut changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
 
-        let mut cur_key = Key::new(seq, Some(key.clone()), Some(value.clone()));
+        let mut cur_key = Key::new(seq, Some(key), Some(value.clone()));
         let mut children: Vec<Child> = vec![];
 
         loop {
@@ -253,7 +249,7 @@ mod test {
         for i in 0..4 {
             let key = vec![i];
             let val = vec![i];
-            hb.put(&key, Some(val.clone())).await?;
+            hb.put(key, Some(val.clone())).await?;
             for j in 0..(i + 1) {
                 let key = vec![j];
                 let val = Some(key.clone());
@@ -272,10 +268,10 @@ mod test {
             let key = vec![i];
             let val = vec![i];
             // initial values
-            hb.put(&key, Some(val.clone())).await?;
+            hb.put(key.clone(), Some(val.clone())).await?;
             // replace replace with val + 1
             let val = vec![i + 1_u8];
-            hb.put(&key, Some(val.clone())).await?;
+            hb.put(key, Some(val.clone())).await?;
             for j in 0..(i + 1) {
                 let key = vec![j];
                 let val = Some(vec![j + 1]);
@@ -294,7 +290,7 @@ mod test {
             let is = i.to_string();
             let key = is.clone().as_bytes().to_vec();
             let val = is.clone().as_bytes().to_vec();
-            hb.put(&key, Some(val.clone())).await?;
+            hb.put(key, Some(val.clone())).await?;
         }
         let tree = hb.print().await?;
         assert_eq!(
@@ -314,7 +310,7 @@ mod test {
             let is = i.to_string();
             let key = is.clone().as_bytes().to_vec();
             let val = Some(key.clone());
-            hb.put(&key, val).await?;
+            hb.put(key, val).await?;
             hb = check_tree(hb).await?;
             let _ = hb.print().await?;
 
@@ -346,7 +342,7 @@ mod test {
 
             let key = i32_key_vec(&i);
             let val = Some(key.clone());
-            hb.put(&key, val).await?;
+            hb.put(key, val).await?;
 
             for j in used.iter() {
                 let key = i32_key_vec(j);

@@ -23,7 +23,7 @@ pub async fn setup_logs() {
         .await;
 }
 
-fn is_sorted(arr: &Vec<Vec<u8>>) {
+fn is_sorted(arr: &[Vec<u8>]) {
     for i in 0..arr.len() {
         let len = arr.len();
         if len != 0 && i < len - 1 && arr[i] >= arr[i + 1] {
@@ -32,7 +32,7 @@ fn is_sorted(arr: &Vec<Vec<u8>>) {
     }
 }
 
-fn interleave<T: Clone>(a: &Vec<T>, b: &Vec<T>) -> Vec<T> {
+fn interleave<T: Clone>(a: &[T], b: &[T]) -> Vec<T> {
     let (a_len, b_len) = (a.len(), b.len());
     let max_len = std::cmp::max(a_len, b_len);
     let mut out = vec![];

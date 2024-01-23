@@ -281,7 +281,7 @@ impl<M: CoreMem> Children<M> {
 #[tracing::instrument(skip(node))]
 async fn nearest_node<M: CoreMem>(
     node: SharedNode<M>,
-    key: &Vec<u8>,
+    key: &[u8],
 ) -> Result<(bool, Vec<SharedNode<M>>, Vec<usize>), HyperbeeError> {
     let mut current_node = node;
     let mut node_path: Vec<SharedNode<M>> = vec![];
@@ -294,7 +294,7 @@ async fn nearest_node<M: CoreMem>(
                 for i in 0..n_keys {
                     let val = current_node.write().await.get_key(i).await?;
                     // found matching child
-                    if *key < val {
+                    if *key < val[..] {
                         trace!("key {:?} < val {:?} at index {}", key, val, i);
                         index_path.push(i);
                         break 'found i;
@@ -508,7 +508,7 @@ impl<M: CoreMem> Hyperbee<M> {
     /// When `Hyperbee.get_root` fails
     pub async fn get(
         &mut self,
-        key: &Vec<u8>,
+        key: &[u8],
     ) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
         let node = match self.get_root(false).await? {
             None => return Ok(None),
