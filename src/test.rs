@@ -144,7 +144,7 @@ pub async fn in_memory_hyperbee(
         .blocks(Arc::new(RwLock::new(blocks)))
         .build()?)
 }
-#[allow(dead_code)]
+#[allow(unused_macros)]
 /// Macro used for creating trees for testing.
 macro_rules! hb_put {
     ( $stop:expr ) => {
