@@ -4,6 +4,7 @@ pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 pub mod blocks;
+pub mod del;
 pub mod put;
 mod test;
 pub mod traverse;
