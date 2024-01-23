@@ -12,7 +12,9 @@ use crate::{
     blocks::BlocksBuilder, CoreMem, Hyperbee, HyperbeeBuilder, HyperbeeError, SharedNode, MAX_KEYS,
 };
 
+#[allow(dead_code)]
 static INIT_LOG: OnceCell<()> = OnceCell::const_new();
+#[allow(dead_code)]
 pub async fn setup_logs() {
     INIT_LOG
         .get_or_init(|| async {
@@ -142,6 +144,8 @@ pub async fn in_memory_hyperbee(
         .blocks(Arc::new(RwLock::new(blocks)))
         .build()?)
 }
+#[allow(dead_code)]
+/// Macro used for creating trees for testing.
 macro_rules! hb_put {
     ( $stop:expr ) => {
         async move {
