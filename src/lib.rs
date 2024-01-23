@@ -486,8 +486,10 @@ impl<M: CoreMem> Hyperbee<M> {
             None => {
                 let blocks = self.blocks.read().await;
                 let version = self.version().await;
-                if version == 0 && ensure_header {
-                    self.ensure_header().await?;
+                if version == 0 {
+                    if ensure_header {
+                        self.ensure_header().await?;
+                    }
                     return Ok(None);
                 }
                 let root = blocks
