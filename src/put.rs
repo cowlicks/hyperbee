@@ -10,6 +10,7 @@ use prost::Message;
 use tokio::sync::RwLock;
 use tracing::trace;
 
+// TODO move this to own module
 #[derive(Debug, Default)]
 pub struct Changes<M: CoreMem> {
     seq: u64,
@@ -20,7 +21,7 @@ pub struct Changes<M: CoreMem> {
 }
 
 impl<M: CoreMem> Changes<M> {
-    fn new(seq: u64, key: Vec<u8>, value: Option<Vec<u8>>) -> Self {
+    pub fn new(seq: u64, key: Vec<u8>, value: Option<Vec<u8>>) -> Self {
         Self {
             seq,
             key,
@@ -30,7 +31,7 @@ impl<M: CoreMem> Changes<M> {
         }
     }
 
-    fn add_node(&mut self, node: SharedNode<M>) -> Child {
+    pub fn add_node(&mut self, node: SharedNode<M>) -> Child {
         self.nodes.push(node);
         let offset: u64 = self
             .nodes
@@ -43,7 +44,7 @@ impl<M: CoreMem> Changes<M> {
         }
     }
 
-    fn add_root(&mut self, root: SharedNode<M>) -> Child {
+    pub fn add_root(&mut self, root: SharedNode<M>) -> Child {
         if self.root.is_some() {
             panic!("We should never be replacing a root on a changes");
         }
@@ -187,7 +188,9 @@ impl<M: CoreMem> Hyperbee<M> {
                 }
                 Some(cur_node) => cur_node,
             };
-            let cur_index = index_path.pop().unwrap();
+            let cur_index = index_path
+                .pop()
+                .expect("node_path and index_path *should* always have the same length");
 
             // If this is a replacemet but we have not replaced yet
             // OR there is room on this node to insert the current key
