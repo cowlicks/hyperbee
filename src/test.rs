@@ -144,21 +144,25 @@ pub async fn in_memory_hyperbee(
         .blocks(Arc::new(RwLock::new(blocks)))
         .build()?)
 }
-#[allow(unused_macros)]
 /// Macro used for creating trees for testing.
 macro_rules! hb_put {
     ( $stop:expr ) => {
         async move {
+            use crate::{Hyperbee, HyperbeeError};
+            use random_access_memory::RandomAccessMemory;
             let mut hb = in_memory_hyperbee().await?;
+            let mut keys = vec![];
             for i in 0..($stop) {
                 let key = i.to_string().clone().as_bytes().to_vec();
+                keys.push(key.clone());
                 let val = key.clone();
-                hb.put(&key, Some(val.clone())).await?;
+                hb.put(key, Some(val.clone())).await?;
             }
-            Ok::<Hyperbee<RandomAccessMemory>, HyperbeeError>(hb)
+            Ok::<(Hyperbee<RandomAccessMemory>, Vec<Vec<u8>>), HyperbeeError>((hb, keys))
         }
     };
 }
+pub(super) use hb_put;
 
 /// Seedable pseudorandom number generator used for reproducible randomized testing
 /// NB: we choose [`u32`] for seed and counter and [`f64`] as `sin_scale` and `rand`'s return value
