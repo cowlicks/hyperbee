@@ -61,7 +61,7 @@ impl<M: CoreMem> Changes<M> {
 /// propagate_changes_up_tree(changes, node_path, node_index, vec![new_node]);
 /// This continues until we reach the root.
 #[tracing::instrument(skip(changes, node_path))]
-async fn propagate_changes_up_tree<M: CoreMem>(
+pub async fn propagate_changes_up_tree<M: CoreMem>(
     mut changes: Changes<M>,
     mut node_path: Vec<SharedNode<M>>,
     mut index_path: Vec<usize>,
