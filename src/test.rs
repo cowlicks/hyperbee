@@ -58,6 +58,10 @@ pub async fn check_node<M: CoreMem>(node: SharedNode<M>) {
         panic!("too many keys!");
     }
 
+    if n_keys < MAX_KEYS >> 1 {
+        panic!("too few keys!");
+    }
+
     if n_children != 0 && (n_children != n_keys + 1) {
         panic!("kids exist but # kids [{n_children}] != # keys [{n_keys}] + 1");
     }
