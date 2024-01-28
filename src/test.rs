@@ -150,13 +150,13 @@ pub async fn in_memory_hyperbee(
 }
 /// Macro used for creating trees for testing.
 macro_rules! hb_put {
-    ( $stop:expr ) => {
+    ( $contents:expr ) => {
         async move {
             use crate::{Hyperbee, HyperbeeError};
             use random_access_memory::RandomAccessMemory;
             let mut hb = in_memory_hyperbee().await?;
             let mut keys = vec![];
-            for i in 0..($stop) {
+            for i in $contents {
                 let key = i.to_string().clone().as_bytes().to_vec();
                 keys.push(key.clone());
                 let val = key.clone();

@@ -105,11 +105,12 @@ pub struct BlockEntry {
 type Shared<T> = Arc<RwLock<T>>;
 type SharedNode<T> = Shared<Node<T>>;
 type SharedBlock = Shared<BlockEntry>;
+type ChildWithCache<T> = (Child, Option<SharedNode<T>>);
 
 #[derive(Debug)]
 struct Children<M: CoreMem> {
     blocks: Shared<Blocks<M>>,
-    children: RwLock<Vec<(Child, Option<SharedNode<M>>)>>,
+    children: RwLock<Vec<ChildWithCache<M>>>,
 }
 
 /// A node in the tree
@@ -250,8 +251,8 @@ impl<M: CoreMem> Children<M> {
     async fn splice<R: RangeBounds<usize>>(
         &self,
         range: R,
-        replace_with: Vec<(Child, Option<SharedNode<M>>)>,
-    ) -> Vec<(Child, Option<SharedNode<M>>)> {
+        replace_with: Vec<ChildWithCache<M>>,
+    ) -> Vec<ChildWithCache<M>> {
         // leaf node do nothing
         if self.children.read().await.is_empty() {
             return vec![];
