@@ -18,6 +18,7 @@ use random_access_storage::RandomAccess;
 use thiserror::Error;
 
 use std::{
+    cmp::Ordering,
     fmt::Debug,
     num::TryFromIntError,
     ops::{Range, RangeBounds},
@@ -269,6 +270,53 @@ impl<M: CoreMem> Children<M> {
     }
 }
 
+#[derive(Debug)]
+pub enum InfiniteKeys {
+    Positive,
+    Negative,
+}
+use InfiniteKeys::{Negative, Positive};
+
+impl PartialEq<[u8]> for InfiniteKeys {
+    fn eq(&self, _other: &[u8]) -> bool {
+        false
+    }
+}
+
+impl PartialEq<InfiniteKeys> for [u8] {
+    fn eq(&self, _other: &InfiniteKeys) -> bool {
+        false
+    }
+}
+
+impl PartialOrd<[u8]> for InfiniteKeys {
+    fn partial_cmp(&self, _other: &[u8]) -> Option<std::cmp::Ordering> {
+        Some(match self {
+            Positive => Ordering::Greater,
+            Negative => Ordering::Less,
+        })
+    }
+}
+
+impl PartialOrd<InfiniteKeys> for [u8] {
+    fn partial_cmp(&self, other: &InfiniteKeys) -> Option<Ordering> {
+        Some(match other {
+            Positive => Ordering::Less,
+            Negative => Ordering::Greater,
+        })
+    }
+}
+
+#[test]
+fn test_inf() {
+    let a: Vec<u8> = vec![1, 2, 3];
+    let b: &[u8] = &[5, 6, 7];
+    assert_eq!(&a[..] < &InfiniteKeys::Positive, true);
+    assert_eq!(*b < InfiniteKeys::Positive, true);
+    assert_eq!(&a[..] < &InfiniteKeys::Negative, false);
+    assert_eq!(*b < InfiniteKeys::Negative, false);
+}
+
 /// Descend through tree to the node nearest (or matching) the provided key
 /// Returns a tuple that describes the path we took. It looks like `(matched, node_path, index_path)`
 /// * `matched` is a bool that indicates if the key was matched
@@ -283,10 +331,13 @@ impl<M: CoreMem> Children<M> {
 // Vec<(SharedNode<M>, usize)>
 // This will simplify extracting node/index in a bunch of places
 #[tracing::instrument(skip(node))]
-async fn nearest_node<M: CoreMem>(
+async fn nearest_node<M: CoreMem, T>(
     node: SharedNode<M>,
-    key: &[u8],
-) -> Result<(bool, Vec<SharedNode<M>>, Vec<usize>), HyperbeeError> {
+    key: &T,
+) -> Result<(bool, Vec<SharedNode<M>>, Vec<usize>), HyperbeeError>
+where
+    T: PartialOrd<[u8]> + Debug + ?Sized,
+{
     let mut current_node = node;
     let mut node_path: Vec<SharedNode<M>> = vec![];
     let mut index_path: Vec<usize> = vec![];
@@ -298,13 +349,13 @@ async fn nearest_node<M: CoreMem>(
                 for i in 0..n_keys {
                     let val = current_node.write().await.get_key(i).await?;
                     // found matching child
-                    if *key < val[..] {
+                    if key < &val[..] {
                         trace!("key {:?} < val {:?} at index {}", key, val, i);
                         index_path.push(i);
                         break 'found i;
                     }
                     // found matching key
-                    if val == *key {
+                    if key == &val[..] {
                         trace!("key {:?} == val {:?} at index {}", key, val, i);
                         index_path.push(i);
                         return Ok((true, node_path, index_path));

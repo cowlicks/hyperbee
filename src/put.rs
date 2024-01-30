@@ -158,7 +158,7 @@ impl<M: CoreMem> Hyperbee<M> {
             Some(node) => node,
         };
 
-        let (matched, mut node_path, mut index_path) = nearest_node(root, &key).await?;
+        let (matched, mut node_path, mut index_path) = nearest_node(root, &key[..]).await?;
 
         let seq = self.version().await;
         let mut changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
