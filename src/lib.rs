@@ -248,10 +248,10 @@ impl<M: CoreMem> Children<M> {
             .collect()
     }
 
-    async fn splice<R: RangeBounds<usize>>(
+    async fn splice<R: RangeBounds<usize>, I: IntoIterator<Item = ChildWithCache<M>>>(
         &self,
         range: R,
-        replace_with: Vec<ChildWithCache<M>>,
+        replace_with: I,
     ) -> Vec<ChildWithCache<M>> {
         // leaf node do nothing
         if self.children.read().await.is_empty() {
@@ -279,6 +279,9 @@ impl<M: CoreMem> Children<M> {
 /// ```Rust
 /// let matching_key = node_path.last()?.keys[index_path.last()?]
 /// ```
+// TODO combine node and branch index into one vec in result like:
+// Vec<(SharedNode<M>, usize)>
+// This will simplify extracting node/index in a bunch of places
 #[tracing::instrument(skip(node))]
 async fn nearest_node<M: CoreMem>(
     node: SharedNode<M>,

@@ -4,13 +4,21 @@ use crate::{
     ChildWithCache, CoreMem, Hyperbee, HyperbeeError, Key, Node, SharedNode, MAX_KEYS,
 };
 
+/// When deleting from a B-Tree, we might need to [`Side::merge`] or [`Side::rotate`] to
+/// maintain the invariants of the tree. These have a "side" or handedness depending on which
+/// way we rotate/merge. The methods on this impl help simplify that.
 enum Side {
     Left,
     Right,
 }
 
 use Side::{Left, Right};
+// TODO consider some trait on  node/children/keys to make the playing with entries easier
 
+/// Glossary
+/// father - parent node with a deficient child
+/// deficient_index - index in the father of the deficient child
+/// donor - the child of the father that donates to the deficint child
 impl Side {
     const fn val(&self) -> isize {
         match *self {
@@ -19,16 +27,25 @@ impl Side {
         }
     }
 
+    // TODO result not needed
     async fn get_donor_index<M: CoreMem>(
         &self,
         father: SharedNode<M>,
         deficient_index: usize,
     ) -> Result<Option<usize>, HyperbeeError> {
         let donor_index = deficient_index as isize + self.val();
-        if donor_index < 0 || (!((donor_index as usize) < father.read().await.n_children().await)) {
+        if donor_index < 0 || ((donor_index as usize) >= father.read().await.n_children().await) {
             return Ok(None);
         }
         Ok(Some(donor_index as usize))
+    }
+
+    /// In both rotation and merge we need a key from the father
+    fn get_key_index(&self, deficient_index: usize) -> usize {
+        match self {
+            Right => deficient_index,
+            Left => deficient_index - 1,
+        }
     }
 
     async fn get_donor_key<M: CoreMem>(&self, donor: SharedNode<M>) -> Key {
@@ -67,10 +84,7 @@ impl Side {
         deficient_index: usize,
         key: Key,
     ) -> Key {
-        let key_index = match self {
-            Right => deficient_index,
-            Left => deficient_index - 1,
-        };
+        let key_index = self.get_key_index(deficient_index);
         father
             .write()
             .await
@@ -131,7 +145,7 @@ impl Side {
             Some(i) => i,
         };
 
-        return Ok((order >> 1)
+        Ok((order >> 1)
             < father
                 .read()
                 .await
@@ -140,7 +154,7 @@ impl Side {
                 .read()
                 .await
                 .n_keys()
-                .await);
+                .await)
     }
 
     async fn rotate<M: CoreMem>(
@@ -183,6 +197,80 @@ impl Side {
 
         Ok(father)
     }
+    async fn can_merge<M: CoreMem>(&self, father: SharedNode<M>, deficient_index: usize) -> bool {
+        let n_children = father.read().await.n_children().await;
+        match self {
+            Right => deficient_index + 1 < n_children,
+            Left => deficient_index > 0,
+        }
+    }
+
+    async fn merge<M: CoreMem>(
+        &self,
+        father: SharedNode<M>,
+        deficient_index: usize,
+        changes: &mut Changes<M>,
+    ) -> Result<SharedNode<M>, HyperbeeError> {
+        let donor_index = self
+            .get_donor_index(father.clone(), deficient_index)
+            .await?
+            .expect("should already be checked");
+
+        // Get donor child an deficient child  ordered from lowest to highest.
+        // Left lower, right higher
+        let (left, right) = {
+            let donor_child = father.read().await.get_child(donor_index).await?;
+            let deficient_child = father.read().await.get_child(deficient_index).await?;
+            match self {
+                Right => (deficient_child, donor_child),
+                Left => (donor_child, deficient_child),
+            }
+        };
+
+        let key_index = self.get_key_index(deficient_index);
+        let donated_key_from_father = father.write().await.keys.remove(key_index);
+
+        // remove RHS child from father
+        let right_child_index = match self {
+            Right => deficient_index + 1,
+            Left => deficient_index,
+        };
+        father
+            .read()
+            .await
+            .children
+            .splice(right_child_index..(right_child_index + 1), vec![])
+            .await;
+
+        // Move donated key from father and RHS keys into LHS
+        let n_left_keys = left.read().await.n_keys().await;
+        let mut keys_to_add = vec![donated_key_from_father];
+        keys_to_add.append(&mut right.write().await.keys);
+        left.write()
+            .await
+            .keys
+            .splice(n_left_keys..n_left_keys, keys_to_add);
+        //
+        // Move RHS children into LHS
+        let n_left_children = left.read().await.n_children().await;
+        left.write()
+            .await
+            .children
+            .splice(
+                n_left_children..n_left_children,
+                right.read().await.children.children.write().await.drain(..),
+            )
+            .await;
+        // Replace new LHS child in the father
+        let left_ref = (changes.add_node(left.clone()), Some(left));
+        father
+            .read()
+            .await
+            .children
+            .splice((right_child_index - 1)..(right_child_index), vec![left_ref])
+            .await;
+        Ok(father)
+    }
 }
 
 async fn repair<M: CoreMem>(
@@ -208,6 +296,12 @@ async fn repair<M: CoreMem>(
         .await?
     {
         return Left.rotate(father.clone(), deficient_index, changes).await;
+    }
+    if Right.can_merge(father.clone(), deficient_index).await {
+        return Right.merge(father.clone(), deficient_index, changes).await;
+    }
+    if Left.can_merge(father.clone(), deficient_index).await {
+        return Right.merge(father.clone(), deficient_index, changes).await;
     }
     todo!()
 }
@@ -240,7 +334,7 @@ impl<M: CoreMem> Hyperbee<M> {
 
         cur_node.write().await.remove_key(cur_index).await;
         let child = if cur_node.read().await.is_leaf().await {
-            if node_path.len() == 0 {
+            if node_path.is_empty() {
                 changes.add_root(cur_node.clone())
             } else {
                 changes.add_node(cur_node.clone())
@@ -289,6 +383,21 @@ impl<M: CoreMem> Node<M> {
 ///
 /// The last one is kind of annoying. I could compare with data generated from js hb. Or maybe my
 /// own appendtree code
+///
+/// Do all these in right and left:
+/// DONE check rotate that effects root in leaf
+/// TODO check rotate that does not effect root in leaf
+///
+/// TODO check rotate that effects root in non leaf
+/// TODO check rotate that does not effect root in non leaf
+///
+/// Merge can also cause cascading merges. Test variations of that too.
+/// TODO check merge that effects root in leaf
+/// TODO check merge that does not effect root in leaf
+///
+/// TODO check merge that effects root in non leaf
+/// TODO check merge that does not effect root in non leaf
+///
 mod test {
     use crate::test::{check_tree, in_memory_hyperbee};
 
@@ -373,6 +482,21 @@ mod test {
     {
         let (mut hb, keys) = crate::test::hb_put!(vec![1, 2, 3, 4, 5, 0]).await?;
         let k = keys[keys.len() - 2].clone();
+        println!("BEFORE {}", hb.print().await?);
+        let res = hb.del(&k).await?;
+        assert!(res);
+        let res = hb.get(&k).await?;
+        assert_eq!(res, None);
+        println!("AFTER {}", hb.print().await?);
+        check_tree(hb).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_from_leaf_with_underflow_merge_left() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let (mut hb, keys) = crate::test::hb_put!(0..5).await?;
+        let k = keys[0].clone();
         println!("BEFORE {}", hb.print().await?);
         let res = hb.del(&k).await?;
         assert!(res);

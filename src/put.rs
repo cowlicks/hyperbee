@@ -31,6 +31,8 @@ impl<M: CoreMem> Changes<M> {
         }
     }
 
+    // TODO should this return (Child, Option<SharedNode>) AKA ChildWithCache since we always just
+    // use the result of this to insert the child into a shared node
     pub fn add_node(&mut self, node: SharedNode<M>) -> Child {
         self.nodes.push(node);
         let offset: u64 = self
