@@ -1,7 +1,8 @@
 use crate::{
     nearest_node,
     put::{propagate_changes_up_tree, Changes},
-    ChildWithCache, CoreMem, Hyperbee, HyperbeeError, Key, Node, SharedNode, MAX_KEYS,
+    ChildWithCache, CoreMem, Hyperbee, HyperbeeError, InfiniteKeys, Key, Node, SharedNode,
+    MAX_KEYS,
 };
 
 /// When deleting from a B-Tree, we might need to [`Side::merge`] or [`Side::rotate`] to
@@ -274,17 +275,12 @@ impl Side {
 }
 
 async fn repair<M: CoreMem>(
-    node_path: &mut Vec<SharedNode<M>>,
-    index_path: &mut Vec<usize>,
+    path: &mut Vec<(SharedNode<M>, usize)>,
     order: usize,
     changes: &mut Changes<M>,
 ) -> Result<SharedNode<M>, HyperbeeError> {
-    let father = node_path
-        .pop()
-        .expect("node_path.len() > 0 should be checked before");
-    let deficient_index = index_path
-        .pop()
-        .expect("node_path.len() > 0 should be checked before");
+    let (father, deficient_index) = path.pop().expect("path.len() > 0 should be checked before");
+
     if Right
         .can_rotate(father.clone(), deficient_index, order)
         .await?
@@ -303,7 +299,7 @@ async fn repair<M: CoreMem>(
     if Left.can_merge(father.clone(), deficient_index).await {
         return Right.merge(father.clone(), deficient_index, changes).await;
     }
-    todo!()
+    panic!("this should never happen");
 }
 
 impl<M: CoreMem> Hyperbee<M> {
@@ -313,7 +309,8 @@ impl<M: CoreMem> Hyperbee<M> {
             None => return Ok(false),
         };
 
-        let (matched, mut node_path, mut index_path) = nearest_node(root, key).await?;
+        //let (matched, mut node_path, mut index_path) = nearest_node(root, key).await?;
+        let (matched, mut path) = nearest_node(root, key).await?;
 
         if !matched {
             return Ok(false);
@@ -323,30 +320,26 @@ impl<M: CoreMem> Hyperbee<M> {
         let mut changes: Changes<M> =
             Changes::new(self.version().await, key.clone().to_vec(), None);
 
-        // remove the key from the node
-        let cur_node = match node_path.pop() {
-            Some(node) => node,
-            None => todo!(),
-        };
-        let cur_index = index_path
-            .pop()
-            .expect("node_path and index_path *should* always have the same length");
+        let (cur_node, cur_index) = path.pop().unwrap();
 
+        // remove the key from the node
         cur_node.write().await.remove_key(cur_index).await;
         let child = if cur_node.read().await.is_leaf().await {
-            if node_path.is_empty() {
+            if path.is_empty() {
                 changes.add_root(cur_node.clone())
             } else {
                 changes.add_node(cur_node.clone())
             }
         } else {
+            let left_sub_tree = cur_node.read().await.get_child(cur_index).await?;
+            let nn = nearest_node(left_sub_tree.clone(), &InfiniteKeys::Positive).await?;
             todo!()
         };
 
         // if node is not root and is deficient
-        let child = if !node_path.is_empty() && cur_node.read().await.keys.len() < MAX_KEYS >> 1 {
-            let repaired = repair(&mut node_path, &mut index_path, MAX_KEYS, &mut changes).await?;
-            match node_path.is_empty() {
+        let child = if !path.is_empty() && cur_node.read().await.keys.len() < MAX_KEYS >> 1 {
+            let repaired = repair(&mut path, MAX_KEYS, &mut changes).await?;
+            match path.is_empty() {
                 true => changes.add_root(repaired),
                 false => changes.add_node(repaired),
             }
@@ -355,8 +348,8 @@ impl<M: CoreMem> Hyperbee<M> {
         };
 
         // if not root propagate changes
-        let changes = if !node_path.is_empty() {
-            propagate_changes_up_tree(changes, node_path, index_path, child).await
+        let changes = if !path.is_empty() {
+            propagate_changes_up_tree(changes, path, child).await
         } else {
             changes
         };

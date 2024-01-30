@@ -334,15 +334,13 @@ fn test_inf() {
 async fn nearest_node<M: CoreMem, T>(
     node: SharedNode<M>,
     key: &T,
-) -> Result<(bool, Vec<SharedNode<M>>, Vec<usize>), HyperbeeError>
+) -> Result<(bool, Vec<(SharedNode<M>, usize)>), HyperbeeError>
 where
     T: PartialOrd<[u8]> + Debug + ?Sized,
 {
     let mut current_node = node;
-    let mut node_path: Vec<SharedNode<M>> = vec![];
-    let mut index_path: Vec<usize> = vec![];
+    let mut out_path: Vec<(SharedNode<M>, usize)> = vec![];
     loop {
-        node_path.push(current_node.clone());
         let next_node = {
             let child_index: usize = 'found: {
                 let n_keys = current_node.read().await.keys.len();
@@ -351,14 +349,14 @@ where
                     // found matching child
                     if key < &val[..] {
                         trace!("key {:?} < val {:?} at index {}", key, val, i);
-                        index_path.push(i);
+                        out_path.push((current_node.clone(), i));
                         break 'found i;
                     }
                     // found matching key
                     if key == &val[..] {
                         trace!("key {:?} == val {:?} at index {}", key, val, i);
-                        index_path.push(i);
-                        return Ok((true, node_path, index_path));
+                        out_path.push((current_node.clone(), i));
+                        return Ok((true, out_path));
                     }
                 }
                 // key is greater than all of this nodes keys, take last child, which has index
@@ -368,14 +366,14 @@ where
                     key,
                     n_keys
                 );
-                index_path.push(n_keys);
+                out_path.push((current_node.clone(), n_keys));
                 n_keys
             };
 
             // leaf node with no match
             if current_node.read().await.children.is_empty().await {
                 trace!("Reached leaf. Returning");
-                return Ok((false, node_path, index_path));
+                return Ok((false, out_path));
             }
 
             current_node.read().await.get_child(child_index).await?
@@ -571,18 +569,12 @@ impl<M: CoreMem> Hyperbee<M> {
             None => return Ok(None),
             Some(node) => node,
         };
-        let (matched, path, indexes) = nearest_node(node, key).await?;
+        let (matched, path) = nearest_node(node, key).await?;
         if matched {
-            return Ok(Some(
-                path.last()
-                    .expect("Since `matched` was true, there must be at least one node in `path`")
-                    .read()
-                    .await
-                    .get_value_of_key(*indexes.last().expect(
-                        "Since `matched` was true, there must be at least one node in `indexes`",
-                    ))
-                    .await?,
-            ));
+            let (node, key_index) = path
+                .last()
+                .expect("Since `matched` was true, there must be at least one node in `path`");
+            return Ok(Some(node.read().await.get_value_of_key(*key_index).await?));
         }
         Ok(None)
     }

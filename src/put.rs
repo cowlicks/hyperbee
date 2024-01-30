@@ -62,21 +62,19 @@ impl<M: CoreMem> Changes<M> {
 /// This creates a new node, with which we call:
 /// propagate_changes_up_tree(changes, node_path, node_index, vec![new_node]);
 /// This continues until we reach the root.
-#[tracing::instrument(skip(changes, node_path))]
+#[tracing::instrument(skip(changes, path))]
 pub async fn propagate_changes_up_tree<M: CoreMem>(
     mut changes: Changes<M>,
-    mut node_path: Vec<SharedNode<M>>,
-    mut index_path: Vec<usize>,
+    mut path: Vec<(SharedNode<M>, usize)>,
     new_child: Child,
 ) -> Changes<M> {
     let mut cur_child = new_child;
     loop {
         // this should add children to node
         // add node to changes, as root or node, and redo loop if not root
-        let node = node_path.pop().expect("should be checked before call ");
-        let index = index_path.pop().expect("should be checked before call ");
+        let (node, index) = path.pop().expect("should be checked before call ");
         node.read().await.children.children.write().await[index].0 = cur_child.clone();
-        if node_path.is_empty() {
+        if path.is_empty() {
             changes.add_root(node);
             return changes;
         } else {
@@ -158,7 +156,7 @@ impl<M: CoreMem> Hyperbee<M> {
             Some(node) => node,
         };
 
-        let (matched, mut node_path, mut index_path) = nearest_node(root, &key[..]).await?;
+        let (matched, mut path) = nearest_node(root, &key[..]).await?;
 
         let seq = self.version().await;
         let mut changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
@@ -167,7 +165,7 @@ impl<M: CoreMem> Hyperbee<M> {
         let mut children: Vec<Child> = vec![];
 
         loop {
-            let cur_node = match node_path.pop() {
+            let (cur_node, cur_index) = match path.pop() {
                 None => {
                     trace!(
                         "creating a new root with key = [{}] and children = [{:#?}]",
@@ -188,11 +186,8 @@ impl<M: CoreMem> Hyperbee<M> {
 
                     return Ok((true, outcome.length));
                 }
-                Some(cur_node) => cur_node,
+                Some(cur) => cur,
             };
-            let cur_index = index_path
-                .pop()
-                .expect("node_path and index_path *should* always have the same length");
 
             // If this is a replacemet but we have not replaced yet
             // OR there is room on this node to insert the current key
@@ -209,11 +204,10 @@ impl<M: CoreMem> Hyperbee<M> {
                     ._insert(cur_key, children, cur_index..stop)
                     .await;
 
-                if !node_path.is_empty() {
+                if !path.is_empty() {
                     trace!("inserted into some child");
                     let child = changes.add_node(cur_node);
-                    let changes =
-                        propagate_changes_up_tree(changes, node_path, index_path, child).await;
+                    let changes = propagate_changes_up_tree(changes, path, child).await;
                     let outcome = self.blocks.read().await.add_changes(changes).await?;
                     return Ok((matched, outcome.length));
                 } else {
