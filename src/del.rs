@@ -307,7 +307,21 @@ async fn repair<M: CoreMem>(
     let (father, deficient_index) = path.pop().expect("path.len() > 0 should be checked before");
 
     let father = repair_one(father, deficient_index, order, changes).await?;
-    return Ok(father);
+
+    // if root empty use child
+    if path.is_empty()
+        && father.read().await.n_keys().await == 0
+        && father.read().await.n_children().await == 1
+    {
+        let new_root = father.read().await.get_child(0).await?;
+        return Ok((changes.add_root(new_root.clone()), Some(new_root)));
+    }
+
+    let father_ref = match path.is_empty() {
+        true => changes.add_root(father.clone()),
+        false => changes.add_node(father.clone()),
+    };
+    return Ok((father_ref, Some(father.clone())));
 }
 
 impl<M: CoreMem> Hyperbee<M> {
