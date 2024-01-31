@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::SharedNode;
+use crate::{ChildWithCache, SharedNode};
 
 use super::{
     messages::{yolo_index, Node as NodeSchema, YoloIndex},
@@ -66,19 +66,19 @@ impl<M: CoreMem> Changes<M> {
 pub async fn propagate_changes_up_tree<M: CoreMem>(
     mut changes: Changes<M>,
     mut path: Vec<(SharedNode<M>, usize)>,
-    new_child: Child,
+    new_child: ChildWithCache<M>,
 ) -> Changes<M> {
     let mut cur_child = new_child;
     loop {
         // this should add children to node
         // add node to changes, as root or node, and redo loop if not root
         let (node, index) = path.pop().expect("should be checked before call ");
-        node.read().await.children.children.write().await[index].0 = cur_child.clone();
+        node.read().await.children.children.write().await[index] = cur_child;
         if path.is_empty() {
             changes.add_root(node);
             return changes;
         } else {
-            cur_child = changes.add_node(node);
+            cur_child = (changes.add_node(node.clone()), Some(node))
         }
     }
 }
@@ -206,8 +206,9 @@ impl<M: CoreMem> Hyperbee<M> {
 
                 if !path.is_empty() {
                     trace!("inserted into some child");
-                    let child = changes.add_node(cur_node);
-                    let changes = propagate_changes_up_tree(changes, path, child).await;
+                    let child = changes.add_node(cur_node.clone());
+                    let changes =
+                        propagate_changes_up_tree(changes, path, (child, Some(cur_node))).await;
                     let outcome = self.blocks.read().await.add_changes(changes).await?;
                     return Ok((matched, outcome.length));
                 } else {

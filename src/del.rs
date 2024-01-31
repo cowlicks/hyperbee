@@ -303,7 +303,7 @@ async fn repair<M: CoreMem>(
     path: &mut Vec<(SharedNode<M>, usize)>,
     order: usize,
     changes: &mut Changes<M>,
-) -> Result<SharedNode<M>, HyperbeeError> {
+) -> Result<ChildWithCache<M>, HyperbeeError> {
     let (father, deficient_index) = path.pop().expect("path.len() > 0 should be checked before");
 
     let father = repair_one(father, deficient_index, order, changes).await?;
@@ -333,13 +333,13 @@ impl<M: CoreMem> Hyperbee<M> {
         // remove the key from the node
         cur_node.write().await.remove_key(cur_index).await;
         let child = if cur_node.read().await.is_leaf().await {
-            let child = if path.is_empty() {
+            let child_ref = if path.is_empty() {
                 changes.add_root(cur_node.clone())
             } else {
                 changes.add_node(cur_node.clone())
             };
             path.push((cur_node.clone(), cur_index));
-            child
+            (child_ref, Some(cur_node.clone()))
         } else {
             todo!()
         };
@@ -347,11 +347,7 @@ impl<M: CoreMem> Hyperbee<M> {
         let (bottom_node, _) = path.pop().expect("if/else above ensures path is not empty");
         // if node is not root and is deficient
         let child = if !path.is_empty() && bottom_node.read().await.keys.len() < MAX_KEYS >> 1 {
-            let repaired = repair(&mut path, MAX_KEYS, &mut changes).await?;
-            match path.is_empty() {
-                true => changes.add_root(repaired),
-                false => changes.add_node(repaired),
-            }
+            repair(&mut path, MAX_KEYS, &mut changes).await?
         } else {
             child
         };
