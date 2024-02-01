@@ -176,7 +176,7 @@ impl Side {
         // create new ref for changed donor
         let donor_ref = changes.add_node(donor.clone());
         // replace donor that changed in the father
-        father.read().await.children.children.write().await[donor_index] = (donor_ref, Some(donor));
+        father.read().await.children.children.write().await[donor_index] = donor_ref;
 
         // swap donated_key in father to get key for deficient_child
         let donated_key_from_father = self
@@ -194,7 +194,7 @@ impl Side {
         let newly_non_deficient_child_ref = changes.add_node(deficient_child.clone());
 
         father.read().await.children.children.write().await[deficient_index] =
-            (newly_non_deficient_child_ref, Some(deficient_child));
+            newly_non_deficient_child_ref;
 
         Ok(father)
     }
@@ -262,7 +262,7 @@ impl Side {
             )
             .await;
         // Replace new LHS child in the father
-        let left_ref = (changes.add_node(left.clone()), Some(left));
+        let left_ref = changes.add_node(left.clone());
         father
             .read()
             .await
@@ -273,6 +273,7 @@ impl Side {
     }
 }
 
+#[tracing::instrument]
 async fn repair_one<M: CoreMem>(
     father: SharedNode<M>,
     deficient_index: usize,
@@ -316,20 +317,11 @@ async fn repair<M: CoreMem>(
             && cur_father.read().await.n_children().await == 1
         {
             let new_root = cur_father.read().await.get_child(0).await?;
-            break (changes.add_root(new_root.clone()), Some(new_root));
+            break changes.add_root(new_root.clone());
         }
 
         // store updated father
-        let father_ref = match path.is_empty() {
-            true => (
-                changes.add_root(cur_father.clone()),
-                Some(cur_father.clone()),
-            ),
-            false => (
-                changes.add_node(cur_father.clone()),
-                Some(cur_father.clone()),
-            ),
-        };
+        let father_ref = changes.add_changed_node(path.len(), cur_father.clone());
 
         // if no more nodes, or father does not need repair, we are done
         if path.is_empty() || cur_father.read().await.n_keys().await >= MAX_KEYS >> 1 {
@@ -369,13 +361,9 @@ impl<M: CoreMem> Hyperbee<M> {
         // remove the key from the node
         cur_node.write().await.remove_key(cur_index).await;
         let child = if cur_node.read().await.is_leaf().await {
-            let child_ref = if path.is_empty() {
-                changes.add_root(cur_node.clone())
-            } else {
-                changes.add_node(cur_node.clone())
-            };
+            let child_ref = changes.add_changed_node(path.len(), cur_node.clone());
             path.push((cur_node.clone(), cur_index));
-            (child_ref, Some(cur_node.clone()))
+            child_ref
         } else {
             todo!()
         };

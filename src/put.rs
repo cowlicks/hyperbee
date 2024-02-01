@@ -33,27 +33,41 @@ impl<M: CoreMem> Changes<M> {
 
     // TODO should this return (Child, Option<SharedNode>) AKA ChildWithCache since we always just
     // use the result of this to insert the child into a shared node
-    pub fn add_node(&mut self, node: SharedNode<M>) -> Child {
-        self.nodes.push(node);
+    pub fn add_node(&mut self, node: SharedNode<M>) -> ChildWithCache<M> {
+        self.nodes.push(node.clone());
         let offset: u64 = self
             .nodes
             .len()
             .try_into()
             .expect("TODO usize to seq (u64)");
-        Child {
-            seq: self.seq,
-            offset,
-        }
+        (
+            Child {
+                seq: self.seq,
+                offset,
+            },
+            Some(node),
+        )
     }
 
-    pub fn add_root(&mut self, root: SharedNode<M>) -> Child {
+    pub fn add_root(&mut self, root: SharedNode<M>) -> ChildWithCache<M> {
         if self.root.is_some() {
             panic!("We should never be replacing a root on a changes");
         }
-        self.root = Some(root);
-        Child {
-            seq: self.seq,
-            offset: 0,
+        self.root = Some(root.clone());
+        (
+            Child {
+                seq: self.seq,
+                offset: 0,
+            },
+            Some(root.clone()),
+        )
+    }
+
+    pub fn add_changed_node(&mut self, path_len: usize, node: SharedNode<M>) -> ChildWithCache<M> {
+        if path_len == 0 {
+            self.add_root(node.clone())
+        } else {
+            self.add_node(node.clone())
         }
     }
 }
@@ -74,11 +88,9 @@ pub async fn propagate_changes_up_tree<M: CoreMem>(
         // add node to changes, as root or node, and redo loop if not root
         let (node, index) = path.pop().expect("should be checked before call ");
         node.read().await.children.children.write().await[index] = cur_child;
+        cur_child = changes.add_changed_node(path.len(), node.clone());
         if path.is_empty() {
-            changes.add_root(node);
             return changes;
-        } else {
-            cur_child = (changes.add_node(node.clone()), Some(node))
         }
     }
 }
@@ -96,23 +108,13 @@ impl<M: CoreMem> Node<M> {
         );
         let left = Node::new(
             self.keys.splice(0..key_median_index, vec![]).collect(),
-            self.children
-                .splice(0..children_median_index, vec![])
-                .await
-                .into_iter()
-                .map(|x| x.0)
-                .collect(),
+            self.children.splice(0..children_median_index, vec![]).await,
             self.blocks.clone(),
         );
         let mid_key = self.keys.remove(0);
         let right = Node::new(
             self.keys.drain(..).collect(),
-            self.children
-                .splice(0.., vec![])
-                .await
-                .into_iter()
-                .map(|x| x.0)
-                .collect(),
+            self.children.splice(0.., vec![]).await,
             self.blocks.clone(),
         );
         (
@@ -162,7 +164,7 @@ impl<M: CoreMem> Hyperbee<M> {
         let mut changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
 
         let mut cur_key = Key::new(seq, Some(key), Some(value.clone()));
-        let mut children: Vec<Child> = vec![];
+        let mut children: Vec<ChildWithCache<M>> = vec![];
 
         loop {
             let (cur_node, cur_index) = match path.pop() {
@@ -204,16 +206,13 @@ impl<M: CoreMem> Hyperbee<M> {
                     ._insert(cur_key, children, cur_index..stop)
                     .await;
 
+                let child = changes.add_changed_node(path.len(), cur_node.clone());
                 if !path.is_empty() {
                     trace!("inserted into some child");
-                    let child = changes.add_node(cur_node.clone());
-                    let changes =
-                        propagate_changes_up_tree(changes, path, (child, Some(cur_node))).await;
+                    let changes = propagate_changes_up_tree(changes, path, child).await;
                     let outcome = self.blocks.read().await.add_changes(changes).await?;
                     return Ok((matched, outcome.length));
                 } else {
-                    trace!("inserted into root");
-                    changes.add_root(cur_node);
                 };
 
                 let outcome = self.blocks.read().await.add_changes(changes).await?;

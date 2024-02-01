@@ -191,14 +191,14 @@ impl Pointers {
 }
 
 impl<M: CoreMem> Children<M> {
-    fn new(blocks: Shared<Blocks<M>>, children: Vec<Child>) -> Self {
+    fn new(blocks: Shared<Blocks<M>>, children: Vec<ChildWithCache<M>>) -> Self {
         Self {
             blocks,
-            children: RwLock::new(children.into_iter().map(|c| (c, Option::None)).collect()),
+            children: RwLock::new(children),
         }
     }
     #[tracing::instrument(skip(self))]
-    async fn insert(&self, index: usize, new_children: Vec<Child>) {
+    async fn insert(&self, index: usize, new_children: Vec<ChildWithCache<M>>) {
         if new_children.is_empty() {
             trace!("no children to insert, do nothing");
             return;
@@ -213,10 +213,10 @@ impl<M: CoreMem> Children<M> {
             index,
             new_children.len()
         );
-        self.children.write().await.splice(
-            index..(index + replace_split_child),
-            new_children.iter().map(|c| (c.clone(), Option::None)),
-        );
+        self.children
+            .write()
+            .await
+            .splice(index..(index + replace_split_child), new_children);
     }
 
     #[tracing::instrument(skip(self))]
@@ -383,7 +383,7 @@ where
 }
 
 impl<M: CoreMem> Node<M> {
-    fn new(keys: Vec<Key>, children: Vec<Child>, blocks: Shared<Blocks<M>>) -> Self {
+    fn new(keys: Vec<Key>, children: Vec<ChildWithCache<M>>, blocks: Shared<Blocks<M>>) -> Self {
         Node {
             keys,
             children: Children::new(blocks.clone(), children),
@@ -488,7 +488,12 @@ impl<M: CoreMem> Node<M> {
 
     /// Insert a key and it's children into [`self`].
     #[tracing::instrument(skip(self))]
-    async fn _insert(&mut self, key_ref: Key, children: Vec<Child>, range: Range<usize>) {
+    async fn _insert(
+        &mut self,
+        key_ref: Key,
+        children: Vec<ChildWithCache<M>>,
+        range: Range<usize>,
+    ) {
         trace!("inserting [{}] children", children.len());
         self.keys.splice(range.clone(), vec![key_ref]);
         self.children.insert(range.start, children).await;
@@ -516,7 +521,11 @@ impl BlockEntry {
         );
         Ok(Node::new(
             node_data.keys.clone(),
-            node_data.children.clone(),
+            node_data
+                .children
+                .iter()
+                .map(|c| (c.clone(), Option::None))
+                .collect(),
             blocks,
         ))
     }
