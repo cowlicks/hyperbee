@@ -299,29 +299,51 @@ async fn repair_one<M: CoreMem>(
     }
     panic!("this should never happen");
 }
+/// must be given a path who's last element has a deficient child...
 async fn repair<M: CoreMem>(
     path: &mut Vec<(SharedNode<M>, usize)>,
     order: usize,
     changes: &mut Changes<M>,
 ) -> Result<ChildWithCache<M>, HyperbeeError> {
-    let (father, deficient_index) = path.pop().expect("path.len() > 0 should be checked before");
+    let father_ref = loop {
+        let (father, deficient_index) =
+            path.pop().expect("path.len() > 0 should be checked before");
 
-    let father = repair_one(father, deficient_index, order, changes).await?;
+        let cur_father = repair_one(father, deficient_index, order, changes).await?;
+        // if root empty use child
+        if path.is_empty()
+            && cur_father.read().await.n_keys().await == 0
+            && cur_father.read().await.n_children().await == 1
+        {
+            let new_root = cur_father.read().await.get_child(0).await?;
+            break (changes.add_root(new_root.clone()), Some(new_root));
+        }
 
-    // if root empty use child
-    if path.is_empty()
-        && father.read().await.n_keys().await == 0
-        && father.read().await.n_children().await == 1
-    {
-        let new_root = father.read().await.get_child(0).await?;
-        return Ok((changes.add_root(new_root.clone()), Some(new_root)));
-    }
+        // store updated father
+        let father_ref = match path.is_empty() {
+            true => (
+                changes.add_root(cur_father.clone()),
+                Some(cur_father.clone()),
+            ),
+            false => (
+                changes.add_node(cur_father.clone()),
+                Some(cur_father.clone()),
+            ),
+        };
 
-    let father_ref = match path.is_empty() {
-        true => changes.add_root(father.clone()),
-        false => changes.add_node(father.clone()),
+        // if no more nodes, or father does not need repair, we are done
+        if path.is_empty() || cur_father.read().await.n_keys().await >= MAX_KEYS >> 1 {
+            break father_ref;
+        }
+
+        // add father_ref to next node in path and continue repair up tree
+        let (grandpa, cur_deficient_index) = path.pop().unwrap();
+        grandpa.read().await.children.children.write().await[cur_deficient_index + 1] =
+            father_ref.clone();
+        path.push((grandpa, cur_deficient_index));
     };
-    return Ok((father_ref, Some(father.clone())));
+
+    return Ok(father_ref);
 }
 
 impl<M: CoreMem> Hyperbee<M> {
