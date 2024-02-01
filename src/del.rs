@@ -540,4 +540,34 @@ mod test {
         check_tree(hb).await?;
         Ok(())
     }
+
+    #[tokio::test]
+    async fn delete_from_internal_no_underflow() -> Result<(), Box<dyn std::error::Error>> {
+        let (mut hb, keys) = crate::test::hb_put!(0..19).await?;
+        let k = keys[5].clone();
+        println!("BEFORE {}", hb.print().await?);
+        let res = hb.del(&k).await?;
+        assert!(res);
+        let res = hb.get(&k).await?;
+        assert_eq!(res, None);
+        println!("AFTER {}", hb.print().await?);
+        check_tree(hb).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_from_internal_node_with_underflow_merge_foo(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let (mut hb, keys) = crate::test::hb_put!(0..19).await?;
+        let k = keys[10].clone();
+        println!("BEFORE\n{}", hb.print().await?);
+        let res = hb.del(&k).await?;
+        panic!();
+        assert!(res);
+        let res = hb.get(&k).await?;
+        assert_eq!(res, None);
+        println!("AFTER {}", hb.print().await?);
+        check_tree(hb).await?;
+        Ok(())
+    }
 }
