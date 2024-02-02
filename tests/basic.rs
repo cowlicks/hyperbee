@@ -20,7 +20,7 @@ async fn basic() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn no_key() -> Result<(), Box<dyn std::error::Error>> {
+async fn no_key_foo() -> Result<(), Box<dyn std::error::Error>> {
     let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
     let result = hb.get(&"foobar".to_string().into_bytes()).await?;
     assert_eq!(result, Option::None);

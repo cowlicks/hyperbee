@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{ChildWithCache, SharedNode};
+use crate::SharedNode;
 
 use super::{
     messages::{yolo_index, Node as NodeSchema, YoloIndex},
@@ -31,39 +31,34 @@ impl<M: CoreMem> Changes<M> {
         }
     }
 
-    // TODO should this return (Child, Option<SharedNode>) AKA ChildWithCache since we always just
     // use the result of this to insert the child into a shared node
-    pub fn add_node(&mut self, node: SharedNode<M>) -> ChildWithCache<M> {
+    pub fn add_node(&mut self, node: SharedNode<M>) -> Child<M> {
         self.nodes.push(node.clone());
         let offset: u64 = self
             .nodes
             .len()
             .try_into()
             .expect("TODO usize to seq (u64)");
-        (
-            Child {
-                seq: self.seq,
-                offset,
-            },
-            Some(node),
-        )
+        Child {
+            seq: self.seq,
+            offset,
+            child_node: Some(node.clone()),
+        }
     }
 
-    pub fn add_root(&mut self, root: SharedNode<M>) -> ChildWithCache<M> {
+    pub fn add_root(&mut self, root: SharedNode<M>) -> Child<M> {
         if self.root.is_some() {
             panic!("We should never be replacing a root on a changes");
         }
         self.root = Some(root.clone());
-        (
-            Child {
-                seq: self.seq,
-                offset: 0,
-            },
-            Some(root.clone()),
-        )
+        Child {
+            seq: self.seq,
+            offset: 0,
+            child_node: Some(root.clone()),
+        }
     }
 
-    pub fn add_changed_node(&mut self, path_len: usize, node: SharedNode<M>) -> ChildWithCache<M> {
+    pub fn add_changed_node(&mut self, path_len: usize, node: SharedNode<M>) -> Child<M> {
         if path_len == 0 {
             self.add_root(node.clone())
         } else {
@@ -80,7 +75,7 @@ impl<M: CoreMem> Changes<M> {
 pub async fn propagate_changes_up_tree<M: CoreMem>(
     mut changes: Changes<M>,
     mut path: Vec<(SharedNode<M>, usize)>,
-    new_child: ChildWithCache<M>,
+    new_child: Child<M>,
 ) -> Changes<M> {
     let mut cur_child = new_child;
     loop {
@@ -164,7 +159,7 @@ impl<M: CoreMem> Hyperbee<M> {
         let mut changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
 
         let mut cur_key = Key::new(seq, Some(key), Some(value.clone()));
-        let mut children: Vec<ChildWithCache<M>> = vec![];
+        let mut children: Vec<Child<M>> = vec![];
 
         loop {
             let (cur_node, cur_index) = match path.pop() {

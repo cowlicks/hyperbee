@@ -1,8 +1,7 @@
 use crate::{
     nearest_node,
     put::{propagate_changes_up_tree, Changes},
-    ChildWithCache, CoreMem, Hyperbee, HyperbeeError, InfiniteKeys, Key, Node, SharedNode,
-    MAX_KEYS,
+    Child, CoreMem, Hyperbee, HyperbeeError, InfiniteKeys, Key, Node, SharedNode, MAX_KEYS,
 };
 
 /// When deleting from a B-Tree, we might need to [`Side::merge`] or [`Side::rotate`] to
@@ -61,7 +60,7 @@ impl Side {
         }
     }
 
-    async fn get_donor_child<M: CoreMem>(&self, donor: SharedNode<M>) -> Option<ChildWithCache<M>> {
+    async fn get_donor_child<M: CoreMem>(&self, donor: SharedNode<M>) -> Option<Child<M>> {
         if donor.read().await.n_children().await == 0 {
             return None;
         }
@@ -100,7 +99,7 @@ impl Side {
         &self,
         deficient_child: SharedNode<M>,
         key: Key,
-        child: Option<ChildWithCache<M>>,
+        child: Option<Child<M>>,
     ) {
         match self {
             Right => {
@@ -305,7 +304,7 @@ async fn repair<M: CoreMem>(
     path: &mut Vec<(SharedNode<M>, usize)>,
     order: usize,
     changes: &mut Changes<M>,
-) -> Result<ChildWithCache<M>, HyperbeeError> {
+) -> Result<Child<M>, HyperbeeError> {
     let father_ref = loop {
         let (father, deficient_index) =
             path.pop().expect("path.len() > 0 should be checked before");

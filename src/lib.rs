@@ -82,21 +82,35 @@ impl std::fmt::Display for Key {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 /// Pointer used within a [`Node`] to point to it's child nodes.
-pub struct Child {
+pub struct Child<M: CoreMem> {
     /// Index of the `Node` within the [`hypercore::Hypercore`].
     pub seq: u64,
     /// Index of the `Node` within the [`messages::Node::index`].
     /// NB: offset = 0, is the topmost node
     pub offset: u64,
+    child_node: Option<SharedNode<M>>,
+}
+
+impl<M: CoreMem> Clone for Child<M> {
+    fn clone(&self) -> Self {
+        Self {
+            seq: self.seq.clone(),
+            offset: self.offset.clone(),
+            child_node: match &self.child_node {
+                None => None,
+                Some(x) => Some(x.clone()),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 /// A block off the Hypercore
-pub struct BlockEntry {
+pub struct BlockEntry<M: CoreMem> {
     /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
-    index: Pointers,
+    index: Pointers<M>,
     /// NodeSchema::new(hypercore.get(seq)).key
     key: Vec<u8>,
     /// NodeSchema::new(hypercore.get(seq)).value
@@ -105,13 +119,12 @@ pub struct BlockEntry {
 
 type Shared<T> = Arc<RwLock<T>>;
 type SharedNode<T> = Shared<Node<T>>;
-type SharedBlock = Shared<BlockEntry>;
-type ChildWithCache<T> = (Child, Option<SharedNode<T>>);
+type SharedBlock<T> = Shared<BlockEntry<T>>;
 
 #[derive(Debug)]
 struct Children<M: CoreMem> {
     blocks: Shared<Blocks<M>>,
-    children: RwLock<Vec<ChildWithCache<M>>>,
+    children: RwLock<Vec<Child<M>>>,
 }
 
 /// A node in the tree
@@ -132,14 +145,14 @@ pub struct Hyperbee<M: CoreMem> {
 }
 
 #[derive(Clone, Debug)]
-struct Level {
+struct Level<M: CoreMem> {
     keys: Vec<Key>,
-    children: Vec<Child>,
+    children: Vec<Child<M>>,
 }
 
 #[derive(Clone, Debug)]
-struct Pointers {
-    levels: Vec<Level>,
+struct Pointers<M: CoreMem> {
+    levels: Vec<Level<M>>,
 }
 
 impl Key {
@@ -152,19 +165,23 @@ impl Key {
     }
 }
 
-impl Child {
+impl<M: CoreMem> Child<M> {
     fn new(seq: u64, offset: u64) -> Self {
-        Child { seq, offset }
+        Child {
+            seq,
+            offset,
+            child_node: Option::None, // TODO pass param
+        }
     }
 }
 
-impl Level {
-    fn new(keys: Vec<Key>, children: Vec<Child>) -> Self {
+impl<M: CoreMem> Level<M> {
+    fn new(keys: Vec<Key>, children: Vec<Child<M>>) -> Self {
         Self { keys, children }
     }
 }
 
-impl Pointers {
+impl<M: CoreMem> Pointers<M> {
     fn new<B: Buf>(buf: B) -> Result<Self, DecodeError> {
         let levels: Vec<_> = YoloIndex::decode(buf)?
             .levels
@@ -185,20 +202,20 @@ impl Pointers {
         Ok(Pointers { levels })
     }
 
-    fn get(&self, i: usize) -> &Level {
+    fn get(&self, i: usize) -> &Level<M> {
         &self.levels[i]
     }
 }
 
 impl<M: CoreMem> Children<M> {
-    fn new(blocks: Shared<Blocks<M>>, children: Vec<ChildWithCache<M>>) -> Self {
+    fn new(blocks: Shared<Blocks<M>>, children: Vec<Child<M>>) -> Self {
         Self {
             blocks,
             children: RwLock::new(children),
         }
     }
     #[tracing::instrument(skip(self))]
-    async fn insert(&self, index: usize, new_children: Vec<ChildWithCache<M>>) {
+    async fn insert(&self, index: usize, new_children: Vec<Child<M>>) {
         if new_children.is_empty() {
             trace!("no children to insert, do nothing");
             return;
@@ -221,18 +238,21 @@ impl<M: CoreMem> Children<M> {
 
     #[tracing::instrument(skip(self))]
     async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
-        let child_data = match &self.children.read().await[index] {
-            (_, Some(node)) => return Ok(node.clone()),
-            (child_data, None) => child_data.clone(),
+        let (seq, offset) = {
+            let child_ref = &self.children.read().await[index];
+            if let Some(node) = &child_ref.child_node {
+                return Ok(node.clone());
+            }
+            (child_ref.seq, child_ref.offset)
         };
-        let block = self.blocks.read().await.get(&child_data.seq).await?;
+        let block = self.blocks.read().await.get(&seq).await?;
         let node = Arc::new(RwLock::new(
             block
                 .read()
                 .await
-                .get_tree_node(child_data.offset, self.blocks.clone())?,
+                .get_tree_node(offset, self.blocks.clone())?,
         ));
-        self.children.write().await[index].1 = Some(node.clone());
+        self.children.write().await[index].child_node = Some(node.clone());
         Ok(node)
     }
 
@@ -240,20 +260,15 @@ impl<M: CoreMem> Children<M> {
         self.children.read().await.len()
     }
 
-    async fn get_children(&self) -> Vec<Child> {
-        self.children
-            .read()
-            .await
-            .iter()
-            .map(|(c, _)| c.clone())
-            .collect()
+    async fn get_children(&self) -> Vec<Child<M>> {
+        self.children.read().await.clone()
     }
 
-    async fn splice<R: RangeBounds<usize>, I: IntoIterator<Item = ChildWithCache<M>>>(
+    async fn splice<R: RangeBounds<usize>, I: IntoIterator<Item = Child<M>>>(
         &self,
         range: R,
         replace_with: I,
-    ) -> Vec<ChildWithCache<M>> {
+    ) -> Vec<Child<M>> {
         // leaf node do nothing
         if self.children.read().await.is_empty() {
             return vec![];
@@ -327,8 +342,6 @@ fn test_inf() {
 /// ```Rust
 /// let matching_key = node_path.last()?.keys[index_path.last()?]
 /// ```
-// TODO combine node and branch index into one vec in result like:
-// Vec<(SharedNode<M>, usize)>
 // This will simplify extracting node/index in a bunch of places
 #[tracing::instrument(skip(node))]
 async fn nearest_node<M: CoreMem, T>(
@@ -376,14 +389,15 @@ where
                 return Ok((false, out_path));
             }
 
-            current_node.read().await.get_child(child_index).await?
+            let x = current_node.read().await.get_child(child_index).await?;
+            x
         };
         current_node = next_node;
     }
 }
 
 impl<M: CoreMem> Node<M> {
-    fn new(keys: Vec<Key>, children: Vec<ChildWithCache<M>>, blocks: Shared<Blocks<M>>) -> Self {
+    fn new(keys: Vec<Key>, children: Vec<Child<M>>, blocks: Shared<Blocks<M>>) -> Self {
         Node {
             keys,
             children: Children::new(blocks.clone(), children),
@@ -488,19 +502,14 @@ impl<M: CoreMem> Node<M> {
 
     /// Insert a key and it's children into [`self`].
     #[tracing::instrument(skip(self))]
-    async fn _insert(
-        &mut self,
-        key_ref: Key,
-        children: Vec<ChildWithCache<M>>,
-        range: Range<usize>,
-    ) {
+    async fn _insert(&mut self, key_ref: Key, children: Vec<Child<M>>, range: Range<usize>) {
         trace!("inserting [{}] children", children.len());
         self.keys.splice(range.clone(), vec![key_ref]);
         self.children.insert(range.start, children).await;
     }
 }
 
-impl BlockEntry {
+impl<M: CoreMem> BlockEntry<M> {
     fn new(entry: NodeSchema) -> Result<Self, HyperbeeError> {
         Ok(BlockEntry {
             index: Pointers::new(&entry.index[..])?,
@@ -510,7 +519,7 @@ impl BlockEntry {
     }
 
     /// offset is the offset of the node within the hypercore block
-    fn get_tree_node<M: CoreMem>(
+    fn get_tree_node(
         &self,
         offset: u64,
         blocks: Shared<Blocks<M>>,
@@ -521,11 +530,7 @@ impl BlockEntry {
         );
         Ok(Node::new(
             node_data.keys.clone(),
-            node_data
-                .children
-                .iter()
-                .map(|c| (c.clone(), Option::None))
-                .collect(),
+            node_data.children.clone(),
             blocks,
         ))
     }

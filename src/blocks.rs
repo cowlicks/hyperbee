@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, io::Write, sync::Arc};
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Blocks<M: CoreMem> {
     #[builder(default)]
-    cache: Shared<BTreeMap<u64, SharedBlock>>,
+    cache: Shared<BTreeMap<u64, SharedBlock<M>>>,
     core: Shared<Hypercore<M>>,
 }
 
@@ -30,7 +30,7 @@ impl<M: CoreMem> Blocks<M> {
     /// when the provided `seq` is not in the Hypercore
     /// when the data in the Hypercore block cannot be decoded
     #[tracing::instrument(skip(self))]
-    pub async fn get(&self, seq: &u64) -> Result<Shared<BlockEntry>, HyperbeeError> {
+    pub async fn get(&self, seq: &u64) -> Result<Shared<BlockEntry<M>>, HyperbeeError> {
         // check if seq is == self.core.info.length + 1
         // if so take changes and do something like:
         // changes.clone().to_block_entry()
@@ -48,11 +48,11 @@ impl<M: CoreMem> Blocks<M> {
             Ok(block_entry)
         }
     }
-    async fn _get_from_cache(&self, seq: &u64) -> Option<Shared<BlockEntry>> {
+    async fn _get_from_cache(&self, seq: &u64) -> Option<Shared<BlockEntry<M>>> {
         self.cache.read().await.get(seq).cloned()
     }
 
-    pub async fn _get_from_core(&self, seq: &u64) -> Result<Option<BlockEntry>, HyperbeeError> {
+    pub async fn _get_from_core(&self, seq: &u64) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
         match self.core.write().await.get(*seq).await? {
             Some(core_block) => {
                 let node = NodeSchema::decode(&core_block[..])?;
