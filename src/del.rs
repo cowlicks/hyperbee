@@ -620,7 +620,7 @@ mod test {
         let rand = Rand::default();
         let mut hb = in_memory_hyperbee().await?;
 
-        let keys: Vec<Vec<u8>> = (0..50).map(i32_key_vec).collect();
+        let keys: Vec<Vec<u8>> = (0..100).map(i32_key_vec).collect();
         let keys = rand.shuffle(keys);
 
         for k in keys.iter() {
