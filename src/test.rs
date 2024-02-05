@@ -116,6 +116,10 @@ pub async fn check_tree<M: CoreMem>(
         (r_root.n_keys().await, r_root.n_children().await)
     };
 
+    if n_keys == 0 && n_children > 0 {
+        panic!("root has children but no keys!");
+    }
+
     if n_keys > MAX_KEYS {
         panic!("too many keys!");
     }
@@ -216,4 +220,13 @@ fn deterministic_rand_test() {
     assert_eq!(r.rand(), 0.01925105413576489);
     assert_eq!(r.rand(), 0.03524534118514566);
     assert_eq!(r.rand(), 0.8834764880921284);
+}
+
+pub fn i32_key_vec(i: i32) -> Vec<u8> {
+    i.clone().to_string().as_bytes().to_vec()
+}
+
+pub fn vec_key_to_i32(i: Vec<u8>) -> i32 {
+    let s = String::from_utf8(i).unwrap();
+    i32::from_str_radix(&s, 10).unwrap()
 }
