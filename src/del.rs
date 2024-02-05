@@ -466,7 +466,7 @@ impl<M: CoreMem> Node<M> {
 /// TODO check merge that does not effect root in non leaf
 ///
 mod test {
-    use crate::test::{check_tree, in_memory_hyperbee};
+    use crate::test::{check_tree, i32_key_vec, in_memory_hyperbee, vec_key_to_i32, Rand};
 
     #[tokio::test]
     async fn empty_tree_no_key() -> Result<(), Box<dyn std::error::Error>> {
@@ -569,29 +569,71 @@ mod test {
     async fn delete_from_internal_no_underflow() -> Result<(), Box<dyn std::error::Error>> {
         let (mut hb, keys) = crate::test::hb_put!(0..19).await?;
         let k = keys[5].clone();
-        println!("BEFORE {}", hb.print().await?);
         let res = hb.del(&k).await?;
         assert!(res);
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
-        println!("AFTER {}", hb.print().await?);
         check_tree(hb).await?;
         Ok(())
     }
 
     #[tokio::test]
-    async fn delete_from_internal_node_with_underflow_merge_foo(
+    async fn delete_from_internal_node_with_underflow_merge(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (mut hb, keys) = crate::test::hb_put!(0..19).await?;
         let k = keys[10].clone();
-        println!("BEFORE\n{}", hb.print().await?);
         let res = hb.del(&k).await?;
-        panic!();
         assert!(res);
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
-        println!("AFTER {}", hb.print().await?);
         check_tree(hb).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_from_internal_node_with_underflow_rotate_foo(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let (mut hb, keys) = crate::test::hb_put!(0..25).await?;
+        let k = keys[10].clone();
+        let res = hb.del(&k).await?;
+        assert!(res);
+        let res = hb.get(&k).await?;
+        assert_eq!(res, None);
+        check_tree(hb).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn bug_where_root_was_not_getting_replaced() -> Result<(), Box<dyn std::error::Error>> {
+        let (mut hb, keys) = crate::test::hb_put!(0..5).await?;
+        for k in keys.iter() {
+            hb.del(k).await?;
+            let res = hb.get(&k).await?;
+            assert_eq!(res, None);
+            check_tree(hb.clone()).await?;
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rand_delete() -> Result<(), Box<dyn std::error::Error>> {
+        let rand = Rand::default();
+        let mut hb = in_memory_hyperbee().await?;
+
+        let keys: Vec<Vec<u8>> = (0..50).map(i32_key_vec).collect();
+        let keys = rand.shuffle(keys);
+
+        for k in keys.iter() {
+            let val = Some(k.clone());
+            hb.put(k.clone(), val).await?;
+        }
+
+        for k in rand.shuffle(keys).iter() {
+            hb.del(k).await?;
+            let res = hb.get(&k).await?;
+            assert_eq!(res, None);
+            check_tree(hb.clone()).await?;
+        }
         Ok(())
     }
 }
