@@ -7,11 +7,13 @@ use crate::{
 /// When deleting from a B-Tree, we might need to [`Side::merge`] or [`Side::rotate`] to
 /// maintain the invariants of the tree. These have a "side" or handedness depending on which
 /// way we rotate/merge. The methods on this impl help simplify that.
+#[derive(Debug)]
 enum Side {
     Left,
     Right,
 }
 
+use tracing::info;
 use Side::{Left, Right};
 // TODO consider some trait on  node/children/keys to make the playing with entries easier
 
@@ -197,6 +199,7 @@ impl Side {
 
         Ok(father)
     }
+
     async fn can_merge<M: CoreMem>(&self, father: SharedNode<M>, deficient_index: usize) -> bool {
         let n_children = father.read().await.n_children().await;
         match self {
@@ -205,6 +208,7 @@ impl Side {
         }
     }
 
+    #[tracing::instrument(skip(self, father, changes))]
     async fn merge<M: CoreMem>(
         &self,
         father: SharedNode<M>,
@@ -272,7 +276,7 @@ impl Side {
     }
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(father, changes))]
 async fn repair_one<M: CoreMem>(
     father: SharedNode<M>,
     deficient_index: usize,
@@ -283,23 +287,28 @@ async fn repair_one<M: CoreMem>(
         .can_rotate(father.clone(), deficient_index, order)
         .await?
     {
+        info!("Repair by rotating from Right");
         return Right.rotate(father.clone(), deficient_index, changes).await;
     }
     if Left
         .can_rotate(father.clone(), deficient_index, order)
         .await?
     {
+        info!("Repair by rotating from Left");
         return Left.rotate(father.clone(), deficient_index, changes).await;
     }
     if Right.can_merge(father.clone(), deficient_index).await {
+        info!("Repair by merging from Right");
         return Right.merge(father.clone(), deficient_index, changes).await;
     }
     if Left.can_merge(father.clone(), deficient_index).await {
-        return Right.merge(father.clone(), deficient_index, changes).await;
+        info!("Repair by merging from Left");
+        return Left.merge(father.clone(), deficient_index, changes).await;
     }
     panic!("this should never happen");
 }
 /// must be given a path who's last element has a deficient child...
+#[tracing::instrument(skip(path, changes))]
 async fn repair<M: CoreMem>(
     path: &mut Vec<(SharedNode<M>, usize)>,
     order: usize,
@@ -344,14 +353,14 @@ impl<M: CoreMem> Hyperbee<M> {
             None => return Ok(false),
         };
 
-        //let (matched, mut node_path, mut index_path) = nearest_node(root, key).await?;
         let (matched, mut path) = nearest_node(root, key).await?;
 
         if !matched {
             return Ok(false);
         }
 
-        // NB: jS hyperbee stores the "key" the deleted "key" in the created BlockEntry
+        // NB: jS hyperbee stores the "key" the deleted "key" in the created BlockEntry. So we are
+        // doing that too
         let mut changes: Changes<M> =
             Changes::new(self.version().await, key.clone().to_vec(), None);
 
@@ -459,13 +468,11 @@ mod test {
     #[tokio::test]
     async fn delete_from_leaf_no_underflow() -> Result<(), Box<dyn std::error::Error>> {
         let (mut hb, keys) = crate::test::hb_put!(0..10).await?;
-        println!("{}", hb.print().await?);
         let k = &keys.last().unwrap().clone();
         let res = hb.del(&k).await?;
         assert!(res);
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
-        println!("{}", hb.print().await?);
         check_tree(hb).await?;
         Ok(())
     }
@@ -473,7 +480,6 @@ mod test {
     #[tokio::test]
     async fn delete_last_key() -> Result<(), Box<dyn std::error::Error>> {
         let (mut hb, keys) = crate::test::hb_put!(0..1).await?;
-        println!("{}", hb.print().await?);
         let k = &keys.last().unwrap().clone();
         let res = hb.del(&k).await?;
         assert!(res);
@@ -488,12 +494,10 @@ mod test {
     {
         let (mut hb, keys) = crate::test::hb_put!(0..6).await?;
         let k = keys[0].clone();
-        println!("BEFORE {}", hb.print().await?);
         let res = hb.del(&k).await?;
         assert!(res);
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
-        println!("AFTER {}", hb.print().await?);
         check_tree(hb).await?;
         Ok(())
     }
@@ -503,12 +507,10 @@ mod test {
     {
         let (mut hb, keys) = crate::test::hb_put!(vec![1, 2, 3, 4, 5, 0]).await?;
         let k = keys[keys.len() - 2].clone();
-        println!("BEFORE {}", hb.print().await?);
         let res = hb.del(&k).await?;
         assert!(res);
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
-        println!("AFTER {}", hb.print().await?);
         check_tree(hb).await?;
         Ok(())
     }
@@ -518,12 +520,10 @@ mod test {
     {
         let (mut hb, keys) = crate::test::hb_put!(0..5).await?;
         let k = keys[0].clone();
-        println!("BEFORE {}", hb.print().await?);
         let res = hb.del(&k).await?;
         assert!(res);
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
-        println!("AFTER {}", hb.print().await?);
         check_tree(hb).await?;
         Ok(())
     }
