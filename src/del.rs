@@ -374,7 +374,34 @@ impl<M: CoreMem> Hyperbee<M> {
             path.push((cur_node.clone(), cur_index));
             child_ref
         } else {
-            todo!()
+            // get the lagest key that is smaller than the deleted value
+            let left_sub_tree = cur_node.read().await.get_child(cur_index).await?;
+            let (_, mut left_path) =
+                nearest_node(left_sub_tree.clone(), &InfiniteKeys::Positive).await?;
+
+            let (bottom, bottom_index) = left_path
+                .pop()
+                .expect("non leaf so must have some nodes here");
+            let replacement_key = bottom
+                .write()
+                .await
+                .keys
+                .pop()
+                .expect("nodes can't have zero keys");
+
+            // insert this replacement key where the key was that was removed
+            cur_node
+                .write()
+                .await
+                .keys
+                .insert(cur_index, replacement_key);
+
+            // we add the path we took to get this replacement to the `path` so we can rebalance
+            // the tree from where the key was taken if necessary.
+            path.push((cur_node.clone(), cur_index));
+            path.append(&mut left_path);
+            path.push((bottom.clone(), bottom_index));
+            changes.add_node(bottom.clone())
         };
 
         let (bottom_node, _) = path.pop().expect("if/else above ensures path is not empty");
