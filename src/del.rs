@@ -1,7 +1,6 @@
 use crate::{
-    nearest_node,
-    put::{propagate_changes_up_tree, Changes},
-    Child, CoreMem, Hyperbee, HyperbeeError, InfiniteKeys, Key, Node, SharedNode, MAX_KEYS,
+    changes::Changes, nearest_node, put::propagate_changes_up_tree, Child, CoreMem, Hyperbee,
+    HyperbeeError, InfiniteKeys, Key, Node, SharedNode, MAX_KEYS,
 };
 
 /// When deleting from a B-Tree, we might need to [`Side::merge`] or [`Side::rotate`] to

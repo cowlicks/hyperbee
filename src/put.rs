@@ -1,74 +1,13 @@
 use std::sync::Arc;
 
-use crate::SharedNode;
-
 use super::{
+    changes::Changes,
     messages::{yolo_index, Node as NodeSchema, YoloIndex},
-    nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, Key, Node, MAX_KEYS,
+    nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, Key, Node, SharedNode, MAX_KEYS,
 };
 use prost::Message;
 use tokio::sync::RwLock;
 use tracing::trace;
-
-// TODO move this to own module
-#[derive(Debug, Default)]
-pub struct Changes<M: CoreMem> {
-    seq: u64,
-    pub key: Vec<u8>,
-    pub value: Option<Vec<u8>>,
-    pub nodes: Vec<SharedNode<M>>,
-    pub root: Option<SharedNode<M>>,
-}
-
-impl<M: CoreMem> Changes<M> {
-    pub fn new(seq: u64, key: Vec<u8>, value: Option<Vec<u8>>) -> Self {
-        Self {
-            seq,
-            key,
-            value,
-            nodes: vec![],
-            root: None,
-        }
-    }
-
-    // use the result of this to insert the child into a shared node
-    pub fn add_node(&mut self, node: SharedNode<M>) -> Child<M> {
-        self.nodes.push(node.clone());
-        let offset: u64 = self
-            .nodes
-            .len()
-            .try_into()
-            .expect("TODO usize to seq (u64)");
-        Child {
-            seq: self.seq,
-            offset,
-            child_node: Some(node),
-        }
-    }
-
-    pub fn overwrite_root(&mut self, root: SharedNode<M>) -> Child<M> {
-        self.root = Some(root.clone());
-        Child {
-            seq: self.seq,
-            offset: 0,
-            child_node: Some(root),
-        }
-    }
-    pub fn add_root(&mut self, root: SharedNode<M>) -> Child<M> {
-        if self.root.is_some() {
-            panic!("We should never be replacing a root on a changes");
-        }
-        self.overwrite_root(root)
-    }
-
-    pub fn add_changed_node(&mut self, path_len: usize, node: SharedNode<M>) -> Child<M> {
-        if path_len == 0 {
-            self.add_root(node)
-        } else {
-            self.add_node(node)
-        }
-    }
-}
 
 /// Add the given `children` to the next node in `node_path` at the next index in `index_path`.
 /// This creates a new node, with which we call:
@@ -209,10 +148,9 @@ impl<M: CoreMem> Hyperbee<M> {
                     let changes = propagate_changes_up_tree(changes, path, child).await;
                     let outcome = self.blocks.read().await.add_changes(changes).await?;
                     return Ok((matched, outcome.length));
-                } ;
+                };
 
                 let outcome = self.blocks.read().await.add_changes(changes).await?;
-                // TODO propagateChangesUpTree
                 return Ok((matched, outcome.length));
             }
 

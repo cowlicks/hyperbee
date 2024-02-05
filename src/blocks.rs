@@ -4,8 +4,8 @@ use tokio::sync::RwLock;
 use tracing::trace;
 
 use crate::{
+    changes::Changes,
     messages::{Node as NodeSchema, YoloIndex},
-    put::Changes,
     BlockEntry, CoreMem, HyperbeeError, Shared, SharedBlock,
 };
 use prost::Message;

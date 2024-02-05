@@ -4,6 +4,7 @@ pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 pub mod blocks;
+mod changes;
 pub mod del;
 pub mod put;
 mod test;
@@ -437,7 +438,6 @@ impl<M: CoreMem> Node<M> {
 
     /// Use given index to get Key.seq, which points to the block in the core where this value
     /// lives. Load that BlockEntry and return (Key.seq, BlockEntry.value)
-    // TODO this should return Res<(u64, Opt<Vec<u8>>)>
     async fn get_value_of_key(
         &self,
         index: usize,
@@ -566,7 +566,6 @@ impl<M: CoreMem> Hyperbee<M> {
             protocol: PROTOCOL.to_string(),
             metadata: None, // TODO this is this.tree.metadata in js. What should go here.
         };
-        // TODO get this working
         let mut buf = vec![];
         header.encode(&mut buf).unwrap();
         let _ = self.blocks.read().await.append(&buf).await?;
