@@ -413,11 +413,20 @@ impl<M: CoreMem> Hyperbee<M> {
         };
 
         // if not root propagate changes
-        let changes = if !path.is_empty() {
+        let mut changes = if !path.is_empty() {
             propagate_changes_up_tree(changes, path, child).await
         } else {
             changes
         };
+
+        let root = self
+            .get_root(false)
+            .await?
+            .expect("root is confirmed above");
+        let root = root.read().await;
+        if root.n_keys().await == 0 && root.n_children().await == 1 {
+            changes.overwrite_root(root.get_child(0).await?);
+        }
 
         self.blocks.read().await.add_changes(changes).await?;
         Ok(true)
