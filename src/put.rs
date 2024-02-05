@@ -175,7 +175,6 @@ impl<M: CoreMem> Hyperbee<M> {
                         self.blocks.clone(),
                     )));
 
-                    self.root = Some(new_root.clone());
                     // create a new root
                     // put chlidren in node_schema then put the below thing
                     changes.add_root(new_root);

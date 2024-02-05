@@ -139,9 +139,14 @@ pub struct Node<M: CoreMem> {
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
     pub blocks: Shared<Blocks<M>>,
-    // TODO add root here so tree is not dropped after each .get()
-    #[builder(default)]
-    root: Option<SharedNode<M>>,
+}
+
+impl<M: CoreMem> Clone for Hyperbee<M> {
+    fn clone(&self) -> Self {
+        Self {
+            blocks: self.blocks.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -548,28 +553,22 @@ impl<M: CoreMem> Hyperbee<M> {
         &mut self,
         ensure_header: bool,
     ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
-        match &self.root {
-            Some(root) => Ok(Some(root.clone())),
-            None => {
-                let blocks = self.blocks.read().await;
-                let version = self.version().await;
-                if version == 0 {
-                    if ensure_header {
-                        self.ensure_header().await?;
-                    }
-                    return Ok(None);
-                }
-                let root = blocks
-                    .get(&(version - 1))
-                    .await?
-                    .read()
-                    .await
-                    .get_tree_node(0, self.blocks.clone())?;
-                let root = Arc::new(RwLock::new(root));
-                self.root = Some(root.clone());
-                Ok(Some(root))
+        let blocks = self.blocks.read().await;
+        let version = self.version().await;
+        if version == 0 {
+            if ensure_header {
+                self.ensure_header().await?;
             }
+            return Ok(None);
         }
+        let root = blocks
+            .get(&(version - 1))
+            .await?
+            .read()
+            .await
+            .get_tree_node(0, self.blocks.clone())?;
+        let root = Arc::new(RwLock::new(root));
+        Ok(Some(root))
     }
 
     /// Get the value corresponding to the provided `key` from the Hyperbee
