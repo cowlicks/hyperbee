@@ -338,7 +338,8 @@ async fn repair<M: CoreMem>(
 
         // add father_ref to next node in path and continue repair up tree
         let (grandpa, cur_deficient_index) = path.pop().unwrap();
-        grandpa.read().await.children.children.write().await[cur_deficient_index + 1] =
+
+        grandpa.read().await.children.children.write().await[cur_deficient_index] =
             father_ref.clone();
         path.push((grandpa, cur_deficient_index));
     };
