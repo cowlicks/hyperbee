@@ -325,7 +325,7 @@ async fn repair<M: CoreMem>(
             && cur_father.read().await.n_children().await == 1
         {
             let new_root = cur_father.read().await.get_child(0).await?;
-            break changes.add_root(new_root.clone());
+            break changes.add_root(new_root);
         }
 
         // store updated father
@@ -344,7 +344,7 @@ async fn repair<M: CoreMem>(
         path.push((grandpa, cur_deficient_index));
     };
 
-    return Ok(father_ref);
+    Ok(father_ref)
 }
 
 impl<M: CoreMem> Hyperbee<M> {
@@ -490,10 +490,10 @@ mod test {
     async fn delete_from_root_that_is_leaf() -> Result<(), Box<dyn std::error::Error>> {
         let (mut hb, keys) = crate::test::hb_put!(0..4).await?;
         let k = &keys[0].clone();
-        let res = hb.del(&k).await?;
+        let res = hb.del(k).await?;
         assert!(res);
 
-        let res = hb.get(&k).await?;
+        let res = hb.get(k).await?;
         assert_eq!(res, None);
 
         let res = hb.get(&keys[1].clone()).await?;
@@ -506,9 +506,9 @@ mod test {
     async fn delete_from_leaf_no_underflow() -> Result<(), Box<dyn std::error::Error>> {
         let (mut hb, keys) = crate::test::hb_put!(0..10).await?;
         let k = &keys.last().unwrap().clone();
-        let res = hb.del(&k).await?;
+        let res = hb.del(k).await?;
         assert!(res);
-        let res = hb.get(&k).await?;
+        let res = hb.get(k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
         Ok(())
@@ -518,9 +518,9 @@ mod test {
     async fn delete_last_key() -> Result<(), Box<dyn std::error::Error>> {
         let (mut hb, keys) = crate::test::hb_put!(0..1).await?;
         let k = &keys.last().unwrap().clone();
-        let res = hb.del(&k).await?;
+        let res = hb.del(k).await?;
         assert!(res);
-        let res = hb.get(&k).await?;
+        let res = hb.get(k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
         Ok(())
@@ -542,7 +542,7 @@ mod test {
     #[tokio::test]
     async fn delete_from_leaf_with_underflow_rotate_right() -> Result<(), Box<dyn std::error::Error>>
     {
-        let (mut hb, keys) = crate::test::hb_put!(vec![1, 2, 3, 4, 5, 0]).await?;
+        let (mut hb, keys) = crate::test::hb_put!(&[1, 2, 3, 4, 5, 0]).await?;
         let k = keys[keys.len() - 2].clone();
         let res = hb.del(&k).await?;
         assert!(res);
@@ -608,7 +608,7 @@ mod test {
         let (mut hb, keys) = crate::test::hb_put!(0..5).await?;
         for k in keys.iter() {
             hb.del(k).await?;
-            let res = hb.get(&k).await?;
+            let res = hb.get(k).await?;
             assert_eq!(res, None);
             check_tree(hb.clone()).await?;
         }
@@ -630,7 +630,7 @@ mod test {
 
         for k in rand.shuffle(keys).iter() {
             hb.del(k).await?;
-            let res = hb.get(&k).await?;
+            let res = hb.get(k).await?;
             assert_eq!(res, None);
             check_tree(hb.clone()).await?;
         }

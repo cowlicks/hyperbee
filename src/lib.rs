@@ -297,12 +297,13 @@ impl PartialOrd<InfiniteKeys> for [u8] {
 fn test_inf() {
     let a: Vec<u8> = vec![1, 2, 3];
     let b: &[u8] = &[5, 6, 7];
-    assert_eq!(&a[..] < &InfiniteKeys::Positive, true);
-    assert_eq!(*b < InfiniteKeys::Positive, true);
-    assert_eq!(&a[..] < &InfiniteKeys::Negative, false);
-    assert_eq!(*b < InfiniteKeys::Negative, false);
+    assert!(a[..] < InfiniteKeys::Positive);
+    assert!(*b < InfiniteKeys::Positive);
+    assert!(a[..] >= InfiniteKeys::Negative);
+    assert!(*b >= InfiniteKeys::Negative);
 }
 
+type NodePath<T> = Vec<(SharedNode<T>, usize)>;
 /// Descend through tree to the node nearest (or matching) the provided key
 /// Returns a tuple that describes the path we took. It looks like `(matched, node_path, index_path)`
 /// * `matched` is a bool that indicates if the key was matched
@@ -318,12 +319,12 @@ fn test_inf() {
 async fn nearest_node<M: CoreMem, T>(
     node: SharedNode<M>,
     key: &T,
-) -> Result<(bool, Vec<(SharedNode<M>, usize)>), HyperbeeError>
+) -> Result<(bool, NodePath<M>), HyperbeeError>
 where
     T: PartialOrd<[u8]> + Debug + ?Sized,
 {
     let mut current_node = node;
-    let mut out_path: Vec<(SharedNode<M>, usize)> = vec![];
+    let mut out_path: NodePath<M> = vec![];
     loop {
         let next_node = {
             let child_index: usize = 'found: {
@@ -360,8 +361,7 @@ where
                 return Ok((false, out_path));
             }
 
-            let x = current_node.read().await.get_child(child_index).await?;
-            x
+            current_node.read().await.get_child(child_index).await?
         };
         current_node = next_node;
     }
@@ -633,8 +633,8 @@ impl<M: CoreMem> Clone for Hyperbee<M> {
 impl<M: CoreMem> Clone for Child<M> {
     fn clone(&self) -> Self {
         Self {
-            seq: self.seq.clone(),
-            offset: self.offset.clone(),
+            seq: self.seq,
+            offset: self.offset,
             child_node: self.child_node.clone(),
         }
     }

@@ -42,7 +42,7 @@ impl<M: CoreMem> Changes<M> {
         Child {
             seq: self.seq,
             offset,
-            child_node: Some(node.clone()),
+            child_node: Some(node),
         }
     }
 
@@ -51,7 +51,7 @@ impl<M: CoreMem> Changes<M> {
         Child {
             seq: self.seq,
             offset: 0,
-            child_node: Some(root.clone()),
+            child_node: Some(root),
         }
     }
     pub fn add_root(&mut self, root: SharedNode<M>) -> Child<M> {
@@ -63,9 +63,9 @@ impl<M: CoreMem> Changes<M> {
 
     pub fn add_changed_node(&mut self, path_len: usize, node: SharedNode<M>) -> Child<M> {
         if path_len == 0 {
-            self.add_root(node.clone())
+            self.add_root(node)
         } else {
-            self.add_node(node.clone())
+            self.add_node(node)
         }
     }
 }
@@ -209,8 +209,7 @@ impl<M: CoreMem> Hyperbee<M> {
                     let changes = propagate_changes_up_tree(changes, path, child).await;
                     let outcome = self.blocks.read().await.add_changes(changes).await?;
                     return Ok((matched, outcome.length));
-                } else {
-                };
+                } ;
 
                 let outcome = self.blocks.read().await.add_changes(changes).await?;
                 // TODO propagateChangesUpTree
@@ -338,7 +337,7 @@ mod test {
 
             for kj in used.iter() {
                 let val = Some(kj.clone());
-                let res = hb.get(&kj).await?.unwrap();
+                let res = hb.get(kj).await?.unwrap();
                 assert_eq!(res.1, val);
             }
 

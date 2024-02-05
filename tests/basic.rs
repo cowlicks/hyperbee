@@ -10,7 +10,7 @@ async fn basic() -> Result<(), Box<dyn std::error::Error>> {
     for i in start..stop {
         let key = i.to_string();
         let expected = (stop - i).to_string();
-        let (_seq, res) = hb.get(&key.as_bytes().to_vec()).await?.unwrap();
+        let (_seq, res) = hb.get(key.as_bytes()).await?.unwrap();
         let res = res.unwrap();
         let res = std::str::from_utf8(&res).unwrap();
         println!("k {i}, v {res}");
