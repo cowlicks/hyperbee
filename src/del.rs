@@ -466,7 +466,7 @@ impl<M: CoreMem> Node<M> {
 /// TODO check merge that does not effect root in non leaf
 ///
 mod test {
-    use crate::test::{check_tree, i32_key_vec, in_memory_hyperbee, vec_key_to_i32, Rand};
+    use crate::test::{check_tree, i32_key_vec, in_memory_hyperbee, Rand};
 
     #[tokio::test]
     async fn empty_tree_no_key() -> Result<(), Box<dyn std::error::Error>> {

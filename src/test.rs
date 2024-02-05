@@ -226,6 +226,7 @@ pub fn i32_key_vec(i: i32) -> Vec<u8> {
     i.clone().to_string().as_bytes().to_vec()
 }
 
+#[allow(dead_code)]
 pub fn vec_key_to_i32(i: Vec<u8>) -> i32 {
     let s = String::from_utf8(i).unwrap();
     i32::from_str_radix(&s, 10).unwrap()

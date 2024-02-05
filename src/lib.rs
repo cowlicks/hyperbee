@@ -19,7 +19,7 @@ use thiserror::Error;
 
 use std::{
     cmp::Ordering,
-    fmt::Debug,
+    fmt::{Debug, Display},
     num::TryFromIntError,
     ops::{Range, RangeBounds},
     path::Path,
@@ -69,19 +69,6 @@ pub struct Key {
     keys_key: Option<Vec<u8>>,
     keys_value: Option<Option<Vec<u8>>>,
 }
-
-impl std::fmt::Display for Key {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.keys_key {
-            Some(val_vec) => match String::from_utf8(val_vec.clone()) {
-                Ok(val_str) => write!(f, "key.key as utf8 {val_str}"),
-                Err(_) => write!(f, "key.key as Vec {val_vec:?}"),
-            },
-            None => write!(f, "key.seq @ {}", self.seq),
-        }
-    }
-}
-
 #[derive(Debug)]
 /// Pointer used within a [`Node`] to point to it's child nodes.
 pub struct Child<M: CoreMem> {
@@ -91,19 +78,6 @@ pub struct Child<M: CoreMem> {
     /// NB: offset = 0, is the topmost node
     pub offset: u64,
     child_node: Option<SharedNode<M>>,
-}
-
-impl<M: CoreMem> Clone for Child<M> {
-    fn clone(&self) -> Self {
-        Self {
-            seq: self.seq.clone(),
-            offset: self.offset.clone(),
-            child_node: match &self.child_node {
-                None => None,
-                Some(x) => Some(x.clone()),
-            },
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -139,14 +113,6 @@ pub struct Node<M: CoreMem> {
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
     pub blocks: Shared<Blocks<M>>,
-}
-
-impl<M: CoreMem> Clone for Hyperbee<M> {
-    fn clone(&self) -> Self {
-        Self {
-            blocks: self.blocks.clone(),
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -642,4 +608,34 @@ pub async fn load_from_storage_dir(
     Ok(HyperbeeBuilder::default()
         .blocks(Arc::new(RwLock::new(blocks)))
         .build()?)
+}
+
+impl Display for Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.keys_key {
+            Some(val_vec) => match String::from_utf8(val_vec.clone()) {
+                Ok(val_str) => write!(f, "key.key as utf8 {val_str}"),
+                Err(_) => write!(f, "key.key as Vec {val_vec:?}"),
+            },
+            None => write!(f, "key.seq @ {}", self.seq),
+        }
+    }
+}
+
+impl<M: CoreMem> Clone for Hyperbee<M> {
+    fn clone(&self) -> Self {
+        Self {
+            blocks: self.blocks.clone(),
+        }
+    }
+}
+
+impl<M: CoreMem> Clone for Child<M> {
+    fn clone(&self) -> Self {
+        Self {
+            seq: self.seq.clone(),
+            offset: self.offset.clone(),
+            child_node: self.child_node.clone(),
+        }
+    }
 }
