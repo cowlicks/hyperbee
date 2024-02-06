@@ -6,7 +6,7 @@ use tracing::trace;
 use crate::{
     changes::Changes,
     messages::{Node as NodeSchema, YoloIndex},
-    BlockEntry, CoreMem, HyperbeeError, Shared, SharedBlock,
+    BlockEntry, CoreMem, HyperbeeError, Shared,
 };
 use prost::Message;
 use std::{collections::BTreeMap, sync::Arc};
@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, sync::Arc};
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Blocks<M: CoreMem> {
     #[builder(default)]
-    cache: Shared<BTreeMap<u64, SharedBlock<M>>>,
+    cache: Shared<BTreeMap<u64, Shared<BlockEntry<M>>>>,
     core: Shared<Hypercore<M>>,
 }
 

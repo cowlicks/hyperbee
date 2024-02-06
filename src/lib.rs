@@ -99,7 +99,6 @@ pub struct BlockEntry<M: CoreMem> {
 
 type Shared<T> = Arc<RwLock<T>>;
 type SharedNode<T> = Shared<Node<T>>;
-type SharedBlock<T> = Shared<BlockEntry<T>>;
 type NodePath<T> = Vec<(SharedNode<T>, usize)>;
 
 #[derive(Debug)]

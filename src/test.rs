@@ -9,7 +9,8 @@ use hypercore::{HypercoreBuilder, Storage};
 use tokio::sync::{OnceCell, RwLock};
 
 use crate::{
-    blocks::BlocksBuilder, CoreMem, Hyperbee, HyperbeeBuilder, HyperbeeError, SharedNode, MAX_KEYS,
+    blocks::BlocksBuilder, min_keys, CoreMem, Hyperbee, HyperbeeBuilder, HyperbeeError, SharedNode,
+    MAX_KEYS,
 };
 
 #[allow(dead_code)]
