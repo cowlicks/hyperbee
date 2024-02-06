@@ -40,6 +40,7 @@ fn min_keys(max_keys: usize) -> usize {
     max_keys >> 1
 }
 
+// TODO are all these used
 #[derive(Error, Debug)]
 pub enum HyperbeeError {
     #[error("There was an error in the underlying Hypercore")]
@@ -65,6 +66,7 @@ pub enum HyperbeeError {
 }
 
 #[derive(Clone, Debug)]
+// TODO rename to keyvalue
 /// Pointer used within a [`Node`] to point to the block where the Key's (key, value) pair is stored.
 pub struct Key {
     /// Index of the key's "key" within the [`hypercore::Hypercore`].
@@ -115,12 +117,14 @@ pub struct Node<M: CoreMem> {
     blocks: Shared<Blocks<M>>,
 }
 
+/// TODO document me
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
     pub blocks: Shared<Blocks<M>>,
 }
 
+// TODO only used twice. Delete?
 impl Key {
     fn new(seq: u64, keys_key: Option<Vec<u8>>, keys_value: Option<Option<Vec<u8>>>) -> Self {
         Key {
@@ -170,6 +174,8 @@ fn make_node_vec<B: Buf, M: CoreMem>(
         .collect())
 }
 
+// TODO look at all references of Children.children and simplify them with methods, or remove
+// methods here.
 impl<M: CoreMem> Children<M> {
     fn new(blocks: Shared<Blocks<M>>, children: Vec<Child<M>>) -> Self {
         Self {
@@ -177,6 +183,7 @@ impl<M: CoreMem> Children<M> {
             children: RwLock::new(children),
         }
     }
+    // TODO only used once
     #[tracing::instrument(skip(self))]
     async fn insert(&self, index: usize, new_children: Vec<Child<M>>) {
         if new_children.is_empty() {
@@ -199,6 +206,7 @@ impl<M: CoreMem> Children<M> {
             .splice(index..(index + replace_split_child), new_children);
     }
 
+    // TODO only used twice
     #[tracing::instrument(skip(self))]
     async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
         let (seq, offset) = {
@@ -239,11 +247,13 @@ impl<M: CoreMem> Children<M> {
             .collect()
     }
 
+    // TODO used once, but should prob be used other places
     async fn is_empty(&self) -> bool {
         self.children.read().await.is_empty()
     }
 }
 
+// TODO move to own module file
 #[derive(Debug)]
 pub enum InfiniteKeys {
     Positive,
@@ -482,6 +492,7 @@ impl<M: CoreMem> BlockEntry<M> {
 
     /// Get a [`Node`] from this [`BlockEntry`] at the provided `offset`.
     /// offset is the offset of the node within the hypercore block
+    // TODO rename get_node
     fn get_tree_node(&self, offset: u64) -> Result<SharedNode<M>, HyperbeeError> {
         Ok(self
             .nodes
@@ -589,6 +600,7 @@ impl<M: CoreMem> Clone for Hyperbee<M> {
 ///
 /// # Errors
 /// when Hyperbee fails to build
+// TODO move to tests/
 pub async fn load_from_storage_dir(
     storage_dir: &str,
 ) -> Result<Hyperbee<random_access_disk::RandomAccessDisk>, HyperbeeError> {
