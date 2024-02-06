@@ -51,7 +51,7 @@ fn interleave<T: Clone>(a: &[T], b: &[T]) -> Vec<T> {
 pub async fn check_node<M: CoreMem>(node: SharedNode<M>) {
     let (n_keys, n_children) = {
         let r_node = node.read().await;
-        (r_node.n_keys().await, r_node.n_children().await)
+        (r_node.keys.len(), r_node.n_children().await)
     };
 
     if n_keys > MAX_KEYS {
@@ -113,7 +113,7 @@ pub async fn check_tree<M: CoreMem>(
 
     let (n_keys, n_children) = {
         let r_root = root.read().await;
-        (r_root.n_keys().await, r_root.n_children().await)
+        (r_root.keys.len(), r_root.n_children().await)
     };
 
     if n_keys == 0 && n_children > 0 {

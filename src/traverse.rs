@@ -51,7 +51,7 @@ impl<M: CoreMem> Traverse<'_, M> {
 /// Return the tuple (number_of_keys, number_of_children) for the given node
 async fn get_n_keys_and_children<M: CoreMem>(node: SharedNode<M>) -> (usize, usize) {
     (
-        node.read().await.n_keys().await,
+        node.read().await.keys.len(),
         node.read().await.n_children().await,
     )
 }

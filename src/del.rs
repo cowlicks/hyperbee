@@ -6,9 +6,12 @@ use crate::{
 /// When deleting from a B-Tree, we might need to [`Side::merge`] or [`Side::rotate`] to
 /// maintain the invariants of the tree. These have a "side" or handedness depending on which
 /// way we rotate/merge. The methods on this impl help simplify that.
+/// The left side is smaller than the right side
 #[derive(Debug)]
 enum Side {
+    /// Toward smaller values
     Left,
+    /// Toward bigger values.
     Right,
 }
 
@@ -154,8 +157,8 @@ impl Side {
                 .await?
                 .read()
                 .await
-                .n_keys()
-                .await)
+                .keys
+                .len())
     }
 
     async fn rotate<M: CoreMem>(
@@ -246,7 +249,7 @@ impl Side {
             .await;
 
         // Move donated key from father and RHS keys into LHS
-        let n_left_keys = left.read().await.n_keys().await;
+        let n_left_keys = left.read().await.keys.len();
         let mut keys_to_add = vec![donated_key_from_father];
         keys_to_add.append(&mut right.write().await.keys);
         left.write()
@@ -320,7 +323,7 @@ async fn repair<M: CoreMem>(
         let cur_father = repair_one(father, deficient_index, order, changes).await?;
         // if root empty use child
         if path.is_empty()
-            && cur_father.read().await.n_keys().await == 0
+            && cur_father.read().await.keys.len() == 0
             && cur_father.read().await.n_children().await == 1
         {
             let new_root = cur_father.read().await.get_child(0).await?;
@@ -331,7 +334,7 @@ async fn repair<M: CoreMem>(
         let father_ref = changes.add_changed_node(path.len(), cur_father.clone());
 
         // if no more nodes, or father does not need repair, we are done
-        if path.is_empty() || cur_father.read().await.n_keys().await >= MAX_KEYS >> 1 {
+        if path.is_empty() || cur_father.read().await.keys.len() >= MAX_KEYS >> 1 {
             break father_ref;
         }
 
@@ -423,7 +426,7 @@ impl<M: CoreMem> Hyperbee<M> {
             .await?
             .expect("root is confirmed above");
         let root = root.read().await;
-        if root.n_keys().await == 0 && root.n_children().await == 1 {
+        if root.keys.len() == 0 && root.n_children().await == 1 {
             changes.overwrite_root(root.get_child(0).await?);
         }
 
@@ -447,20 +450,7 @@ impl<M: CoreMem> Node<M> {
 /// * Run check_tree after del to make sure tree still has all invariants
 /// * Check expected final shape of the entire tree. Probably with hb.print() == expected
 ///
-/// The last one is kind of annoying. I could compare with data generated from js hb. Or maybe my
-/// own appendtree code
-///
-/// An attemp to try to enumerate all possible cases for a deletion:
-/// no-exists + exists * (
-///     (leaf + internal + root) * (
-///         no-underflow +
-///         (
-///             (underflow * (once + some, + all) )     // how many underflows
-///             * (( right + left) + (merge + rotate))  // every kind of repair
-///         )
-///     )
-/// )
-/// so:
+/// enumeration of tests:
 /// no-exists
 /// (all following exist)
 ///
@@ -493,7 +483,6 @@ impl<M: CoreMem> Node<M> {
 ///
 /// TODO check merge that effects root in non leaf
 /// TODO check merge that does not effect root in non leaf
-///
 mod test {
     use crate::test::{check_tree, i32_key_vec, in_memory_hyperbee, Rand};
 

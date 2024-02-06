@@ -357,10 +357,6 @@ impl<M: CoreMem> Node<M> {
         }
     }
 
-    pub async fn n_keys(&self) -> usize {
-        self.keys.len()
-    }
-
     pub async fn n_children(&self) -> usize {
         self.children.children.read().await.len()
     }
