@@ -68,6 +68,7 @@ pub struct Key {
     /// Value of the key's "key". NB: it is not the "value" corresponding to the value in a `(key,
     /// value)` pair
     keys_key: Option<Vec<u8>>,
+    /// Value of the key's "Value"
     keys_value: Option<Option<Vec<u8>>>,
 }
 #[derive(Debug)]
@@ -78,7 +79,7 @@ pub struct Child<M: CoreMem> {
     /// Index of the `Node` within the [`messages::Node::index`].
     /// NB: offset = 0, is the topmost node
     pub offset: u64,
-    child_node: Option<SharedNode<M>>,
+    node: Option<SharedNode<M>>,
 }
 
 #[derive(Clone, Debug)]
@@ -128,12 +129,8 @@ impl Key {
 }
 
 impl<M: CoreMem> Child<M> {
-    fn new(seq: u64, offset: u64) -> Self {
-        Child {
-            seq,
-            offset,
-            child_node: Option::None, // TODO pass param
-        }
+    fn new(seq: u64, offset: u64, node: Option<SharedNode<M>>) -> Self {
+        Child { seq, offset, node }
     }
 }
 
@@ -152,7 +149,11 @@ fn make_node_vec<B: Buf, M: CoreMem>(
                 .collect();
             let mut children = vec![];
             for i in (0..(level.children.len())).step_by(2) {
-                children.push(Child::new(level.children[i], level.children[i + 1]));
+                children.push(Child::new(
+                    level.children[i],
+                    level.children[i + 1],
+                    Option::None,
+                ));
             }
             Arc::new(RwLock::new(Node::new(keys, children, blocks.clone())))
         })
@@ -192,7 +193,7 @@ impl<M: CoreMem> Children<M> {
     async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
         let (seq, offset) = {
             let child_ref = &self.children.read().await[index];
-            if let Some(node) = &child_ref.child_node {
+            if let Some(node) = &child_ref.node {
                 return Ok(node.clone());
             }
             (child_ref.seq, child_ref.offset)
@@ -204,7 +205,7 @@ impl<M: CoreMem> Children<M> {
             .get(&seq, self.blocks.clone())
             .await?;
         let node = block.read().await.get_tree_node(offset)?;
-        self.children.write().await[index].child_node = Some(node.clone());
+        self.children.write().await[index].node = Some(node.clone());
         Ok(node)
     }
 
@@ -476,7 +477,7 @@ impl<M: CoreMem> BlockEntry<M> {
                 usize::try_from(offset)
                     .map_err(|e| HyperbeeError::U64ToUsizeConversionError(offset, e))?,
             )
-            .expect("TODO when would we get the wrong offset?")
+            .expect("offset *should* always point to a real node")
             .clone())
     }
 }
@@ -588,10 +589,6 @@ impl<M: CoreMem> Clone for Hyperbee<M> {
 
 impl<M: CoreMem> Clone for Child<M> {
     fn clone(&self) -> Self {
-        Self {
-            seq: self.seq,
-            offset: self.offset,
-            child_node: self.child_node.clone(),
-        }
+        Self::new(self.seq, self.offset, self.node.clone())
     }
 }

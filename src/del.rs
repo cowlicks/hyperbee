@@ -450,6 +450,36 @@ impl<M: CoreMem> Node<M> {
 /// The last one is kind of annoying. I could compare with data generated from js hb. Or maybe my
 /// own appendtree code
 ///
+/// An attemp to try to enumerate all possible cases for a deletion:
+/// no-exists + exists * (
+///     (leaf + internal + root) * (
+///         no-underflow +
+///         (
+///             (underflow * (once + some, + all) )     // how many underflows
+///             * (( right + left) + (merge + rotate))  // every kind of repair
+///         )
+///     )
+/// )
+/// so:
+/// no-exists
+/// (all following exist)
+///
+/// leaf no-underflow
+/// internal no-underflow
+/// root no-underflow
+///
+///for x of (leaf, internal, root) do
+///   for y of (once, some, all) do
+///       for z of (rigt, left) do
+///           for a of (merge, rotate) do
+///               exists underflow x y z a
+///
+/// This gives 40 tests
+///
+/// leaf, internal root
+/// (right, left) x (merge, rotate)
+/// no-underflow, underflow once, underflow some, underflow all-the-way
+///
 /// Do all these in right and left:
 /// DONE check rotate that effects root in leaf
 /// TODO check rotate that does not effect root in leaf

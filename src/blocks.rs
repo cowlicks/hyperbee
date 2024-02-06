@@ -84,8 +84,13 @@ impl<M: CoreMem> Blocks<M> {
         trace!("adding changes with n_nodes = {}", nodes.len());
         let mut new_nodes = vec![];
         // encode nodes
-        // TODO ensure root
-        new_nodes.push(root.unwrap().read().await.to_level().await);
+        new_nodes.push(
+            root.expect("Root *should* always be added in the put/del logic")
+                .read()
+                .await
+                .to_level()
+                .await,
+        );
         for node in nodes.into_iter() {
             new_nodes.push(node.read().await.to_level().await);
         }

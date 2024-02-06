@@ -28,20 +28,12 @@ impl<M: CoreMem> Changes<M> {
             .len()
             .try_into()
             .expect("TODO usize to seq (u64)");
-        Child {
-            seq: self.seq,
-            offset,
-            child_node: Some(node),
-        }
+        Child::new(self.seq, offset, Some(node))
     }
 
     pub fn overwrite_root(&mut self, root: SharedNode<M>) -> Child<M> {
         self.root = Some(root.clone());
-        Child {
-            seq: self.seq,
-            offset: 0,
-            child_node: Some(root),
-        }
+        Child::new(self.seq, 0, Some(root))
     }
     pub fn add_root(&mut self, root: SharedNode<M>) -> Child<M> {
         if self.root.is_some() {
