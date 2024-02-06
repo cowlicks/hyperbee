@@ -87,7 +87,7 @@ pub struct Child<M: CoreMem> {
 }
 
 #[derive(Clone, Debug)]
-/// A block off the Hypercore
+/// A block off the hypercore deserialized into the form we use in the BTree
 pub struct BlockEntry<M: CoreMem> {
     /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
     nodes: Vec<SharedNode<M>>,
@@ -137,6 +137,13 @@ impl<M: CoreMem> Child<M> {
     }
 }
 
+impl<M: CoreMem> Clone for Child<M> {
+    fn clone(&self) -> Self {
+        Self::new(self.seq, self.offset, self.node.clone())
+    }
+}
+
+/// Deserialize bytes from a Hypercore block into [`Node`]s.
 fn make_node_vec<B: Buf, M: CoreMem>(
     buf: B,
     blocks: Shared<Blocks<M>>,
@@ -216,16 +223,12 @@ impl<M: CoreMem> Children<M> {
         self.children.read().await.len()
     }
 
-    async fn get_children(&self) -> Vec<Child<M>> {
-        self.children.read().await.clone()
-    }
-
     async fn splice<R: RangeBounds<usize>, I: IntoIterator<Item = Child<M>>>(
         &self,
         range: R,
         replace_with: I,
     ) -> Vec<Child<M>> {
-        // leaf node do nothing
+        // Leaf node do nothing. Should we Err instead?
         if self.children.read().await.is_empty() {
             return vec![];
         }
@@ -289,16 +292,19 @@ fn test_inf() {
 }
 
 /// Descend through tree to the node nearest (or matching) the provided key
-/// Returns a tuple that describes the path we took. It looks like `(matched, node_path, index_path)`
-/// * `matched` is a bool that indicates if the key was matched
-/// * `node_path` is a `Vec` of nodes that we passed through, in order. Starting with the provided `node`
-/// argument, ending with last node.
-/// * `index_path` is a `Vec` of indexes which corresponds to the index of the child node that we
-/// passed through. If `matched` is true the matching key is at:
-/// ```Rust
-/// let matching_key = node_path.last()?.keys[index_path.last()?]
-/// ```
-// This will simplify extracting node/index in a bunch of places
+/// Return value describes the path to the key. It looks like:
+/// `(matched, path: Vec<(node, index)>)`
+///
+/// Here `matched` is a bool that indicates if the key was matched.
+/// The `path` is a `Vec` that describes the path to the key. Each item is a tuple `(node, inde)`.
+/// `path[0]` is the root of tree, and the last element would be final node,
+/// which is always a leaf if `matched == false`.
+/// In the `path` the `node` is a referenece to the node we passed through.
+/// The `index` is the child index to the next node in the path.
+/// In a leaf node, the `index` could be thought of as the gap between the node's keys where the provided
+/// `key` would be ineserted. Or for `matched = true` the index of the matched key in the nodes's
+/// keys.
+// TODO use binary search instead of iterating over keys
 #[tracing::instrument(skip(node))]
 async fn nearest_node<M: CoreMem, T>(
     node: SharedNode<M>,
@@ -345,6 +351,7 @@ where
                 return Ok((false, out_path));
             }
 
+            // continue to next node
             current_node.read().await.get_child(child_index).await?
         };
         current_node = next_node;
@@ -364,6 +371,7 @@ impl<M: CoreMem> Node<M> {
         self.children.children.read().await.len()
     }
 
+    /// The number of children between this node and a leaf
     pub async fn height(&self) -> Result<usize, HyperbeeError> {
         if self.n_children().await == 0 {
             Ok(1)
@@ -381,9 +389,10 @@ impl<M: CoreMem> Node<M> {
         }
     }
 
+    /// Serialize this node
     async fn to_level(&self) -> yolo_index::Level {
         let mut children = vec![];
-        for c in self.children.get_children().await.iter() {
+        for c in self.children.children.read().await.iter() {
             children.push(c.seq);
             children.push(c.offset);
         }
@@ -393,6 +402,7 @@ impl<M: CoreMem> Node<M> {
         }
     }
 
+    /// Get the key at the provided index
     #[tracing::instrument(skip(self))]
     async fn get_key(&mut self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
         let key = &mut self.keys[index];
@@ -415,8 +425,9 @@ impl<M: CoreMem> Node<M> {
         Ok(value)
     }
 
-    /// Use given index to get Key.seq, which points to the block in the core where this value
-    /// lives. Load that BlockEntry and return (Key.seq, BlockEntry.value)
+    // Use given index to get Key.seq, which points to the block in the core where this value
+    // lives. Load that BlockEntry and return (Key.seq, BlockEntry.value)
+    /// Get the value for the key at the provided index
     async fn get_value_of_key(
         &self,
         index: usize,
@@ -446,6 +457,7 @@ impl<M: CoreMem> Node<M> {
         }
     }
 
+    /// Get the child at the provided index
     async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
         self.children.get_child(index).await
     }
@@ -468,6 +480,7 @@ impl<M: CoreMem> BlockEntry<M> {
         })
     }
 
+    /// Get a [`Node`] from this [`BlockEntry`] at the provided `offset`.
     /// offset is the offset of the node within the hypercore block
     fn get_tree_node(&self, offset: u64) -> Result<SharedNode<M>, HyperbeeError> {
         Ok(self
@@ -482,13 +495,15 @@ impl<M: CoreMem> BlockEntry<M> {
 }
 
 impl<M: CoreMem> Hyperbee<M> {
-    /// Trying to duplicate Js Hb.version
+    /// The number of blocks in the hypercore.
+    /// The first block is always the header block so:
+    /// `version` would be the `seq` of the next block
+    /// `version - 1` is most recent block
     pub async fn version(&self) -> u64 {
         self.blocks.read().await.info().await.length
     }
-    /// Gets the root of the tree
-    /// enuser_header if true, write the hyperbee header onto the hypercore, if it does not exist
-    /// write_root: if true write an empty root node, if one does not exist
+    /// Gets the root of the tree.
+    /// When `ensure_header == true` write the hyperbee header onto the hypercore if it does not exist.
     pub async fn get_root(
         &mut self,
         ensure_header: bool,
@@ -531,6 +546,7 @@ impl<M: CoreMem> Hyperbee<M> {
         Ok(None)
     }
 
+    /// Write the header for the tree
     async fn ensure_header(&self) -> Result<bool, HyperbeeError> {
         if self.blocks.read().await.info().await.length != 0 {
             return Ok(false);
@@ -546,6 +562,7 @@ impl<M: CoreMem> Hyperbee<M> {
         Ok(true)
     }
 
+    /// Returs a string representing the structure of the tree showing the keys in each node
     pub async fn print(&mut self) -> Result<String, HyperbeeError> {
         let root = self
             .get_root(false)
@@ -553,6 +570,14 @@ impl<M: CoreMem> Hyperbee<M> {
             .ok_or(HyperbeeError::NoRootError)?;
         let out = traverse::print(root).await?;
         Ok(out)
+    }
+}
+
+impl<M: CoreMem> Clone for Hyperbee<M> {
+    fn clone(&self) -> Self {
+        Self {
+            blocks: self.blocks.clone(),
+        }
     }
 }
 
@@ -576,18 +601,4 @@ pub async fn load_from_storage_dir(
     Ok(HyperbeeBuilder::default()
         .blocks(Arc::new(RwLock::new(blocks)))
         .build()?)
-}
-
-impl<M: CoreMem> Clone for Hyperbee<M> {
-    fn clone(&self) -> Self {
-        Self {
-            blocks: self.blocks.clone(),
-        }
-    }
-}
-
-impl<M: CoreMem> Clone for Child<M> {
-    fn clone(&self) -> Self {
-        Self::new(self.seq, self.offset, self.node.clone())
-    }
 }
