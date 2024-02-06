@@ -1,6 +1,6 @@
 use crate::{
-    changes::Changes, nearest_node, put::propagate_changes_up_tree, Child, CoreMem, Hyperbee,
-    HyperbeeError, InfiniteKeys, Key, Node, NodePath, SharedNode, MAX_KEYS,
+    changes::Changes, min_keys, nearest_node, put::propagate_changes_up_tree, Child, CoreMem,
+    Hyperbee, HyperbeeError, InfiniteKeys, Key, Node, NodePath, SharedNode, MAX_KEYS,
 };
 
 /// When deleting from a B-Tree, we might need to [`Side::merge`] or [`Side::rotate`] to
@@ -334,7 +334,7 @@ async fn repair<M: CoreMem>(
         let father_ref = changes.add_changed_node(path.len(), cur_father.clone());
 
         // if no more nodes, or father does not need repair, we are done
-        if path.is_empty() || cur_father.read().await.keys.len() >= MAX_KEYS >> 1 {
+        if path.is_empty() || cur_father.read().await.keys.len() >= min_keys(MAX_KEYS) {
             break father_ref;
         }
 
@@ -408,7 +408,8 @@ impl<M: CoreMem> Hyperbee<M> {
 
         let (bottom_node, _) = path.pop().expect("if/else above ensures path is not empty");
         // if node is not root and is deficient
-        let child = if !path.is_empty() && bottom_node.read().await.keys.len() < MAX_KEYS >> 1 {
+        let child = if !path.is_empty() && bottom_node.read().await.keys.len() < min_keys(MAX_KEYS)
+        {
             repair(&mut path, MAX_KEYS, &mut changes).await?
         } else {
             child

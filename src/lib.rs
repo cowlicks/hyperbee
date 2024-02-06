@@ -36,6 +36,10 @@ impl<T: RandomAccess + Debug + Send> CoreMem for T {}
 static PROTOCOL: &str = "hyperbee";
 static MAX_KEYS: usize = 4;
 
+fn min_keys(max_keys: usize) -> usize {
+    max_keys >> 1
+}
+
 #[derive(Error, Debug)]
 pub enum HyperbeeError {
     #[error("There was an error in the underlying Hypercore")]

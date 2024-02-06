@@ -58,7 +58,7 @@ pub async fn check_node<M: CoreMem>(node: SharedNode<M>) {
         panic!("too many keys!");
     }
 
-    if n_keys < MAX_KEYS >> 1 {
+    if n_keys < min_keys(MAX_KEYS) {
         panic!("too few keys!");
     }
 
