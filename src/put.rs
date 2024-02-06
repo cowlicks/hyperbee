@@ -2,11 +2,10 @@ use std::sync::Arc;
 
 use super::{
     changes::Changes,
-    messages::{yolo_index, Node as NodeSchema, YoloIndex},
     nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, Key, Node, NodePath, SharedNode,
     MAX_KEYS,
 };
-use prost::Message;
+
 use tokio::sync::RwLock;
 use tracing::trace;
 
@@ -152,7 +151,7 @@ impl<M: CoreMem> Hyperbee<M> {
         changes.add_root(new_root);
         let outcome = self.blocks.read().await.add_changes(changes).await?;
 
-        return Ok((true, outcome.length));
+        Ok((true, outcome.length))
     }
 }
 

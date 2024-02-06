@@ -323,7 +323,7 @@ async fn repair<M: CoreMem>(
         let cur_father = repair_one(father, deficient_index, order, changes).await?;
         // if root empty use child
         if path.is_empty()
-            && cur_father.read().await.keys.len() == 0
+            && cur_father.read().await.keys.is_empty()
             && cur_father.read().await.n_children().await == 1
         {
             let new_root = cur_father.read().await.get_child(0).await?;
@@ -427,7 +427,7 @@ impl<M: CoreMem> Hyperbee<M> {
             .await?
             .expect("root is confirmed above");
         let root = root.read().await;
-        if root.keys.len() == 0 && root.n_children().await == 1 {
+        if root.keys.is_empty() && root.n_children().await == 1 {
             changes.overwrite_root(root.get_child(0).await?);
         }
 
