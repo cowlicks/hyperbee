@@ -3,7 +3,8 @@ use std::sync::Arc;
 use super::{
     changes::Changes,
     messages::{yolo_index, Node as NodeSchema, YoloIndex},
-    nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, Key, Node, SharedNode, MAX_KEYS,
+    nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, Key, Node, NodePath, SharedNode,
+    MAX_KEYS,
 };
 use prost::Message;
 use tokio::sync::RwLock;
@@ -16,7 +17,7 @@ use tracing::trace;
 #[tracing::instrument(skip(changes, path))]
 pub async fn propagate_changes_up_tree<M: CoreMem>(
     mut changes: Changes<M>,
-    mut path: Vec<(SharedNode<M>, usize)>,
+    mut path: NodePath<M>,
     new_child: Child<M>,
 ) -> Changes<M> {
     let mut cur_child = new_child;

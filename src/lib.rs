@@ -85,7 +85,7 @@ pub struct Child<M: CoreMem> {
 /// A block off the Hypercore
 pub struct BlockEntry<M: CoreMem> {
     /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
-    index: Pointers<M>,
+    nodes: Vec<SharedNode<M>>,
     /// NodeSchema::new(hypercore.get(seq)).key
     key: Vec<u8>,
     /// NodeSchema::new(hypercore.get(seq)).value
@@ -95,6 +95,7 @@ pub struct BlockEntry<M: CoreMem> {
 type Shared<T> = Arc<RwLock<T>>;
 type SharedNode<T> = Shared<Node<T>>;
 type SharedBlock<T> = Shared<BlockEntry<T>>;
+type NodePath<T> = Vec<(SharedNode<T>, usize)>;
 
 #[derive(Debug)]
 struct Children<M: CoreMem> {
@@ -114,17 +115,6 @@ pub struct Node<M: CoreMem> {
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
     pub blocks: Shared<Blocks<M>>,
-}
-
-#[derive(Clone, Debug)]
-struct Level<M: CoreMem> {
-    keys: Vec<Key>,
-    children: Vec<Child<M>>,
-}
-
-#[derive(Clone, Debug)]
-struct Pointers<M: CoreMem> {
-    levels: Vec<Level<M>>,
 }
 
 impl Key {
@@ -147,36 +137,26 @@ impl<M: CoreMem> Child<M> {
     }
 }
 
-impl<M: CoreMem> Level<M> {
-    fn new(keys: Vec<Key>, children: Vec<Child<M>>) -> Self {
-        Self { keys, children }
-    }
-}
-
-impl<M: CoreMem> Pointers<M> {
-    fn new<B: Buf>(buf: B) -> Result<Self, DecodeError> {
-        let levels: Vec<_> = YoloIndex::decode(buf)?
-            .levels
-            .iter()
-            .map(|level| {
-                let keys = level
-                    .keys
-                    .iter()
-                    .map(|k| Key::new(*k, Option::None, Option::None))
-                    .collect();
-                let mut children = vec![];
-                for i in (0..(level.children.len())).step_by(2) {
-                    children.push(Child::new(level.children[i], level.children[i + 1]));
-                }
-                Level::new(keys, children)
-            })
-            .collect();
-        Ok(Pointers { levels })
-    }
-
-    fn get(&self, i: usize) -> &Level<M> {
-        &self.levels[i]
-    }
+fn make_node_vec<B: Buf, M: CoreMem>(
+    buf: B,
+    blocks: Shared<Blocks<M>>,
+) -> Result<Vec<SharedNode<M>>, DecodeError> {
+    Ok(YoloIndex::decode(buf)?
+        .levels
+        .iter()
+        .map(|level| {
+            let keys = level
+                .keys
+                .iter()
+                .map(|k| Key::new(*k, Option::None, Option::None))
+                .collect();
+            let mut children = vec![];
+            for i in (0..(level.children.len())).step_by(2) {
+                children.push(Child::new(level.children[i], level.children[i + 1]));
+            }
+            Arc::new(RwLock::new(Node::new(keys, children, blocks.clone())))
+        })
+        .collect())
 }
 
 impl<M: CoreMem> Children<M> {
@@ -217,13 +197,13 @@ impl<M: CoreMem> Children<M> {
             }
             (child_ref.seq, child_ref.offset)
         };
-        let block = self.blocks.read().await.get(&seq).await?;
-        let node = Arc::new(RwLock::new(
-            block
-                .read()
-                .await
-                .get_tree_node(offset, self.blocks.clone())?,
-        ));
+        let block = self
+            .blocks
+            .read()
+            .await
+            .get(&seq, self.blocks.clone())
+            .await?;
+        let node = block.read().await.get_tree_node(offset)?;
         self.children.write().await[index].child_node = Some(node.clone());
         Ok(node)
     }
@@ -304,7 +284,6 @@ fn test_inf() {
     assert!(*b >= InfiniteKeys::Negative);
 }
 
-type NodePath<T> = Vec<(SharedNode<T>, usize)>;
 /// Descend through tree to the node nearest (or matching) the provided key
 /// Returns a tuple that describes the path we took. It looks like `(matched, node_path, index_path)`
 /// * `matched` is a bool that indicates if the key was matched
@@ -426,7 +405,7 @@ impl<M: CoreMem> Node<M> {
             .blocks
             .read()
             .await
-            .get(&key.seq)
+            .get(&key.seq, self.blocks.clone())
             .await?
             .read()
             .await
@@ -457,7 +436,7 @@ impl<M: CoreMem> Node<M> {
                 self.blocks
                     .read()
                     .await
-                    .get(seq)
+                    .get(seq, self.blocks.clone())
                     .await?
                     .read()
                     .await
@@ -481,29 +460,24 @@ impl<M: CoreMem> Node<M> {
 }
 
 impl<M: CoreMem> BlockEntry<M> {
-    fn new(entry: NodeSchema) -> Result<Self, HyperbeeError> {
+    fn new(entry: NodeSchema, blocks: Shared<Blocks<M>>) -> Result<Self, HyperbeeError> {
         Ok(BlockEntry {
-            index: Pointers::new(&entry.index[..])?,
+            nodes: make_node_vec(&entry.index[..], blocks)?,
             key: entry.key,
             value: entry.value,
         })
     }
 
     /// offset is the offset of the node within the hypercore block
-    fn get_tree_node(
-        &self,
-        offset: u64,
-        blocks: Shared<Blocks<M>>,
-    ) -> Result<Node<M>, HyperbeeError> {
-        let node_data = self.index.get(
-            usize::try_from(offset)
-                .map_err(|e| HyperbeeError::U64ToUsizeConversionError(offset, e))?,
-        );
-        Ok(Node::new(
-            node_data.keys.clone(),
-            node_data.children.clone(),
-            blocks,
-        ))
+    fn get_tree_node(&self, offset: u64) -> Result<SharedNode<M>, HyperbeeError> {
+        Ok(self
+            .nodes
+            .get(
+                usize::try_from(offset)
+                    .map_err(|e| HyperbeeError::U64ToUsizeConversionError(offset, e))?,
+            )
+            .expect("TODO when would we get the wrong offset?")
+            .clone())
     }
 }
 
@@ -528,12 +502,11 @@ impl<M: CoreMem> Hyperbee<M> {
             return Ok(None);
         }
         let root = blocks
-            .get(&(version - 1))
+            .get(&(version - 1), self.blocks.clone())
             .await?
             .read()
             .await
-            .get_tree_node(0, self.blocks.clone())?;
-        let root = Arc::new(RwLock::new(root));
+            .get_tree_node(0)?;
         Ok(Some(root))
     }
 
@@ -580,10 +553,6 @@ impl<M: CoreMem> Hyperbee<M> {
             .ok_or(HyperbeeError::NoRootError)?;
         let out = traverse::print(root).await?;
         Ok(out)
-    }
-
-    pub async fn print_blocks(&self) -> Result<String, HyperbeeError> {
-        self.blocks.read().await.format_core().await
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::{
     changes::Changes, nearest_node, put::propagate_changes_up_tree, Child, CoreMem, Hyperbee,
-    HyperbeeError, InfiniteKeys, Key, Node, SharedNode, MAX_KEYS,
+    HyperbeeError, InfiniteKeys, Key, Node, NodePath, SharedNode, MAX_KEYS,
 };
 
 /// When deleting from a B-Tree, we might need to [`Side::merge`] or [`Side::rotate`] to
@@ -309,7 +309,7 @@ async fn repair_one<M: CoreMem>(
 /// must be given a path who's last element has a deficient child...
 #[tracing::instrument(skip(path, changes))]
 async fn repair<M: CoreMem>(
-    path: &mut Vec<(SharedNode<M>, usize)>,
+    path: &mut NodePath<M>,
     order: usize,
     changes: &mut Changes<M>,
 ) -> Result<Child<M>, HyperbeeError> {

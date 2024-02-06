@@ -9,7 +9,7 @@ use crate::{
     BlockEntry, CoreMem, HyperbeeError, Shared, SharedBlock,
 };
 use prost::Message;
-use std::{collections::BTreeMap, io::Write, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Builder)]
 #[builder(pattern = "owned", derive(Debug))]
@@ -30,7 +30,11 @@ impl<M: CoreMem> Blocks<M> {
     /// when the provided `seq` is not in the Hypercore
     /// when the data in the Hypercore block cannot be decoded
     #[tracing::instrument(skip(self))]
-    pub async fn get(&self, seq: &u64) -> Result<Shared<BlockEntry<M>>, HyperbeeError> {
+    pub async fn get(
+        &self,
+        seq: &u64,
+        blocks: Shared<Self>,
+    ) -> Result<Shared<BlockEntry<M>>, HyperbeeError> {
         // check if seq is == self.core.info.length + 1
         // if so take changes and do something like:
         // changes.clone().to_block_entry()
@@ -40,7 +44,7 @@ impl<M: CoreMem> Blocks<M> {
         } else {
             trace!("from core");
             let block_entry = self
-                ._get_from_core(seq)
+                ._get_from_core(seq, blocks)
                 .await?
                 .ok_or(HyperbeeError::NoBlockAtSeqError(*seq))?;
             let block_entry = Arc::new(RwLock::new(block_entry));
@@ -52,11 +56,15 @@ impl<M: CoreMem> Blocks<M> {
         self.cache.read().await.get(seq).cloned()
     }
 
-    pub async fn _get_from_core(&self, seq: &u64) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
+    pub async fn _get_from_core(
+        &self,
+        seq: &u64,
+        blocks: Shared<Self>,
+    ) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
         match self.core.write().await.get(*seq).await? {
             Some(core_block) => {
                 let node = NodeSchema::decode(&core_block[..])?;
-                Ok(Some(BlockEntry::new(node)?))
+                Ok(Some(BlockEntry::new(node, blocks)?))
             }
             None => Ok(None),
         }
@@ -68,18 +76,7 @@ impl<M: CoreMem> Blocks<M> {
     pub async fn append(&self, value: &[u8]) -> Result<AppendOutcome, HyperbeeError> {
         Ok(self.core.write().await.append(value).await?)
     }
-    pub async fn format_core(&self) -> Result<String, HyperbeeError> {
-        let l = {
-            let core = self.core.read().await;
-            core.info().length
-        };
-        let mut out = Vec::new();
-        for i in 1..l {
-            let x = self._get_from_core(&i).await;
-            let _ = write!(out, "{:?}\n", x.unwrap().unwrap());
-        }
-        Ok(String::from_utf8(out).unwrap())
-    }
+
     #[tracing::instrument(skip(self, changes))]
     pub async fn add_changes(&self, changes: Changes<M>) -> Result<AppendOutcome, HyperbeeError> {
         let Changes {
