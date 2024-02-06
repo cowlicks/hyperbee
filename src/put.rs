@@ -108,7 +108,7 @@ impl<M: CoreMem> Hyperbee<M> {
             let (cur_node, cur_index) = match path.pop() {
                 None => {
                     trace!(
-                        "creating a new root with key = [{}] and children = [{:#?}]",
+                        "creating a new root with key = [{:#?}] and children = [{:#?}]",
                         &cur_key,
                         &children
                     );

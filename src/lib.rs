@@ -20,7 +20,7 @@ use thiserror::Error;
 
 use std::{
     cmp::Ordering,
-    fmt::{Debug, Display},
+    fmt::Debug,
     num::TryFromIntError,
     ops::{Range, RangeBounds},
     path::Path,
@@ -576,18 +576,6 @@ pub async fn load_from_storage_dir(
     Ok(HyperbeeBuilder::default()
         .blocks(Arc::new(RwLock::new(blocks)))
         .build()?)
-}
-
-impl Display for Key {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.keys_key {
-            Some(val_vec) => match String::from_utf8(val_vec.clone()) {
-                Ok(val_str) => write!(f, "key.key as utf8 {val_str}"),
-                Err(_) => write!(f, "key.key as Vec {val_vec:?}"),
-            },
-            None => write!(f, "key.seq @ {}", self.seq),
-        }
-    }
 }
 
 impl<M: CoreMem> Clone for Hyperbee<M> {

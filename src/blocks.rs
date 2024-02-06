@@ -11,18 +11,12 @@ use crate::{
 use prost::Message;
 use std::{collections::BTreeMap, sync::Arc};
 
-#[derive(Builder)]
+#[derive(Builder, Debug)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Blocks<M: CoreMem> {
     #[builder(default)]
     cache: Shared<BTreeMap<u64, SharedBlock<M>>>,
     core: Shared<Hypercore<M>>,
-}
-
-impl<M: CoreMem> std::fmt::Debug for Blocks<M> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Blocks").finish()
-    }
 }
 
 impl<M: CoreMem> Blocks<M> {
