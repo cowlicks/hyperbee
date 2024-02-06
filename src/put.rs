@@ -10,10 +10,8 @@ use prost::Message;
 use tokio::sync::RwLock;
 use tracing::trace;
 
-/// Add the given `children` to the next node in `node_path` at the next index in `index_path`.
-/// This creates a new node, with which we call:
-/// propagate_changes_up_tree(changes, node_path, node_index, vec![new_node]);
-/// This continues until we reach the root.
+/// After making changes to a tree, this function updates parent references all the way to the
+/// root.
 #[tracing::instrument(skip(changes, path))]
 pub async fn propagate_changes_up_tree<M: CoreMem>(
     mut changes: Changes<M>,
@@ -24,16 +22,18 @@ pub async fn propagate_changes_up_tree<M: CoreMem>(
     loop {
         // this should add children to node
         // add node to changes, as root or node, and redo loop if not root
-        let (node, index) = path.pop().expect("should be checked before call ");
+        let (node, index) = match path.pop() {
+            None => return changes,
+            Some(x) => x,
+        };
         node.read().await.children.children.write().await[index] = cur_child;
         cur_child = changes.add_changed_node(path.len(), node.clone());
-        if path.is_empty() {
-            return changes;
-        }
     }
 }
 
 impl<M: CoreMem> Node<M> {
+    /// Split an overfilled node into two nodes and a a key.
+    /// Returning: `(left_lower_node, middle_key, right_higher_node)`
     #[tracing::instrument(skip(self))]
     async fn split(&mut self) -> (SharedNode<M>, Key, SharedNode<M>) {
         let key_median_index = self.keys.len() >> 1;
@@ -63,113 +63,96 @@ impl<M: CoreMem> Node<M> {
     }
 }
 impl<M: CoreMem> Hyperbee<M> {
+    /// Insert the provide key and value into the tree
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub async fn put(
         &mut self,
         key: Vec<u8>,
         value: Option<Vec<u8>>,
     ) -> Result<(bool, u64), HyperbeeError> {
-        // Get root and handle when it don't exist
-        let root = match self.get_root(true).await? {
-            // No root, create it. Insert key & value. Return.
-            // NB: we could do two things here:
-            // 1 Create root with the provided key/value and add to HC
-            // 2 Create empty root add to HC then Do HB.put which uses the empty root to add new
-            // key/value
-            // We do 1.
-            None => {
-                let p = YoloIndex {
-                    levels: vec![yolo_index::Level {
-                        keys: vec![1],
-                        children: vec![],
-                    }],
-                };
-                let mut index = vec![];
-                YoloIndex::encode(&p, &mut index).map_err(HyperbeeError::YoloIndexEncodingError)?;
-                let node_schema = NodeSchema { key, value, index };
-                let mut block = vec![];
-                NodeSchema::encode(&node_schema, &mut block)
-                    .map_err(HyperbeeError::NodeEncodingError)?;
-                self.blocks.read().await.append(&block).await?;
-                return Ok((false, 1));
-            }
-            Some(node) => node,
-        };
-
-        let (matched, mut path) = nearest_node(root, &key[..]).await?;
+        // NB: do this before we call `version` because it can add the header block
+        let maybe_root = self.get_root(true).await?;
 
         let seq = self.version().await;
         let mut changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
-
-        let mut cur_key = Key::new(seq, Some(key), Some(value.clone()));
+        let mut cur_key = Key::new(seq, Some(key.clone()), Some(value.clone()));
         let mut children: Vec<Child<M>> = vec![];
 
-        loop {
-            let (cur_node, cur_index) = match path.pop() {
-                None => {
-                    trace!(
-                        "creating a new root with key = [{:#?}] and children = [{:#?}]",
-                        &cur_key,
-                        &children
-                    );
-                    let new_root = Arc::new(RwLock::new(Node::new(
-                        vec![cur_key.clone()],
-                        children,
-                        self.blocks.clone(),
-                    )));
-
-                    // create a new root
-                    // put chlidren in node_schema then put the below thing
-                    changes.add_root(new_root);
-                    let outcome = self.blocks.read().await.add_changes(changes).await?;
-
-                    return Ok((true, outcome.length));
-                }
-                Some(cur) => cur,
+        'new_root: loop {
+            // Get root and handle when it don't exist
+            let root = match maybe_root {
+                None => break 'new_root,
+                Some(node) => node,
             };
 
-            // If this is a replacemet but we have not replaced yet
-            // OR there is room on this node to insert the current key
-            let room_for_more_keys = cur_node.read().await.keys.len() < MAX_KEYS;
-            if matched || room_for_more_keys {
-                trace!("room for more keys or key matched");
-                let stop = match matched {
-                    true => cur_index + 1,
-                    false => cur_index,
+            let (matched, mut path) = nearest_node(root, &key[..]).await?;
+
+            loop {
+                let (cur_node, cur_index) = match path.pop() {
+                    None => break 'new_root,
+                    Some(cur) => cur,
                 };
+
+                // If this is a replacemet but we have not replaced yet
+                // OR there is room on this node to insert the current key
+                let room_for_more_keys = cur_node.read().await.keys.len() < MAX_KEYS;
+                if matched || room_for_more_keys {
+                    trace!("room for more keys or key matched");
+                    let stop = match matched {
+                        true => cur_index + 1,
+                        false => cur_index,
+                    };
+                    cur_node
+                        .write()
+                        .await
+                        ._insert(cur_key, children, cur_index..stop)
+                        .await;
+
+                    let child = changes.add_changed_node(path.len(), cur_node.clone());
+                    if !path.is_empty() {
+                        trace!("inserted into some child");
+                        let changes = propagate_changes_up_tree(changes, path, child).await;
+                        let outcome = self.blocks.read().await.add_changes(changes).await?;
+                        return Ok((matched, outcome.length));
+                    };
+
+                    let outcome = self.blocks.read().await.add_changes(changes).await?;
+                    return Ok((matched, outcome.length));
+                }
+
+                // No room in leaf for another key. So we split and continue.
                 cur_node
                     .write()
                     .await
-                    ._insert(cur_key, children, cur_index..stop)
+                    ._insert(cur_key, children, cur_index..cur_index)
                     .await;
 
-                let child = changes.add_changed_node(path.len(), cur_node.clone());
-                if !path.is_empty() {
-                    trace!("inserted into some child");
-                    let changes = propagate_changes_up_tree(changes, path, child).await;
-                    let outcome = self.blocks.read().await.add_changes(changes).await?;
-                    return Ok((matched, outcome.length));
-                };
+                let (left, mid_key, right) = cur_node.write().await.split().await;
 
-                let outcome = self.blocks.read().await.add_changes(changes).await?;
-                return Ok((matched, outcome.length));
+                children = vec![
+                    changes.add_node(left.clone()),
+                    changes.add_node(right.clone()),
+                ];
+                cur_key = mid_key;
             }
-
-            // No room in leaf for another key. So we split.
-            cur_node
-                .write()
-                .await
-                ._insert(cur_key, children, cur_index..cur_index)
-                .await;
-
-            let (left, mid_key, right) = cur_node.write().await.split().await;
-
-            children = vec![
-                changes.add_node(left.clone()),
-                changes.add_node(right.clone()),
-            ];
-            cur_key = mid_key;
         }
+        trace!(
+            "creating a new root with key = [{:#?}] and children = [{:#?}]",
+            &cur_key,
+            &children
+        );
+        let new_root = Arc::new(RwLock::new(Node::new(
+            vec![cur_key.clone()],
+            children,
+            self.blocks.clone(),
+        )));
+
+        // create a new root
+        // put chlidren in node_schema then put the below thing
+        changes.add_root(new_root);
+        let outcome = self.blocks.read().await.add_changes(changes).await?;
+
+        return Ok((true, outcome.length));
     }
 }
 
@@ -283,7 +266,6 @@ mod test {
             hb = check_tree(hb).await?;
             let _ = hb.print().await?;
         }
-        println!("{}", hb.print().await?);
         Ok(())
     }
 }
