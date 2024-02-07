@@ -381,9 +381,13 @@ impl<M: CoreMem> Node<M> {
         self.children.children.read().await.len()
     }
 
-    /// The number of children between this node and a leaf
+    async fn is_leaf(&self) -> bool {
+        self.n_children().await == 0
+    }
+
+    /// The number of children between this node and a leaf + 1
     pub async fn height(&self) -> Result<usize, HyperbeeError> {
-        if self.n_children().await == 0 {
+        if self.is_leaf().await {
             Ok(1)
         } else {
             let mut out = 1;

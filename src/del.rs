@@ -66,7 +66,7 @@ impl Side {
     }
 
     async fn get_donor_child<M: CoreMem>(&self, donor: SharedNode<M>) -> Option<Child<M>> {
-        if donor.read().await.n_children().await == 0 {
+        if donor.read().await.is_leaf().await {
             return None;
         }
         Some(match self {
@@ -142,12 +142,11 @@ impl Side {
         deficient_index: usize,
         order: usize,
     ) -> Result<bool, HyperbeeError> {
-        let donor_index = match self.get_donor_index(father.clone(), deficient_index).await {
-            None => return Ok(false),
-            Some(i) => i,
+        let Some(donor_index) = self.get_donor_index(father.clone(), deficient_index).await else {
+            return Ok(false);
         };
 
-        Ok((order >> 1)
+        Ok((min_keys(order))
             < father
                 .read()
                 .await
@@ -367,7 +366,7 @@ impl<M: CoreMem> Hyperbee<M> {
         let (cur_node, cur_index) = path.pop().unwrap();
 
         // remove the key from the node
-        cur_node.write().await.remove_key(cur_index);
+        cur_node.write().await.keys.remove(cur_index);
         let child = if cur_node.read().await.is_leaf().await {
             let child_ref = changes.add_changed_node(path.len(), cur_node.clone());
             path.push((cur_node.clone(), cur_index));
@@ -430,15 +429,6 @@ impl<M: CoreMem> Hyperbee<M> {
 
         self.blocks.read().await.add_changes(changes).await?;
         Ok(true)
-    }
-}
-
-impl<M: CoreMem> Node<M> {
-    fn remove_key(&mut self, index: usize) -> Key {
-        self.keys.remove(index)
-    }
-    async fn is_leaf(&self) -> bool {
-        self.n_children().await == 0
     }
 }
 
