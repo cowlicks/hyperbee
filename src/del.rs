@@ -3,6 +3,9 @@ use crate::{
     Hyperbee, HyperbeeError, InfiniteKeys, Key, Node, NodePath, SharedNode, MAX_KEYS,
 };
 
+use tracing::info;
+use Side::{Left, Right};
+
 /// When deleting from a B-Tree, we might need to [`Side::merge`] or [`Side::rotate`] to
 /// maintain the invariants of the tree. These have a "side" or handedness depending on which
 /// way we rotate/merge. The methods on this impl help simplify that.
@@ -14,9 +17,6 @@ enum Side {
     /// Toward bigger values.
     Right,
 }
-
-use tracing::info;
-use Side::{Left, Right};
 // TODO consider some trait on  node/children/keys to make the playing with entries easier
 
 /// Glossary
@@ -31,17 +31,18 @@ impl Side {
         }
     }
 
-    // TODO result not needed
     async fn get_donor_index<M: CoreMem>(
         &self,
         father: SharedNode<M>,
         deficient_index: usize,
-    ) -> Result<Option<usize>, HyperbeeError> {
+    ) -> Option<usize> {
+        // TODO check this cast makes sense
         let donor_index = deficient_index as isize + self.val();
         if donor_index < 0 || ((donor_index as usize) >= father.read().await.n_children().await) {
-            return Ok(None);
+            return None;
         }
-        Ok(Some(donor_index as usize))
+
+        Some(donor_index as usize)
     }
 
     /// In both rotation and merge we need a key from the father
@@ -93,7 +94,7 @@ impl Side {
             .write()
             .await
             .keys
-            .splice(key_index..(key_index + 1), vec![key])
+            .splice(key_index..=key_index, vec![key])
             .collect::<Vec<Key>>()
             .pop()
             .expect("one val removed in splice")
@@ -141,10 +142,7 @@ impl Side {
         deficient_index: usize,
         order: usize,
     ) -> Result<bool, HyperbeeError> {
-        let donor_index = match self
-            .get_donor_index(father.clone(), deficient_index)
-            .await?
-        {
+        let donor_index = match self.get_donor_index(father.clone(), deficient_index).await {
             None => return Ok(false),
             Some(i) => i,
         };
@@ -169,7 +167,7 @@ impl Side {
     ) -> Result<SharedNode<M>, HyperbeeError> {
         let donor_index = self
             .get_donor_index(father.clone(), deficient_index)
-            .await?
+            .await
             .expect("should already be checked");
 
         let donor = father.read().await.get_child(donor_index).await?;
@@ -219,7 +217,7 @@ impl Side {
     ) -> Result<SharedNode<M>, HyperbeeError> {
         let donor_index = self
             .get_donor_index(father.clone(), deficient_index)
-            .await?
+            .await
             .expect("should already be checked");
 
         // Get donor child an deficient child  ordered from lowest to highest.
@@ -245,7 +243,7 @@ impl Side {
             .read()
             .await
             .children
-            .splice(right_child_index..(right_child_index + 1), vec![])
+            .splice(right_child_index..=right_child_index, vec![])
             .await;
 
         // Move donated key from father and RHS keys into LHS
@@ -351,9 +349,8 @@ async fn repair<M: CoreMem>(
 
 impl<M: CoreMem> Hyperbee<M> {
     pub async fn del(&mut self, key: &[u8]) -> Result<bool, HyperbeeError> {
-        let root = match self.get_root(false).await? {
-            Some(r) => r,
-            None => return Ok(false),
+        let Some(root) = self.get_root(false).await? else {
+            return Ok(false);
         };
 
         let (matched, mut path) = nearest_node(root, key).await?;
@@ -370,7 +367,7 @@ impl<M: CoreMem> Hyperbee<M> {
         let (cur_node, cur_index) = path.pop().unwrap();
 
         // remove the key from the node
-        cur_node.write().await.remove_key(cur_index).await;
+        cur_node.write().await.remove_key(cur_index);
         let child = if cur_node.read().await.is_leaf().await {
             let child_ref = changes.add_changed_node(path.len(), cur_node.clone());
             path.push((cur_node.clone(), cur_index));
@@ -416,10 +413,10 @@ impl<M: CoreMem> Hyperbee<M> {
         };
 
         // if not root propagate changes
-        let mut changes = if !path.is_empty() {
-            propagate_changes_up_tree(changes, path, child).await
-        } else {
+        let mut changes = if path.is_empty() {
             changes
+        } else {
+            propagate_changes_up_tree(changes, path, child).await
         };
 
         let root = self
@@ -437,7 +434,7 @@ impl<M: CoreMem> Hyperbee<M> {
 }
 
 impl<M: CoreMem> Node<M> {
-    async fn remove_key(&mut self, index: usize) -> Key {
+    fn remove_key(&mut self, index: usize) -> Key {
         self.keys.remove(index)
     }
     async fn is_leaf(&self) -> bool {

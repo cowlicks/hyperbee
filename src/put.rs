@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use super::{
-    changes::Changes,
-    nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, Key, Node, NodePath, SharedNode,
-    MAX_KEYS,
+    changes::Changes, nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, Key, Node, NodePath,
+    SharedNode, MAX_KEYS,
 };
 
 use tokio::sync::RwLock;
