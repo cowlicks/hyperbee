@@ -13,32 +13,32 @@ use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Builder, Debug)]
 #[builder(pattern = "owned", derive(Debug))]
+/// Interface to the underlying Hypercore
 pub struct Blocks<M: CoreMem> {
     #[builder(default)]
+    // TODO make the cache smarter. Allow setting max size and strategy
     cache: Shared<BTreeMap<u64, Shared<BlockEntry<M>>>>,
     core: Shared<Hypercore<M>>,
 }
 
 impl<M: CoreMem> Blocks<M> {
+    /// Get a BlockEntry for the given
     /// # Errors
     /// when the provided `seq` is not in the Hypercore
     /// when the data in the Hypercore block cannot be decoded
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, blocks))]
     pub async fn get(
         &self,
         seq: &u64,
         blocks: Shared<Self>,
     ) -> Result<Shared<BlockEntry<M>>, HyperbeeError> {
-        // check if seq is == self.core.info.length + 1
-        // if so take changes and do something like:
-        // changes.clone().to_block_entry()
-        if let Some(block) = self._get_from_cache(seq).await {
+        if let Some(block) = self.get_from_cache(seq).await {
             trace!("from cache");
             Ok(block)
         } else {
-            trace!("from core");
+            trace!("from Hypercore");
             let block_entry = self
-                ._get_from_core(seq, blocks)
+                .get_from_core(seq, blocks)
                 .await?
                 .ok_or(HyperbeeError::NoBlockAtSeqError(*seq))?;
             let block_entry = Arc::new(RwLock::new(block_entry));
@@ -46,11 +46,11 @@ impl<M: CoreMem> Blocks<M> {
             Ok(block_entry)
         }
     }
-    async fn _get_from_cache(&self, seq: &u64) -> Option<Shared<BlockEntry<M>>> {
+    async fn get_from_cache(&self, seq: &u64) -> Option<Shared<BlockEntry<M>>> {
         self.cache.read().await.get(seq).cloned()
     }
 
-    pub async fn _get_from_core(
+    async fn get_from_core(
         &self,
         seq: &u64,
         blocks: Shared<Self>,
@@ -67,11 +67,14 @@ impl<M: CoreMem> Blocks<M> {
     pub async fn info(&self) -> hypercore::Info {
         self.core.read().await.info()
     }
+
     pub async fn append(&self, value: &[u8]) -> Result<AppendOutcome, HyperbeeError> {
         Ok(self.core.write().await.append(value).await?)
     }
 
     #[tracing::instrument(skip(self, changes))]
+    /// Commit [`Changes`] to the Hypercore
+    // TODO create a BlockEntry from changes and add it to self.cache
     pub async fn add_changes(&self, changes: Changes<M>) -> Result<AppendOutcome, HyperbeeError> {
         let Changes {
             key,
