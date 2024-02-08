@@ -8,6 +8,7 @@ pub mod messages {
 pub mod blocks;
 mod changes;
 pub mod del;
+mod keys;
 pub mod put;
 mod test;
 pub mod traverse;
@@ -21,7 +22,6 @@ use random_access_storage::RandomAccess;
 use thiserror::Error;
 
 use std::{
-    cmp::Ordering,
     fmt::Debug,
     num::TryFromIntError,
     ops::{Range, RangeBounds},
@@ -253,54 +253,6 @@ impl<M: CoreMem> Children<M> {
     async fn is_empty(&self) -> bool {
         self.children.read().await.is_empty()
     }
-}
-
-// TODO move to own module file
-#[derive(Debug)]
-pub enum InfiniteKeys {
-    Positive,
-    Negative,
-}
-use InfiniteKeys::{Negative, Positive};
-
-impl PartialEq<[u8]> for InfiniteKeys {
-    fn eq(&self, _other: &[u8]) -> bool {
-        false
-    }
-}
-
-impl PartialEq<InfiniteKeys> for [u8] {
-    fn eq(&self, _other: &InfiniteKeys) -> bool {
-        false
-    }
-}
-
-impl PartialOrd<[u8]> for InfiniteKeys {
-    fn partial_cmp(&self, _other: &[u8]) -> Option<std::cmp::Ordering> {
-        Some(match self {
-            Positive => Ordering::Greater,
-            Negative => Ordering::Less,
-        })
-    }
-}
-
-impl PartialOrd<InfiniteKeys> for [u8] {
-    fn partial_cmp(&self, other: &InfiniteKeys) -> Option<Ordering> {
-        Some(match other {
-            Positive => Ordering::Less,
-            Negative => Ordering::Greater,
-        })
-    }
-}
-
-#[test]
-fn test_inf() {
-    let a: Vec<u8> = vec![1, 2, 3];
-    let b: &[u8] = &[5, 6, 7];
-    assert!(a[..] < InfiniteKeys::Positive);
-    assert!(*b < InfiniteKeys::Positive);
-    assert!(a[..] >= InfiniteKeys::Negative);
-    assert!(*b >= InfiniteKeys::Negative);
 }
 
 /// Descend through tree to the node nearest (or matching) the provided key
