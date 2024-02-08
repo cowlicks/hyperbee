@@ -2,6 +2,7 @@ use crate::{Child, CoreMem, SharedNode};
 
 #[derive(Debug, Default)]
 /// Structure to store in-progress changes to the [`Hyperbee`]
+/// NB: because of how hyperbee-js works, we need to distinguish between root/non-root nodes.
 pub struct Changes<M: CoreMem> {
     seq: u64,
     pub key: Vec<u8>,
@@ -32,10 +33,13 @@ impl<M: CoreMem> Changes<M> {
         Child::new(self.seq, offset, Some(node))
     }
 
+    /// Should only be used when [`Hyperbee::del`] causes a dangling root
     pub fn overwrite_root(&mut self, root: SharedNode<M>) -> Child<M> {
         self.root = Some(root.clone());
         Child::new(self.seq, 0, Some(root))
     }
+
+    /// Add changed root
     pub fn add_root(&mut self, root: SharedNode<M>) -> Child<M> {
         if self.root.is_some() {
             panic!("We should never be replacing a root on a changes");
@@ -43,6 +47,7 @@ impl<M: CoreMem> Changes<M> {
         self.overwrite_root(root)
     }
 
+    /// adds a changed node and handles when the node should be used as the root
     pub fn add_changed_node(&mut self, path_len: usize, node: SharedNode<M>) -> Child<M> {
         if path_len == 0 {
             self.add_root(node)
