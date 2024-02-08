@@ -1,4 +1,5 @@
 use std::{
+    fmt::Debug,
     future::Future,
     pin::Pin,
     task::{Context, Poll},
@@ -7,14 +8,29 @@ use std::{
 use futures_lite::{future::FutureExt, StreamExt};
 use tokio_stream::Stream;
 
-use crate::{CoreMem, HyperbeeError, SharedNode};
+use crate::{keys::InfiniteKeys, CoreMem, HyperbeeError, SharedNode};
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
+/// Result<(Key's key, (seq, Key's value))>
 type KeyData = Result<(Vec<u8>, (u64, Option<Vec<u8>>)), HyperbeeError>;
 type TreeItem<M> = (KeyData, SharedNode<M>);
 
+pub struct TraverseConfig<T: PartialOrd<[u8]> + Debug + ?Sized + 'static> {
+    min_value: &'static T,
+    greter_than_or_equal_to: bool,
+    max_value: &'static T,
+    less_than_or_equal_to: bool,
+}
+
+static DEFAULT_TRAVERSE: TraverseConfig<InfiniteKeys> = TraverseConfig {
+    min_value: &InfiniteKeys::Negative,
+    greter_than_or_equal_to: true,
+    max_value: &InfiniteKeys::Positive,
+    less_than_or_equal_to: true,
+};
 // TODO add options for gt lt gte lte, reverse, and versions for just key/seq
+// TODO add options for just yielding keys without value
 /// Struct used for iterating over hyperbee with a Stream.
 /// Each iteration yields the key it's value, and the "seq" for the value (the index of the value
 /// in the hypercore).
