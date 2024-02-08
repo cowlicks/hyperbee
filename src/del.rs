@@ -24,25 +24,33 @@ enum Side {
 /// deficient_index - index in the father of the deficient child
 /// donor - the child of the father that donates to the deficint child
 impl Side {
-    const fn val(&self) -> isize {
-        match *self {
-            Right => 1,
-            Left => -1,
-        }
-    }
-
+    // TODO handle usize wrap around
+    /// This is just:
+    /// match self { Right => index + 1, Left => index - 1 }
+    /// but with bounds checking
     async fn get_donor_index<M: CoreMem>(
         &self,
         father: SharedNode<M>,
         deficient_index: usize,
     ) -> Option<usize> {
-        // TODO check this cast makes sense
-        let donor_index = deficient_index as isize + self.val();
-        if donor_index < 0 || ((donor_index as usize) >= father.read().await.n_children().await) {
-            return None;
+        match *self {
+            Left => {
+                if deficient_index == 0 {
+                    None
+                } else {
+                    Some(deficient_index - 1)
+                }
+            }
+            Right => {
+                let donor_index = deficient_index + 1;
+                let n_children = father.read().await.n_children().await;
+                if donor_index >= n_children {
+                    None
+                } else {
+                    Some(donor_index)
+                }
+            }
         }
-
-        Some(donor_index as usize)
     }
 
     /// In both rotation and merge we need a key from the father
@@ -141,13 +149,13 @@ impl Side {
         father: SharedNode<M>,
         deficient_index: usize,
         order: usize,
-    ) -> Result<bool, HyperbeeError> {
+    ) -> Result<Option<usize>, HyperbeeError> {
         let Some(donor_index) = self.get_donor_index(father.clone(), deficient_index).await else {
-            return Ok(false);
+            return Ok(None);
         };
 
-        Ok((min_keys(order))
-            < father
+        let can = min_keys(order)
+            < (father
                 .read()
                 .await
                 .get_child(donor_index)
@@ -155,20 +163,21 @@ impl Side {
                 .read()
                 .await
                 .keys
-                .len())
+                .len());
+        if can {
+            Ok(Some(donor_index))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn rotate<M: CoreMem>(
         &self,
         father: SharedNode<M>,
         deficient_index: usize,
+        donor_index: usize,
         changes: &mut Changes<M>,
     ) -> Result<SharedNode<M>, HyperbeeError> {
-        let donor_index = self
-            .get_donor_index(father.clone(), deficient_index)
-            .await
-            .expect("should already be checked");
-
         let donor = father.read().await.get_child(donor_index).await?;
         // pull donated parts out of donor
         let donated_key = self.get_donor_key(donor.clone()).await;
@@ -199,25 +208,34 @@ impl Side {
         Ok(father)
     }
 
-    async fn can_merge<M: CoreMem>(&self, father: SharedNode<M>, deficient_index: usize) -> bool {
-        let n_children = father.read().await.n_children().await;
-        match self {
-            Right => deficient_index + 1 < n_children,
-            Left => deficient_index > 0,
-        }
+    async fn maybe_rotate<M: CoreMem>(
+        &self,
+        father: SharedNode<M>,
+        deficient_index: usize,
+        order: usize,
+        changes: &mut Changes<M>,
+    ) -> Result<Option<SharedNode<M>>, HyperbeeError> {
+        let Some(donor_index) = self.can_rotate(father.clone(), deficient_index, order).await? else {
+            return Ok(None);
+        };
+        Ok(Some(
+            self.rotate(father, deficient_index, donor_index, changes)
+                .await?,
+        ))
     }
 
     #[tracing::instrument(skip(self, father, changes))]
-    async fn merge<M: CoreMem>(
+    async fn maybe_merge<M: CoreMem>(
         &self,
         father: SharedNode<M>,
         deficient_index: usize,
         changes: &mut Changes<M>,
-    ) -> Result<SharedNode<M>, HyperbeeError> {
-        let donor_index = self
+    ) -> Result<Option<SharedNode<M>>, HyperbeeError> {
+        let Some(donor_index) = self
             .get_donor_index(father.clone(), deficient_index)
-            .await
-            .expect("should already be checked");
+            .await else {
+                return Ok(None);
+            };
 
         // Get donor child an deficient child  ordered from lowest to highest.
         // Left lower, right higher
@@ -271,7 +289,7 @@ impl Side {
             .children
             .splice((right_child_index - 1)..(right_child_index), vec![left_ref])
             .await;
-        Ok(father)
+        Ok(Some(father))
     }
 }
 
@@ -282,27 +300,29 @@ async fn repair_one<M: CoreMem>(
     order: usize,
     changes: &mut Changes<M>,
 ) -> Result<SharedNode<M>, HyperbeeError> {
-    if Right
-        .can_rotate(father.clone(), deficient_index, order)
+    if let Some(res) = Right
+        .maybe_rotate(father.clone(), deficient_index, order, changes)
         .await?
     {
-        info!("Repair by rotating from Right");
-        return Right.rotate(father.clone(), deficient_index, changes).await;
+        return Ok(res);
     }
-    if Left
-        .can_rotate(father.clone(), deficient_index, order)
+    if let Some(res) = Left
+        .maybe_rotate(father.clone(), deficient_index, order, changes)
         .await?
     {
-        info!("Repair by rotating from Left");
-        return Left.rotate(father.clone(), deficient_index, changes).await;
+        return Ok(res);
     }
-    if Right.can_merge(father.clone(), deficient_index).await {
-        info!("Repair by merging from Right");
-        return Right.merge(father.clone(), deficient_index, changes).await;
+    if let Some(res) = Right
+        .maybe_merge(father.clone(), deficient_index, changes)
+        .await?
+    {
+        return Ok(res);
     }
-    if Left.can_merge(father.clone(), deficient_index).await {
-        info!("Repair by merging from Left");
-        return Left.merge(father.clone(), deficient_index, changes).await;
+    if let Some(res) = Left
+        .maybe_merge(father.clone(), deficient_index, changes)
+        .await?
+    {
+        return Ok(res);
     }
     panic!("this should never happen");
 }
