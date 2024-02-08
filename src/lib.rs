@@ -1,5 +1,7 @@
-/// Rust version of [hyperbee](https://github.com/holepunchto/hyperbee)
-/// A B-tree built on top of Hypercore.
+//! Rust version of [hyperbee](https://github.com/holepunchto/hyperbee)
+//! A B-tree built on top of Hypercore.
+// TODO add feature for nice display of keys block entry etc
+
 pub mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
