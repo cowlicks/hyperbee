@@ -1,9 +1,8 @@
 use crate::{
     changes::Changes, min_keys, nearest_node, put::propagate_changes_up_tree, Child, CoreMem,
-    Hyperbee, HyperbeeError, InfiniteKeys, Key, Node, NodePath, SharedNode, MAX_KEYS,
+    Hyperbee, HyperbeeError, InfiniteKeys, Key, NodePath, SharedNode, MAX_KEYS,
 };
 
-use tracing::info;
 use Side::{Left, Right};
 
 /// When deleting from a B-Tree, we might need to [`Side::merge`] or [`Side::rotate`] to
@@ -460,41 +459,33 @@ impl<M: CoreMem> Hyperbee<M> {
 /// There are a few checks we (should) do for each unit test here
 /// * Check the `del`'d element is actually gone with ~hb.get
 /// * Run check_tree after del to make sure tree still has all invariants
-/// * Check expected final shape of the entire tree. Probably with hb.print() == expected
+/// * TODO Check expected final shape of the entire tree. Probably with hb.print() == expected
+/// * TODO Compare structure with hyperbees-js (do this in integration tests
 ///
-/// enumeration of tests:
-/// no-exists
-/// (all following exist)
+/// rough enumeration of possible test cases
 ///
-/// leaf no-underflow
-/// internal no-underflow
-/// root no-underflow
+/// key exists y/n
+/// underflow y/n
+/// deleted from: leaf, internal, root
+/// how far up tree repairs are needed: once, some, all
+/// kind of repair: rotate, merge
+/// repair direction: left, right
 ///
-///for x of (leaf, internal, root) do
+/// Basic cases:
+/// key does not exist.
+/// key exists but no underflow with key in: root, internal, leaf
+///
+/// The rest of the cases multiply:
+///
+/// for x of (leaf, internal, root) do
 ///   for y of (once, some, all) do
 ///       for z of (rigt, left) do
 ///           for a of (merge, rotate) do
 ///               exists underflow x y z a
 ///
 /// This gives 40 tests
+/// This does account for different cascading combinations of repair up the tree.
 ///
-/// leaf, internal root
-/// (right, left) x (merge, rotate)
-/// no-underflow, underflow once, underflow some, underflow all-the-way
-///
-/// Do all these in right and left:
-/// DONE check rotate that effects root in leaf
-/// TODO check rotate that does not effect root in leaf
-///
-/// TODO check rotate that effects root in non leaf
-/// TODO check rotate that does not effect root in non leaf
-///
-/// Merge can also cause cascading merges. Test variations of that too.
-/// TODO check merge that effects root in leaf
-/// TODO check merge that does not effect root in leaf
-///
-/// TODO check merge that effects root in non leaf
-/// TODO check merge that does not effect root in non leaf
 mod test {
     use crate::test::{check_tree, i32_key_vec, in_memory_hyperbee, Rand};
 
@@ -645,6 +636,8 @@ mod test {
         Ok(())
     }
 
+    /// Instead of enumerating all possible cases we try a bunch of random cases, which checking
+    /// for deletion and that the tree maintains all invariants.
     #[tokio::test]
     async fn rand_delete() -> Result<(), Box<dyn std::error::Error>> {
         let rand = Rand::default();
