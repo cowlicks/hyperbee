@@ -1,8 +1,5 @@
 use std::{cmp::Ordering, fmt::Debug};
 
-pub trait ByteOrderable: PartialOrd<[u8]> + Debug {}
-impl<T: PartialOrd<[u8]> + Debug + ?Sized> ByteOrderable for T {}
-
 #[derive(Debug)]
 pub enum InfiniteKeys {
     Positive,
