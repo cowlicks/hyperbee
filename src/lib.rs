@@ -378,7 +378,7 @@ impl<M: CoreMem> Node<M> {
     }
 
     pub async fn n_children(&self) -> usize {
-        self.children.children.read().await.len()
+        self.children.len().await
     }
 
     async fn is_leaf(&self) -> bool {

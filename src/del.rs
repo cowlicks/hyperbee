@@ -334,9 +334,11 @@ async fn repair<M: CoreMem>(
     changes: &mut Changes<M>,
 ) -> Result<Child<M>, HyperbeeError> {
     let father_ref = loop {
+        // next item, should be checked that it needs repair before
         let (father, deficient_index) =
             path.pop().expect("path.len() > 0 should be checked before");
 
+        // Do repair
         let cur_father = repair_one(father, deficient_index, order, changes).await?;
         // if root empty use child
         if path.is_empty()
@@ -372,7 +374,7 @@ impl<M: CoreMem> Hyperbee<M> {
             return Ok(false);
         };
 
-        let (matched, mut path) = nearest_node(root, key).await?;
+        let (matched, mut path) = nearest_node(root.clone(), key).await?;
 
         if !matched {
             return Ok(false);
@@ -387,35 +389,39 @@ impl<M: CoreMem> Hyperbee<M> {
 
         // remove the key from the node
         cur_node.write().await.keys.remove(cur_index);
+        // handle leaf nodes
         let child = if cur_node.read().await.is_leaf().await {
             let child_ref = changes.add_changed_node(path.len(), cur_node.clone());
             path.push((cur_node.clone(), cur_index));
             child_ref
+        // handle internal nodes
         } else {
-            // get the lagest key that is smaller than the deleted value
+            // We replace the deleted key with the largest key that is smaller than the deleted
+            // value.
             let left_sub_tree = cur_node.read().await.get_child(cur_index).await?;
             let (_, mut left_path) =
                 nearest_node(left_sub_tree.clone(), &InfiniteKeys::Positive).await?;
 
             let (bottom, bottom_index) = left_path
                 .pop()
-                .expect("non leaf so must have some nodes here");
+                .expect("There is always at least one node returned by `nearest_node`");
             let replacement_key = bottom
                 .write()
                 .await
                 .keys
                 .pop()
-                .expect("nodes can't have zero keys");
+                .expect("The only possible node with zero keys is an empty root, which is not an internal node so we wouldn't be in this block.");
 
-            // insert this replacement key where the key was that was removed
+            // insert the replacement key into where the deleted key was
             cur_node
                 .write()
                 .await
                 .keys
                 .insert(cur_index, replacement_key);
 
-            // we add the path we took to get this replacement to the `path` so we can rebalance
-            // the tree from where the key was taken if necessary.
+            // now the bottom node where the replacement key came from could be deficient
+            // so we add the path to the replacement key to our original `path` so we can repair
+            // the tree if necessary
             path.push((cur_node.clone(), cur_index));
             path.append(&mut left_path);
             path.push((bottom.clone(), bottom_index));
@@ -423,7 +429,8 @@ impl<M: CoreMem> Hyperbee<M> {
         };
 
         let (bottom_node, _) = path.pop().expect("if/else above ensures path is not empty");
-        // if node is not root and is deficient
+        // if node is not root and is deficient do repair. This repairs all deficient nodes in the
+        // path
         let child = if !path.is_empty() && bottom_node.read().await.keys.len() < min_keys(MAX_KEYS)
         {
             repair(&mut path, MAX_KEYS, &mut changes).await?
@@ -438,11 +445,8 @@ impl<M: CoreMem> Hyperbee<M> {
             propagate_changes_up_tree(changes, path, child).await
         };
 
-        let root = self
-            .get_root(false)
-            .await?
-            .expect("root is confirmed above");
         let root = root.read().await;
+        // If we removed all keys from the root but it still has a child, make the child the root
         if root.keys.is_empty() && root.n_children().await == 1 {
             changes.overwrite_root(root.get_child(0).await?);
         }
