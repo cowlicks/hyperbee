@@ -1,4 +1,5 @@
 #![cfg(test)]
+//! utils used for tests
 
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -173,9 +174,7 @@ macro_rules! hb_put {
 }
 pub(super) use hb_put;
 
-/// Seedable pseudorandom number generator used for reproducible randomized testing
-/// NB: we choose [`u32`] for seed and counter and [`f64`] as `sin_scale` and `rand`'s return value
-/// because you can convert between `u32` and `f64` losslessly.
+/// Seedable deterministic pseudorandom number generator used for reproducible randomized testing
 pub struct Rand {
     seed: u64,
     counter: AtomicU64,
