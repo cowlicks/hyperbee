@@ -1,6 +1,7 @@
 use crate::{Child, CoreMem, SharedNode};
 
 #[derive(Debug, Default)]
+/// Structure to store in-progress changes to the [`Hyperbee`]
 pub struct Changes<M: CoreMem> {
     seq: u64,
     pub key: Vec<u8>,

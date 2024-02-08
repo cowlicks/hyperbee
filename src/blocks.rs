@@ -22,7 +22,7 @@ pub struct Blocks<M: CoreMem> {
 }
 
 impl<M: CoreMem> Blocks<M> {
-    /// Get a BlockEntry for the given
+    /// Get a BlockEntry for the given `seq`
     /// # Errors
     /// when the provided `seq` is not in the Hypercore
     /// when the data in the Hypercore block cannot be decoded
@@ -73,7 +73,7 @@ impl<M: CoreMem> Blocks<M> {
     }
 
     #[tracing::instrument(skip(self, changes))]
-    /// Commit [`Changes`] to the Hypercore
+    /// Commit [`Changes`](crate::changes::Changes) to the Hypercore
     // TODO create a BlockEntry from changes and add it to self.cache
     pub async fn add_changes(&self, changes: Changes<M>) -> Result<AppendOutcome, HyperbeeError> {
         let Changes {
