@@ -17,7 +17,7 @@ use std::{
     fmt::Debug,
     num::TryFromIntError,
     ops::{Range, RangeBounds},
-    path::Path,
+    path::{Path, PathBuf},
     string::FromUtf8Error,
     sync::Arc,
 };
@@ -30,7 +30,7 @@ use thiserror::Error;
 use tokio::sync::RwLock;
 use tracing::trace;
 
-use blocks::{Blocks, BlocksBuilder};
+use blocks::{Blocks, BlocksBuilder, BlocksBuilderError};
 use messages::{yolo_index, Header, Node as NodeSchema, YoloIndex};
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
@@ -54,12 +54,18 @@ pub enum HyperbeeError {
     NoBlockAtSeqError(u64),
     #[error("There was an error building the hyperbee")]
     HyperbeeBuilderError(#[from] HyperbeeBuilderError),
+    #[error(
+        "There was an error building `crate::blocks::Blocks` from `crate::blocks::BlocksBuilder`"
+    )]
+    BlocksBuilderError(#[from] BlocksBuilderError),
     #[error("Converting a u64 value [{0}] to usize failed. This is possibly a 32bit platform. Got error {1}")]
     U64ToUsizeConversionError(u64, TryFromIntError),
     #[error("Could not traverse child node. Got error: {0}")]
     GetChildInTraverseError(Box<dyn std::error::Error>),
-    #[error("There was an error encoding a YoloIndex {0}")]
+    #[error("There was an error encoding a messages::YoloIndex {0}")]
     YoloIndexEncodingError(EncodeError),
+    #[error("There was an error encoding a messages::Header {0}")]
+    HeaderEncodingError(EncodeError),
     #[error("There was an error encoding a messages::Node {0}")]
     NodeEncodingError(EncodeError),
     #[error("There was an error decoding a key")]
@@ -526,7 +532,10 @@ impl<M: CoreMem> Hyperbee<M> {
             metadata: None, // TODO this is this.tree.metadata in js. What should go here.
         };
         let mut buf = vec![];
-        header.encode(&mut buf).unwrap();
+        buf.reserve(header.encoded_len());
+        header
+            .encode(&mut buf)
+            .map_err(HyperbeeError::HeaderEncodingError)?;
         let _ = self.blocks.read().await.append(&buf).await?;
         // write header
         Ok(true)
@@ -543,33 +552,32 @@ impl<M: CoreMem> Hyperbee<M> {
     }
 }
 
+impl Hyperbee<random_access_disk::RandomAccessDisk> {
+    /// Helper for creating a Hyperbee
+    /// # Panics
+    /// when storage path is incorrect
+    /// when Hypercore failse to build
+    /// when Blocks fails to build
+    ///
+    /// # Errors
+    /// when Hyperbee fails to build
+    pub async fn load_from_storage_dir<T: AsRef<Path>>(
+        path_to_storage_dir: T,
+    ) -> Result<Hyperbee<random_access_disk::RandomAccessDisk>, HyperbeeError> {
+        let p: PathBuf = path_to_storage_dir.as_ref().to_owned();
+        let storage = Storage::new_disk(&p, false).await?;
+        let hc = Arc::new(RwLock::new(HypercoreBuilder::new(storage).build().await?));
+        let blocks = BlocksBuilder::default().core(hc).build()?;
+        Ok(HyperbeeBuilder::default()
+            .blocks(Arc::new(RwLock::new(blocks)))
+            .build()?)
+    }
+}
+
 impl<M: CoreMem> Clone for Hyperbee<M> {
     fn clone(&self) -> Self {
         Self {
             blocks: self.blocks.clone(),
         }
     }
-}
-
-/// helper for creating a Hyperbee
-/// # Panics
-/// when storage path is incorrect
-/// when Hypercore failse to build
-/// when Blocks fails to build
-///
-/// # Errors
-/// when Hyperbee fails to build
-// TODO move to tests/
-pub async fn load_from_storage_dir(
-    storage_dir: &str,
-) -> Result<Hyperbee<random_access_disk::RandomAccessDisk>, HyperbeeError> {
-    let path = Path::new(storage_dir).to_owned();
-    let storage = Storage::new_disk(&path, false).await.unwrap();
-    let hc = Arc::new(RwLock::new(
-        HypercoreBuilder::new(storage).build().await.unwrap(),
-    ));
-    let blocks = BlocksBuilder::default().core(hc).build().unwrap();
-    Ok(HyperbeeBuilder::default()
-        .blocks(Arc::new(RwLock::new(blocks)))
-        .build()?)
 }

@@ -102,6 +102,7 @@ impl<M: CoreMem> Blocks<M> {
         let index = YoloIndex { levels: new_nodes };
 
         let mut index_buf = vec![];
+        index_buf.reserve(index.encoded_len());
         YoloIndex::encode(&index, &mut index_buf).map_err(HyperbeeError::YoloIndexEncodingError)?;
 
         let node_schema = NodeSchema {
@@ -111,6 +112,7 @@ impl<M: CoreMem> Blocks<M> {
         };
 
         let mut node_schema_buf = vec![];
+        node_schema_buf.reserve(node_schema.encoded_len());
         NodeSchema::encode(&node_schema, &mut node_schema_buf)
             .map_err(HyperbeeError::NodeEncodingError)?;
         self.append(&node_schema_buf).await

@@ -357,7 +357,9 @@ async fn repair<M: CoreMem>(
         }
 
         // add father_ref to next node in path and continue repair up tree
-        let (grandpa, cur_deficient_index) = path.pop().unwrap();
+        let (grandpa, cur_deficient_index) = path
+            .pop()
+            .expect("path.is_empty branch above checks this exists");
 
         grandpa.read().await.children.children.write().await[cur_deficient_index] =
             father_ref.clone();
@@ -384,7 +386,9 @@ impl<M: CoreMem> Hyperbee<M> {
         let mut changes: Changes<M> =
             Changes::new(self.version().await, key.clone().to_vec(), None);
 
-        let (cur_node, cur_index) = path.pop().unwrap();
+        let (cur_node, cur_index) = path
+            .pop()
+            .expect("nearest_node always returns at least one node");
 
         // remove the key from the node
         cur_node.write().await.keys.remove(cur_index);

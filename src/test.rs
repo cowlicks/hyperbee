@@ -88,7 +88,14 @@ pub async fn check_node<M: CoreMem>(node: SharedNode<M>) {
             .get_child(i)
             .await
             .expect("get child always works in tests");
-        children_vec.push(child.write().await.get_key(0).await.unwrap());
+        children_vec.push(
+            child
+                .write()
+                .await
+                .get_key(0)
+                .await
+                .expect("nodes must always have a key"),
+        );
         check_node(child).await;
     }
     is_sorted(&children_vec);
@@ -154,6 +161,7 @@ pub async fn in_memory_hyperbee(
         .blocks(Arc::new(RwLock::new(blocks)))
         .build()?)
 }
+
 /// Macro used for creating trees for testing.
 macro_rules! hb_put {
     ( $contents:expr ) => {
