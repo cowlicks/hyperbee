@@ -22,7 +22,7 @@ use std::{
 };
 
 use derive_builder::Builder;
-use hypercore::{HypercoreBuilder, HypercoreError, Storage};
+use hypercore::{AppendOutcome, HypercoreBuilder, HypercoreError, Storage};
 use prost::{bytes::Buf, DecodeError, EncodeError, Message};
 use random_access_storage::RandomAccess;
 use thiserror::Error;
@@ -30,7 +30,7 @@ use tokio::sync::RwLock;
 use tracing::trace;
 
 use blocks::{Blocks, BlocksBuilder, BlocksBuilderError};
-use messages::{yolo_index, Header, Node as NodeSchema, YoloIndex};
+use messages::{header::Metadata, yolo_index, Header, Node as NodeSchema, YoloIndex};
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
 impl<T: RandomAccess + Debug + Send> CoreMem for T {}
@@ -73,6 +73,8 @@ pub enum HyperbeeError {
     KeyFromUtf8Error(#[from] FromUtf8Error),
     #[error("The tree has no root so this operation failed")]
     NoRootError,
+    #[error("The tree already has a header")]
+    HeaderAlreadyExists,
 }
 
 #[derive(Clone, Debug)]
@@ -525,23 +527,36 @@ impl<M: CoreMem> Hyperbee<M> {
         Ok(None)
     }
 
-    /// Write the header for the tree
+    /// Ensure the tree has a header
     async fn ensure_header(&self) -> Result<bool, HyperbeeError> {
+        match self.create_header(None).await {
+            Ok(_) => Ok(true),
+            Err(e) => match e {
+                HyperbeeError::HeaderAlreadyExists => Ok(false),
+                other_errors => Err(other_errors),
+            },
+        }
+    }
+
+    /// Create the header for the Hyperbee. This must be done before writing anything else to the
+    /// tree.
+    pub async fn create_header(
+        &self,
+        metadata: Option<Metadata>,
+    ) -> Result<AppendOutcome, HyperbeeError> {
         if self.blocks.read().await.info().await.length != 0 {
-            return Ok(false);
+            return Err(HyperbeeError::HeaderAlreadyExists);
         }
         let header = Header {
             protocol: PROTOCOL.to_string(),
-            metadata: None, // TODO this is this.tree.metadata in js. What should go here.
+            metadata,
         };
         let mut buf = vec![];
         buf.reserve(header.encoded_len());
         header
             .encode(&mut buf)
             .map_err(HyperbeeError::HeaderEncodingError)?;
-        let _ = self.blocks.read().await.append(&buf).await?;
-        // write header
-        Ok(true)
+        self.blocks.read().await.append(&buf).await
     }
 
     /// Returs a string representing the structure of the tree showing the keys in each node
