@@ -39,7 +39,7 @@ impl<T: RandomAccess + Debug + Send> CoreMem for T {}
 static PROTOCOL: &str = "hyperbee";
 /// Same value as JS hyperbee https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L16-L18
 // TODO this is wrong
-static MAX_KEYS: usize = 4;
+static MAX_KEYS: usize = 8;
 
 fn min_keys(max_keys: usize) -> usize {
     max_keys >> 1
