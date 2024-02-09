@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use super::{
+use tokio::sync::RwLock;
+use tracing::trace;
+
+use crate::{
     changes::Changes, nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, Key, Node, NodePath,
     SharedNode, MAX_KEYS,
 };
-
-use tokio::sync::RwLock;
-use tracing::trace;
 
 /// After making changes to a tree, this function updates parent references all the way to the
 /// root.

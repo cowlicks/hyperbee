@@ -1,5 +1,8 @@
+use std::{collections::BTreeMap, sync::Arc};
+
 use derive_builder::Builder;
 use hypercore::{AppendOutcome, Hypercore};
+use prost::Message;
 use tokio::sync::RwLock;
 use tracing::trace;
 
@@ -8,8 +11,6 @@ use crate::{
     messages::{Node as NodeSchema, YoloIndex},
     BlockEntry, CoreMem, HyperbeeError, Shared,
 };
-use prost::Message;
-use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Builder, Debug)]
 #[builder(pattern = "owned", derive(Debug))]

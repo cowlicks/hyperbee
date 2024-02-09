@@ -1,11 +1,13 @@
-use super::{CoreMem, HyperbeeError, SharedNode};
-use futures_lite::{future::FutureExt, StreamExt};
 use std::{
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use futures_lite::{future::FutureExt, StreamExt};
 use tokio_stream::Stream;
+
+use crate::{CoreMem, HyperbeeError, SharedNode};
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 

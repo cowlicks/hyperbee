@@ -13,14 +13,6 @@ pub mod put;
 mod test;
 pub mod traverse;
 
-use blocks::{Blocks, BlocksBuilder};
-use derive_builder::Builder;
-use hypercore::{HypercoreBuilder, HypercoreError, Storage};
-use messages::{yolo_index, Header, Node as NodeSchema, YoloIndex};
-use prost::{bytes::Buf, DecodeError, EncodeError, Message};
-use random_access_storage::RandomAccess;
-use thiserror::Error;
-
 use std::{
     fmt::Debug,
     num::TryFromIntError,
@@ -29,8 +21,17 @@ use std::{
     string::FromUtf8Error,
     sync::Arc,
 };
+
+use derive_builder::Builder;
+use hypercore::{HypercoreBuilder, HypercoreError, Storage};
+use prost::{bytes::Buf, DecodeError, EncodeError, Message};
+use random_access_storage::RandomAccess;
+use thiserror::Error;
 use tokio::sync::RwLock;
 use tracing::trace;
+
+use blocks::{Blocks, BlocksBuilder};
+use messages::{yolo_index, Header, Node as NodeSchema, YoloIndex};
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
 impl<T: RandomAccess + Debug + Send> CoreMem for T {}
