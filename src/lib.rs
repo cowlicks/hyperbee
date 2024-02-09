@@ -1,15 +1,14 @@
 //! Rust version of [hyperbee](https://github.com/holepunchto/hyperbee)
 //! A B-tree built on top of Hypercore.
-// TODO add feature for nice display of keys block entry etc
 
-pub mod messages {
+mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
-pub mod blocks;
+mod blocks;
 mod changes;
-pub mod del;
+mod del;
 mod keys;
-pub mod put;
+mod put;
 mod test;
 pub mod traverse;
 
@@ -36,14 +35,16 @@ use messages::{yolo_index, Header, Node as NodeSchema, YoloIndex};
 pub trait CoreMem: RandomAccess + Debug + Send {}
 impl<T: RandomAccess + Debug + Send> CoreMem for T {}
 
+/// Same value as JS hyperbee https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L663
 static PROTOCOL: &str = "hyperbee";
+/// Same value as JS hyperbee https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L16-L18
+// TODO this is wrong
 static MAX_KEYS: usize = 4;
 
 fn min_keys(max_keys: usize) -> usize {
     max_keys >> 1
 }
 
-// TODO are all these used
 #[derive(Error, Debug)]
 pub enum HyperbeeError {
     #[error("There was an error in the underlying Hypercore")]
@@ -52,7 +53,7 @@ pub enum HyperbeeError {
     DecodeError(#[from] DecodeError),
     #[error("No block at seq  `{0}`")]
     NoBlockAtSeqError(u64),
-    #[error("There was an error building the hyperbee")]
+    #[error("There was an error building `crate::Hyperbee` from `crate::HyperbeeBuilder`")]
     HyperbeeBuilderError(#[from] HyperbeeBuilderError),
     #[error(
         "There was an error building `crate::blocks::Blocks` from `crate::blocks::BlocksBuilder`"
@@ -87,13 +88,13 @@ pub struct Key {
     keys_value: Option<Option<Vec<u8>>>,
 }
 #[derive(Debug)]
-/// Pointer used within a [`Node`] to point to it's child nodes.
+/// Pointer used within a [`Node`] to reference to it's child nodes.
 pub struct Child<M: CoreMem> {
-    /// Index of the `Node` within the [`hypercore::Hypercore`].
+    /// Index of the [`BlockEntry`]within the [`hypercore::Hypercore`] that contains the [`Node`]
     pub seq: u64,
-    /// Index of the `Node` within the [`messages::Node::index`].
-    /// NB: offset = 0, is the topmost node
+    /// Index of the `Node` within the [`BlockEntry`] referenced by [`Child::seq`]
     pub offset: u64,
+    /// Cache of the child node
     node: Option<SharedNode<M>>,
 }
 
@@ -126,7 +127,9 @@ pub struct Node<M: CoreMem> {
     blocks: Shared<Blocks<M>>,
 }
 
-/// TODO document me
+/// A key/value store built on [`hypercore::Hypercore`]. It uses an append only
+/// [B-Tree](https://en.wikipedia.org/wiki/B-tree) and is compatible with the [Javascript Hyperbee
+/// library](https://docs.holepunch.to/building-blocks/hyperbee)
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {

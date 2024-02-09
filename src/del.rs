@@ -293,6 +293,7 @@ impl Side {
 }
 
 #[tracing::instrument(skip(father, changes))]
+/// The orering of the kinds of repairs here is choosen to match the Hyperbee-js implementation
 async fn repair_one<M: CoreMem>(
     father: SharedNode<M>,
     deficient_index: usize,
