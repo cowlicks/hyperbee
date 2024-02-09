@@ -103,7 +103,7 @@ impl<M: CoreMem> Hyperbee<M> {
                     cur_node
                         .write()
                         .await
-                        ._insert(cur_key, children, cur_index..stop)
+                        .insert(cur_key, children, cur_index..stop)
                         .await;
 
                     let child = changes.add_changed_node(path.len(), cur_node.clone());
@@ -122,7 +122,7 @@ impl<M: CoreMem> Hyperbee<M> {
                 cur_node
                     .write()
                     .await
-                    ._insert(cur_key, children, cur_index..cur_index)
+                    .insert(cur_key, children, cur_index..cur_index)
                     .await;
 
                 let (left, mid_key, right) = cur_node.write().await.split().await;

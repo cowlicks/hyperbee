@@ -38,7 +38,6 @@ impl<T: RandomAccess + Debug + Send> CoreMem for T {}
 /// Same value as JS hyperbee https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L663
 static PROTOCOL: &str = "hyperbee";
 /// Same value as JS hyperbee https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L16-L18
-// TODO this is wrong
 static MAX_KEYS: usize = 8;
 
 fn min_keys(max_keys: usize) -> usize {
@@ -138,7 +137,6 @@ pub struct Hyperbee<M: CoreMem> {
     pub blocks: Shared<Blocks<M>>,
 }
 
-// TODO only used twice. Delete?
 impl Key {
     fn new(seq: u64, keys_key: Option<Vec<u8>>, keys_value: Option<Option<Vec<u8>>>) -> Self {
         Key {
@@ -188,8 +186,6 @@ fn make_node_vec<B: Buf, M: CoreMem>(
         .collect())
 }
 
-// TODO look at all references of Children.children and simplify them with methods, or remove
-// methods here.
 impl<M: CoreMem> Children<M> {
     fn new(blocks: Shared<Blocks<M>>, children: Vec<Child<M>>) -> Self {
         Self {
@@ -197,7 +193,7 @@ impl<M: CoreMem> Children<M> {
             children: RwLock::new(children),
         }
     }
-    // TODO only used once
+
     #[tracing::instrument(skip(self))]
     async fn insert(&self, index: usize, new_children: Vec<Child<M>>) {
         if new_children.is_empty() {
@@ -220,7 +216,6 @@ impl<M: CoreMem> Children<M> {
             .splice(index..(index + replace_split_child), new_children);
     }
 
-    // TODO only used twice
     #[tracing::instrument(skip(self))]
     async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
         let (seq, offset) = {
@@ -259,11 +254,6 @@ impl<M: CoreMem> Children<M> {
             .await
             .splice(range, replace_with)
             .collect()
-    }
-
-    // TODO used once, but should prob be used other places
-    async fn is_empty(&self) -> bool {
-        self.children.read().await.is_empty()
     }
 }
 
@@ -322,7 +312,7 @@ where
             };
 
             // leaf node with no match
-            if current_node.read().await.children.is_empty().await {
+            if current_node.read().await.is_leaf().await {
                 trace!("Reached leaf. Returning");
                 return Ok((false, out_path));
             }
@@ -444,7 +434,7 @@ impl<M: CoreMem> Node<M> {
 
     /// Insert a key and it's children into [`self`].
     #[tracing::instrument(skip(self))]
-    async fn _insert(&mut self, key_ref: Key, children: Vec<Child<M>>, range: Range<usize>) {
+    async fn insert(&mut self, key_ref: Key, children: Vec<Child<M>>, range: Range<usize>) {
         trace!("inserting [{}] children", children.len());
         self.keys.splice(range.clone(), vec![key_ref]);
         self.children.insert(range.start, children).await;
@@ -462,7 +452,6 @@ impl<M: CoreMem> BlockEntry<M> {
 
     /// Get a [`Node`] from this [`BlockEntry`] at the provided `offset`.
     /// offset is the offset of the node within the hypercore block
-    // TODO rename get_node
     fn get_tree_node(&self, offset: u64) -> Result<SharedNode<M>, HyperbeeError> {
         Ok(self
             .nodes
