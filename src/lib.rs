@@ -577,7 +577,7 @@ impl Hyperbee<random_access_disk::RandomAccessDisk> {
     ///
     /// # Errors
     /// when Hyperbee fails to build
-    pub async fn load_from_storage_dir<T: AsRef<Path>>(
+    pub async fn from_storage_dir<T: AsRef<Path>>(
         path_to_storage_dir: T,
     ) -> Result<Hyperbee<random_access_disk::RandomAccessDisk>, HyperbeeError> {
         let p: PathBuf = path_to_storage_dir.as_ref().to_owned();
