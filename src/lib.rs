@@ -270,7 +270,6 @@ impl<M: CoreMem> Children<M> {
 /// In a leaf node, the `index` could be thought of as the gap between the node's keys where the provided
 /// `key` would be ineserted. Or for `matched = true` the index of the matched key in the nodes's
 /// keys.
-// TODO use binary search instead of iterating over keys
 #[tracing::instrument(skip(node))]
 async fn nearest_node<M: CoreMem, T>(
     node: SharedNode<M>,
@@ -284,36 +283,43 @@ where
     loop {
         let next_node = {
             let child_index: usize = 'found: {
+                // Binary search current node for matching key, or index of next child
                 let n_keys = current_node.read().await.keys.len();
-                for i in 0..n_keys {
-                    let val = current_node.write().await.get_key(i).await?;
-                    // found matching child
-                    if key < &val[..] {
-                        trace!("key {:?} < val {:?} at index {}", key, val, i);
-                        out_path.push((current_node.clone(), i));
-                        break 'found i;
-                    }
-                    // found matching key
+                if n_keys == 0 {
+                    break 'found n_keys;
+                }
+                let mut low = 0;
+                let mut high = n_keys - 1;
+
+                while low <= high {
+                    let mid = low + ((high - low) >> 1);
+                    let val = current_node.write().await.get_key(mid).await?;
+
+                    // if matching key, we are done!
                     if key == &val[..] {
-                        trace!("key {:?} == val {:?} at index {}", key, val, i);
-                        out_path.push((current_node.clone(), i));
+                        trace!("key {:?} == val {:?} at index {}", key, val, mid);
+                        out_path.push((current_node.clone(), mid));
                         return Ok((true, out_path));
                     }
+
+                    if key < &val[..] {
+                        if mid == 0 {
+                            break;
+                        }
+                        // look lower
+                        high = mid - 1;
+                    } else {
+                        // look higher
+                        low = mid + 1;
+                    }
                 }
-                // key is greater than all of this nodes keys, take last child, which has index
-                // of node.keys.len()
-                trace!(
-                    "new key {:?} greater than all in this node index {}",
-                    key,
-                    n_keys
-                );
-                out_path.push((current_node.clone(), n_keys));
-                n_keys
+                out_path.push((current_node.clone(), low));
+                break 'found low;
             };
 
             // leaf node with no match
             if current_node.read().await.is_leaf().await {
-                trace!("Reached leaf. Returning");
+                trace!("Reached leaf, we're done.");
                 return Ok((false, out_path));
             }
 
