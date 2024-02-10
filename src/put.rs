@@ -66,14 +66,14 @@ impl<M: CoreMem> Hyperbee<M> {
     pub async fn put(
         &mut self,
         key: &[u8],
-        value: Option<Vec<u8>>,
+        value: Option<&[u8]>,
     ) -> Result<(bool, u64), HyperbeeError> {
         // NB: do this before we call `version` because it can add the header block
         let maybe_root = self.get_root(true).await?;
 
         let seq = self.version().await;
         let mut changes: Changes<M> = Changes::new(seq, key, value.clone());
-        let mut cur_key = KeyValue::new(seq, Some(key.to_vec()), Some(value.clone()));
+        let mut cur_key = KeyValue::new(seq, Some(key.to_vec()), Some(value.map(<[u8]>::to_vec)));
         let mut children: Vec<Child<M>> = vec![];
 
         'new_root: loop {
@@ -167,7 +167,7 @@ mod test {
         for i in 0..4 {
             let key = vec![i];
             let val = vec![i];
-            hb.put(&key, Some(val.clone())).await?;
+            hb.put(&key, Some(&val)).await?;
             for j in 0..(i + 1) {
                 let key = vec![j];
                 let val = Some(key.clone());
@@ -186,10 +186,10 @@ mod test {
             let key = vec![i];
             let val = vec![i];
             // initial values
-            hb.put(&key.clone(), Some(val.clone())).await?;
+            hb.put(&key.clone(), Some(&val));
             // replace replace with val + 1
             let val = vec![i + 1_u8];
-            hb.put(&key, Some(val.clone())).await?;
+            hb.put(&key, Some(&val)).await?;
             for j in 0..(i + 1) {
                 let key = vec![j];
                 let val = Some(vec![j + 1]);
@@ -207,8 +207,8 @@ mod test {
         for i in 0..3 {
             let is = i.to_string();
             let key = is.clone().as_bytes().to_vec();
-            let val = is.clone().as_bytes().to_vec();
-            hb.put(&key, Some(val.clone())).await?;
+            let val: Option<&[u8]> = Some(&key);
+            hb.put(&key, val).await?;
         }
         let tree = hb.print().await?;
         assert_eq!(
@@ -228,7 +228,7 @@ mod test {
             let is = i.to_string();
             let key = is.clone().as_bytes().to_vec();
             let val = Some(key.clone());
-            hb.put(&key, val).await?;
+            hb.put(&key, val.as_deref()).await?;
             hb = check_tree(hb).await?;
             let _ = hb.print().await?;
 
@@ -255,7 +255,7 @@ mod test {
         for k in keys {
             used.push(k.clone());
 
-            let val = Some(k.clone());
+            let val: Option<&[u8]> = Some(&k);
             hb.put(&k, val).await?;
 
             for kj in used.iter() {

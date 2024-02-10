@@ -653,7 +653,7 @@ mod test {
         let keys = rand.shuffle(keys);
 
         for k in keys.iter() {
-            let val = Some(k.clone());
+            let val: Option<&[u8]> = Some(k);
             hb.put(&k, val).await?;
         }
 

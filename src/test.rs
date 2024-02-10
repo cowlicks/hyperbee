@@ -153,8 +153,8 @@ macro_rules! hb_put {
             for i in $contents {
                 let key = i.to_string().clone().as_bytes().to_vec();
                 keys.push(key.clone());
-                let val = key.clone();
-                hb.put(&&key, Some(val.clone())).await?;
+                let val: Option<&[u8]> = Some(&key);
+                hb.put(&&key, val).await?;
             }
             Ok::<(Hyperbee<RandomAccessMemory>, Vec<Vec<u8>>), HyperbeeError>((hb, keys))
         }

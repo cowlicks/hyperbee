@@ -12,11 +12,11 @@ pub struct Changes<M: CoreMem> {
 }
 
 impl<M: CoreMem> Changes<M> {
-    pub fn new(seq: u64, key: &[u8], value: Option<Vec<u8>>) -> Self {
+    pub fn new(seq: u64, key: &[u8], value: Option<&[u8]>) -> Self {
         Self {
             seq,
             key: key.to_vec(),
-            value,
+            value: value.map(<[u8]>::to_vec),
             nodes: vec![],
             root: None,
         }
