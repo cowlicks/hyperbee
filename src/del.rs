@@ -23,7 +23,6 @@ enum Side {
 /// deficient_index - index in the father of the deficient child
 /// donor - the child of the father that donates to the deficint child
 impl Side {
-    // TODO handle usize wrap around
     /// This is just:
     /// match self { Right => index + 1, Left => index - 1 }
     /// but with bounds checking

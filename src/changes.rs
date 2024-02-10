@@ -22,14 +22,14 @@ impl<M: CoreMem> Changes<M> {
         }
     }
 
-    // use the result of this to insert the child into a shared node
+    /// Add a node that's changed. Returns the's stored node's reference
     pub fn add_node(&mut self, node: SharedNode<M>) -> Child<M> {
         self.nodes.push(node.clone());
         let offset: u64 = self
             .nodes
             .len()
             .try_into()
-            .expect("TODO usize to seq (u64)");
+            .expect("this would happen when sizeof(usize) < sizeof(u64), lkey on 32bit. And when the offset (which is on the order of the height of the tree) is greater than usize::MAX. Well that would be crazy. We should Probably have a check for usize >= u64 on startup... or something... TODO");
         Child::new(self.seq, offset, Some(node))
     }
 
