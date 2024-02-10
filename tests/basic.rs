@@ -1,3 +1,4 @@
+use hyperbee_rs::Hyperbee;
 static HYPERBEE_STORAGE_DIR: &str = "./test_data/basic";
 static HYPERBEE_STORAGE_DIR_MORE_HEIGHT: &str = "./test_data/more_height";
 static HYPERBEE_STORAGE_DIR_SMALL: &str = "./test_data/alphabet";
@@ -6,7 +7,7 @@ static HYPERBEE_STORAGE_DIR_SMALL: &str = "./test_data/alphabet";
 async fn basic() -> Result<(), Box<dyn std::error::Error>> {
     let start = 0;
     let stop = 25;
-    let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
+    let mut hb = Hyperbee::load_from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
     for i in start..stop {
         let key = i.to_string();
         let expected = (stop - i).to_string();
@@ -21,7 +22,7 @@ async fn basic() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn no_key() -> Result<(), Box<dyn std::error::Error>> {
-    let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
+    let mut hb = Hyperbee::load_from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
     let result = hb.get(&"foobar".to_string().into_bytes()).await?;
     assert_eq!(result, Option::None);
     Ok(())
@@ -32,7 +33,7 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
     use tokio_stream::StreamExt;
     let start = 0;
     let stop = 25;
-    let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
+    let mut hb = Hyperbee::load_from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
     let mut expected: Vec<Vec<u8>> = (start..stop).map(|i| i.to_string().into()).collect();
     expected.sort();
     let mut result = vec![];
@@ -60,7 +61,7 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn height() -> Result<(), Box<dyn std::error::Error>> {
-    let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR_MORE_HEIGHT).await?;
+    let mut hb = Hyperbee::load_from_storage_dir(HYPERBEE_STORAGE_DIR_MORE_HEIGHT).await?;
     let root = hb
         .get_root(false)
         .await?
@@ -72,7 +73,7 @@ async fn height() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn print() -> Result<(), Box<dyn std::error::Error>> {
-    let mut hb = hyperbee_rs::load_from_storage_dir(HYPERBEE_STORAGE_DIR_SMALL).await?;
+    let mut hb = Hyperbee::load_from_storage_dir(HYPERBEE_STORAGE_DIR_SMALL).await?;
     let result = hb.print().await?;
     println!("{result}");
     assert_eq!(
