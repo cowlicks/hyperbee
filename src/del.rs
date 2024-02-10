@@ -383,8 +383,7 @@ impl<M: CoreMem> Hyperbee<M> {
 
         // NB: jS hyperbee stores the "key" the deleted "key" in the created BlockEntry. So we are
         // doing that too
-        let mut changes: Changes<M> =
-            Changes::new(self.version().await, key.clone().to_vec(), None);
+        let mut changes: Changes<M> = Changes::new(self.version().await, key, None);
 
         let (cur_node, cur_index) = path
             .pop()
@@ -655,7 +654,7 @@ mod test {
 
         for k in keys.iter() {
             let val = Some(k.clone());
-            hb.put(k.clone(), val).await?;
+            hb.put(&k, val).await?;
         }
 
         for k in rand.shuffle(keys).iter() {

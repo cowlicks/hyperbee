@@ -154,7 +154,7 @@ macro_rules! hb_put {
                 let key = i.to_string().clone().as_bytes().to_vec();
                 keys.push(key.clone());
                 let val = key.clone();
-                hb.put(key, Some(val.clone())).await?;
+                hb.put(&&key, Some(val.clone())).await?;
             }
             Ok::<(Hyperbee<RandomAccessMemory>, Vec<Vec<u8>>), HyperbeeError>((hb, keys))
         }

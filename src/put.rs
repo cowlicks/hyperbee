@@ -65,15 +65,15 @@ impl<M: CoreMem> Hyperbee<M> {
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub async fn put(
         &mut self,
-        key: Vec<u8>,
+        key: &[u8],
         value: Option<Vec<u8>>,
     ) -> Result<(bool, u64), HyperbeeError> {
         // NB: do this before we call `version` because it can add the header block
         let maybe_root = self.get_root(true).await?;
 
         let seq = self.version().await;
-        let mut changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
-        let mut cur_key = KeyValue::new(seq, Some(key.clone()), Some(value.clone()));
+        let mut changes: Changes<M> = Changes::new(seq, key, value.clone());
+        let mut cur_key = KeyValue::new(seq, Some(key.to_vec()), Some(value.clone()));
         let mut children: Vec<Child<M>> = vec![];
 
         'new_root: loop {
@@ -83,7 +83,7 @@ impl<M: CoreMem> Hyperbee<M> {
                 Some(node) => node,
             };
 
-            let (matched, mut path) = nearest_node(root, &key[..]).await?;
+            let (matched, mut path) = nearest_node(root, key).await?;
 
             loop {
                 let (cur_node, cur_index) = match path.pop() {
@@ -167,7 +167,7 @@ mod test {
         for i in 0..4 {
             let key = vec![i];
             let val = vec![i];
-            hb.put(key, Some(val.clone())).await?;
+            hb.put(&key, Some(val.clone())).await?;
             for j in 0..(i + 1) {
                 let key = vec![j];
                 let val = Some(key.clone());
@@ -186,10 +186,10 @@ mod test {
             let key = vec![i];
             let val = vec![i];
             // initial values
-            hb.put(key.clone(), Some(val.clone())).await?;
+            hb.put(&key.clone(), Some(val.clone())).await?;
             // replace replace with val + 1
             let val = vec![i + 1_u8];
-            hb.put(key, Some(val.clone())).await?;
+            hb.put(&key, Some(val.clone())).await?;
             for j in 0..(i + 1) {
                 let key = vec![j];
                 let val = Some(vec![j + 1]);
@@ -208,7 +208,7 @@ mod test {
             let is = i.to_string();
             let key = is.clone().as_bytes().to_vec();
             let val = is.clone().as_bytes().to_vec();
-            hb.put(key, Some(val.clone())).await?;
+            hb.put(&key, Some(val.clone())).await?;
         }
         let tree = hb.print().await?;
         assert_eq!(
@@ -228,7 +228,7 @@ mod test {
             let is = i.to_string();
             let key = is.clone().as_bytes().to_vec();
             let val = Some(key.clone());
-            hb.put(key, val).await?;
+            hb.put(&key, val).await?;
             hb = check_tree(hb).await?;
             let _ = hb.print().await?;
 
@@ -256,7 +256,7 @@ mod test {
             used.push(k.clone());
 
             let val = Some(k.clone());
-            hb.put(k, val).await?;
+            hb.put(&k, val).await?;
 
             for kj in used.iter() {
                 let val = Some(kj.clone());
