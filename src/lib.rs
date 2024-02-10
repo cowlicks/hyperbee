@@ -77,16 +77,15 @@ pub enum HyperbeeError {
 }
 
 #[derive(Clone, Debug)]
-// TODO rename to keyvalue
-/// Pointer used within a [`Node`] to point to the block where the Key's (key, value) pair is stored.
+/// Pointer used within a [`Node`] to point to the block where a (key, value) pair is stored.
+/// A key can be inserted without a value, so it's value is optional.
 pub struct KeyValue {
-    /// Index of the key's "key" within the [`hypercore::Hypercore`].
+    /// Index of key value pair within the [`hypercore::Hypercore`].
     seq: u64,
-    /// Value of the key's "key". NB: it is not the "value" corresponding to the value in a `(key,
-    /// value)` pair
-    keys_key: Option<Vec<u8>>,
-    /// Value of the key's "Value"
-    keys_value: Option<Option<Vec<u8>>>,
+    /// Key of the key value pair
+    cached_key: Option<Vec<u8>>,
+    /// Value of the key value pair.
+    cached_value: Option<Option<Vec<u8>>>,
 }
 #[derive(Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
@@ -96,7 +95,7 @@ pub struct Child<M: CoreMem> {
     /// Index of the `Node` within the [`BlockEntry`] referenced by [`Child::seq`]
     pub offset: u64,
     /// Cache of the child node
-    node: Option<SharedNode<M>>,
+    cached_node: Option<SharedNode<M>>,
 }
 
 #[derive(Clone, Debug)]
@@ -141,21 +140,25 @@ impl KeyValue {
     fn new(seq: u64, keys_key: Option<Vec<u8>>, keys_value: Option<Option<Vec<u8>>>) -> Self {
         KeyValue {
             seq,
-            keys_key,
-            keys_value,
+            cached_key: keys_key,
+            cached_value: keys_value,
         }
     }
 }
 
 impl<M: CoreMem> Child<M> {
     fn new(seq: u64, offset: u64, node: Option<SharedNode<M>>) -> Self {
-        Child { seq, offset, node }
+        Child {
+            seq,
+            offset,
+            cached_node: node,
+        }
     }
 }
 
 impl<M: CoreMem> Clone for Child<M> {
     fn clone(&self) -> Self {
-        Self::new(self.seq, self.offset, self.node.clone())
+        Self::new(self.seq, self.offset, self.cached_node.clone())
     }
 }
 
@@ -220,7 +223,7 @@ impl<M: CoreMem> Children<M> {
     async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
         let (seq, offset) = {
             let child_ref = &self.children.read().await[index];
-            if let Some(node) = &child_ref.node {
+            if let Some(node) = &child_ref.cached_node {
                 return Ok(node.clone());
             }
             (child_ref.seq, child_ref.offset)
@@ -232,7 +235,7 @@ impl<M: CoreMem> Children<M> {
             .get(&seq, self.blocks.clone())
             .await?;
         let node = block.read().await.get_tree_node(offset)?;
-        self.children.write().await[index].node = Some(node.clone());
+        self.children.write().await[index].cached_node = Some(node.clone());
         Ok(node)
     }
 
@@ -382,7 +385,7 @@ impl<M: CoreMem> Node<M> {
     #[tracing::instrument(skip(self))]
     async fn get_key(&mut self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
         let key = &mut self.keys[index];
-        if let Some(value) = &key.keys_key {
+        if let Some(value) = &key.cached_key {
             trace!("has cached value");
             return Ok(value.clone());
         }
@@ -397,7 +400,7 @@ impl<M: CoreMem> Node<M> {
             .await
             .key
             .clone();
-        key.keys_key = Some(value.clone());
+        key.cached_key = Some(value.clone());
         Ok(value)
     }
 
@@ -411,12 +414,12 @@ impl<M: CoreMem> Node<M> {
         match &self.keys[index] {
             KeyValue {
                 seq,
-                keys_value: Some(value),
+                cached_value: Some(value),
                 ..
             } => Ok((*seq, value.clone())),
             KeyValue {
                 seq,
-                keys_value: None,
+                cached_value: None,
                 ..
             } => Ok((
                 *seq,
