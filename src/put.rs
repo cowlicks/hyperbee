@@ -156,11 +156,14 @@ impl<M: CoreMem> Hyperbee<M> {
 
 #[cfg(test)]
 mod test {
-    use crate::test::{check_tree, i32_key_vec, in_memory_hyperbee, Rand};
+    use crate::{
+        test::{check_tree, i32_key_vec, Rand},
+        Hyperbee,
+    };
 
     #[tokio::test]
     async fn basic_put() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = in_memory_hyperbee().await?;
+        let mut hb = Hyperbee::from_ram().await?;
         for i in 0..4 {
             let key = vec![i];
             let val = vec![i];
@@ -178,7 +181,7 @@ mod test {
 
     #[tokio::test]
     async fn basic_put_with_replace() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = in_memory_hyperbee().await?;
+        let mut hb = Hyperbee::from_ram().await?;
         for i in 0..4 {
             let key = vec![i];
             let val = vec![i];
@@ -200,7 +203,7 @@ mod test {
 
     #[tokio::test]
     async fn print_put() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = in_memory_hyperbee().await?;
+        let mut hb = Hyperbee::from_ram().await?;
         for i in 0..3 {
             let is = i.to_string();
             let key = is.clone().as_bytes().to_vec();
@@ -220,7 +223,7 @@ mod test {
 
     #[tokio::test]
     async fn multi_put() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = in_memory_hyperbee().await?;
+        let mut hb = Hyperbee::from_ram().await?;
         for i in 0..100 {
             let is = i.to_string();
             let key = is.clone().as_bytes().to_vec();
@@ -243,7 +246,7 @@ mod test {
     #[tokio::test]
     async fn shuffled_put() -> Result<(), Box<dyn std::error::Error>> {
         let rand = Rand::default();
-        let mut hb = in_memory_hyperbee().await?;
+        let mut hb = Hyperbee::from_ram().await?;
 
         let keys: Vec<Vec<u8>> = (0..100).map(i32_key_vec).collect();
         let keys = rand.shuffle(keys);

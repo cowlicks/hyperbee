@@ -491,11 +491,14 @@ impl<M: CoreMem> Hyperbee<M> {
 /// This does account for different cascading combinations of repair up the tree.
 ///
 mod test {
-    use crate::test::{check_tree, i32_key_vec, in_memory_hyperbee, Rand};
+    use crate::{
+        test::{check_tree, i32_key_vec, Rand},
+        Hyperbee,
+    };
 
     #[tokio::test]
     async fn empty_tree_no_key() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = in_memory_hyperbee().await?;
+        let mut hb = Hyperbee::from_ram().await?;
         let key = vec![1];
         let res = hb.del(&key).await?;
         assert!(!res);
@@ -645,7 +648,7 @@ mod test {
     #[tokio::test]
     async fn rand_delete() -> Result<(), Box<dyn std::error::Error>> {
         let rand = Rand::default();
-        let mut hb = in_memory_hyperbee().await?;
+        let mut hb = Hyperbee::from_ram().await?;
 
         let keys: Vec<Vec<u8>> = (0..100).map(i32_key_vec).collect();
         let keys = rand.shuffle(keys);

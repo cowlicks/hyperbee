@@ -1,18 +1,11 @@
 #![cfg(test)]
 //! utils used for tests
 
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
-};
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use hypercore::{HypercoreBuilder, Storage};
-use tokio::sync::{OnceCell, RwLock};
+use tokio::sync::OnceCell;
 
-use crate::{
-    blocks::BlocksBuilder, min_keys, CoreMem, Hyperbee, HyperbeeBuilder, HyperbeeError, SharedNode,
-    MAX_KEYS,
-};
+use crate::{min_keys, CoreMem, Hyperbee, SharedNode, MAX_KEYS};
 
 #[allow(dead_code)]
 static INIT_LOG: OnceCell<()> = OnceCell::const_new();
@@ -149,26 +142,13 @@ pub async fn check_tree<M: CoreMem>(
     Ok(hb)
 }
 
-pub async fn in_memory_hyperbee(
-) -> Result<Hyperbee<random_access_memory::RandomAccessMemory>, HyperbeeError> {
-    let hc = Arc::new(RwLock::new(
-        HypercoreBuilder::new(Storage::new_memory().await?)
-            .build()
-            .await?,
-    ));
-    let blocks = BlocksBuilder::default().core(hc).build().unwrap();
-    Ok(HyperbeeBuilder::default()
-        .blocks(Arc::new(RwLock::new(blocks)))
-        .build()?)
-}
-
 /// Macro used for creating trees for testing.
 macro_rules! hb_put {
     ( $contents:expr ) => {
         async move {
             use crate::{Hyperbee, HyperbeeError};
             use random_access_memory::RandomAccessMemory;
-            let mut hb = in_memory_hyperbee().await?;
+            let mut hb = Hyperbee::from_ram().await?;
             let mut keys = vec![];
             for i in $contents {
                 let key = i.to_string().clone().as_bytes().to_vec();
