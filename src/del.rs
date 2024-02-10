@@ -1,6 +1,6 @@
 use crate::{
     changes::Changes, keys::InfiniteKeys, min_keys, nearest_node, put::propagate_changes_up_tree,
-    Child, CoreMem, Hyperbee, HyperbeeError, Key, NodePath, SharedNode, MAX_KEYS,
+    Child, CoreMem, Hyperbee, HyperbeeError, KeyValue, NodePath, SharedNode, MAX_KEYS,
 };
 
 use Side::{Left, Right};
@@ -60,7 +60,7 @@ impl Side {
         }
     }
 
-    async fn get_donor_key<M: CoreMem>(&self, donor: SharedNode<M>) -> Key {
+    async fn get_donor_key<M: CoreMem>(&self, donor: SharedNode<M>) -> KeyValue {
         match self {
             Right => donor.write().await.keys.remove(0),
             Left => donor
@@ -94,15 +94,15 @@ impl Side {
         &self,
         father: SharedNode<M>,
         deficient_index: usize,
-        key: Key,
-    ) -> Key {
+        key: KeyValue,
+    ) -> KeyValue {
         let key_index = self.get_key_index(deficient_index);
         father
             .write()
             .await
             .keys
             .splice(key_index..=key_index, vec![key])
-            .collect::<Vec<Key>>()
+            .collect::<Vec<KeyValue>>()
             .pop()
             .expect("one val removed in splice")
     }
@@ -110,7 +110,7 @@ impl Side {
     async fn insert_donations_into_deficient_child<M: CoreMem>(
         &self,
         deficient_child: SharedNode<M>,
-        key: Key,
+        key: KeyValue,
         child: Option<Child<M>>,
     ) {
         match self {

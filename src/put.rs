@@ -4,8 +4,8 @@ use tokio::sync::RwLock;
 use tracing::trace;
 
 use crate::{
-    changes::Changes, nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, Key, Node, NodePath,
-    SharedNode, MAX_KEYS,
+    changes::Changes, nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, KeyValue, Node,
+    NodePath, SharedNode, MAX_KEYS,
 };
 
 /// After making changes to a tree, this function updates parent references all the way to the
@@ -33,7 +33,7 @@ impl<M: CoreMem> Node<M> {
     /// Split an overfilled node into two nodes and a a key.
     /// Returning: `(left_lower_node, middle_key, right_higher_node)`
     #[tracing::instrument(skip(self))]
-    async fn split(&mut self) -> (SharedNode<M>, Key, SharedNode<M>) {
+    async fn split(&mut self) -> (SharedNode<M>, KeyValue, SharedNode<M>) {
         let key_median_index = self.keys.len() >> 1;
         let children_median_index = self.children.len().await >> 1;
         trace!(
@@ -73,7 +73,7 @@ impl<M: CoreMem> Hyperbee<M> {
 
         let seq = self.version().await;
         let mut changes: Changes<M> = Changes::new(seq, key.clone(), value.clone());
-        let mut cur_key = Key::new(seq, Some(key.clone()), Some(value.clone()));
+        let mut cur_key = KeyValue::new(seq, Some(key.clone()), Some(value.clone()));
         let mut children: Vec<Child<M>> = vec![];
 
         'new_root: loop {

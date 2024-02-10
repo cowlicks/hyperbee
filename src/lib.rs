@@ -79,7 +79,7 @@ pub enum HyperbeeError {
 #[derive(Clone, Debug)]
 // TODO rename to keyvalue
 /// Pointer used within a [`Node`] to point to the block where the Key's (key, value) pair is stored.
-pub struct Key {
+pub struct KeyValue {
     /// Index of the key's "key" within the [`hypercore::Hypercore`].
     seq: u64,
     /// Value of the key's "key". NB: it is not the "value" corresponding to the value in a `(key,
@@ -123,7 +123,7 @@ struct Children<M: CoreMem> {
 /// A node in the tree
 #[derive(Debug)]
 pub struct Node<M: CoreMem> {
-    pub keys: Vec<Key>,
+    pub keys: Vec<KeyValue>,
     children: Children<M>,
     blocks: Shared<Blocks<M>>,
 }
@@ -137,9 +137,9 @@ pub struct Hyperbee<M: CoreMem> {
     pub blocks: Shared<Blocks<M>>,
 }
 
-impl Key {
+impl KeyValue {
     fn new(seq: u64, keys_key: Option<Vec<u8>>, keys_value: Option<Option<Vec<u8>>>) -> Self {
-        Key {
+        KeyValue {
             seq,
             keys_key,
             keys_value,
@@ -171,7 +171,7 @@ fn make_node_vec<B: Buf, M: CoreMem>(
             let keys = level
                 .keys
                 .iter()
-                .map(|k| Key::new(*k, Option::None, Option::None))
+                .map(|k| KeyValue::new(*k, Option::None, Option::None))
                 .collect();
             let mut children = vec![];
             for i in (0..(level.children.len())).step_by(2) {
@@ -331,7 +331,7 @@ where
 }
 
 impl<M: CoreMem> Node<M> {
-    fn new(keys: Vec<Key>, children: Vec<Child<M>>, blocks: Shared<Blocks<M>>) -> Self {
+    fn new(keys: Vec<KeyValue>, children: Vec<Child<M>>, blocks: Shared<Blocks<M>>) -> Self {
         Node {
             keys,
             children: Children::new(blocks.clone(), children),
@@ -409,12 +409,12 @@ impl<M: CoreMem> Node<M> {
         index: usize,
     ) -> Result<(u64, Option<Vec<u8>>), HyperbeeError> {
         match &self.keys[index] {
-            Key {
+            KeyValue {
                 seq,
                 keys_value: Some(value),
                 ..
             } => Ok((*seq, value.clone())),
-            Key {
+            KeyValue {
                 seq,
                 keys_value: None,
                 ..
@@ -440,7 +440,7 @@ impl<M: CoreMem> Node<M> {
 
     /// Insert a key and it's children into [`self`].
     #[tracing::instrument(skip(self))]
-    async fn insert(&mut self, key_ref: Key, children: Vec<Child<M>>, range: Range<usize>) {
+    async fn insert(&mut self, key_ref: KeyValue, children: Vec<Child<M>>, range: Range<usize>) {
         trace!("inserting [{}] children", children.len());
         self.keys.splice(range.clone(), vec![key_ref]);
         self.children.insert(range.start, children).await;
