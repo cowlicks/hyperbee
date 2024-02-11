@@ -186,7 +186,7 @@ mod test {
             let key = vec![i];
             let val = vec![i];
             // initial values
-            hb.put(&key.clone(), Some(&val));
+            hb.put(&key.clone(), Some(&val)).await?;
             // replace replace with val + 1
             let val = vec![i + 1_u8];
             hb.put(&key, Some(&val)).await?;
