@@ -4,7 +4,7 @@ static HYPERBEE_STORAGE_DIR: &str = "./test_data/with_replaced_values";
 async fn with_replaced_values() -> Result<(), Box<dyn std::error::Error>> {
     let start = 0;
     let stop = 25;
-    let mut hb = hyperbee_rs::Hyperbee::from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
+    let mut hb = hyperbee::Hyperbee::from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
     for i in start..stop {
         let key = i.to_string();
         let expected = (i * 2).to_string();

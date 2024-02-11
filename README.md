@@ -9,8 +9,8 @@ $ cargo add hyperbee
 
 From the [examples](/examples/ram.rs):
 
-```rust 
-use hyperbee_rs::Hyperbee;
+```rust
+use hyperbee::Hyperbee;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
