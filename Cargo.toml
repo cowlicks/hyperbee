@@ -1,7 +1,18 @@
 [package]
 name = "hyperbee-rs"
 version = "0.1.0"
+license = "MIT OR Apache-2.0"
+description = "Peer to Peer B-tree"
+documentation = "https://docs.rs/hyperbee"
+repository = "https://github.com/cowlicks/hyperbee"
+readme = "README.md"
 edition = "2021"
+keywords = ["dat", "p2p", "btree", "hypercore"]
+categories = [
+  "algorithms",
+  "asynchronous",
+  "data-structures",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
