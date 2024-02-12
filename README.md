@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - [x] in order key streaming like JS's [`createReadStream`](https://docs.holepunch.to/building-blocks/hyperbee#const-stream-db.createreadstream-range-options)
 - [ ] support `gt`, `lt`,  etc bounds for key streaming
 - [ ] accept compare-and-swap for `put` and `del`.
-- [ ] support prefixed key operations like JS's [`sub`](https://docs.holepunch.to/building-blocks/hyperbee#const-sub-db.sub-sub-prefix-options)
+- [x] support prefixed key operations like JS's [`sub`](https://docs.holepunch.to/building-blocks/hyperbee#const-sub-db.sub-sub-prefix-options)
 - [ ] one-to-one binary output
 
 ## Future work
