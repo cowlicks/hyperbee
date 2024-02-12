@@ -1,6 +1,6 @@
 # Hyperbee
 
-A append-only B-tree running built on Hypercore. Compatible with the [JavaScript version](https://github.com/holepunchto/hyperbee).
+A peer-to-peer append-only B-tree built on Hypercore. Compatible with the [JavaScript version](https://github.com/holepunchto/hyperbee).
 ```
 $ cargo add hyperbee
 ```
