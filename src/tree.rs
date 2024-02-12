@@ -12,7 +12,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 /// A key/value store built on [`hypercore::Hypercore`]. It uses an append only
 /// [B-Tree](https://en.wikipedia.org/wiki/B-tree) and is compatible with the [Javascript Hyperbee
@@ -131,7 +131,7 @@ impl Tree<random_access_disk::RandomAccessDisk> {
     ) -> Result<Tree<random_access_disk::RandomAccessDisk>, HyperbeeError> {
         let p: PathBuf = path_to_storage_dir.as_ref().to_owned();
         let storage = Storage::new_disk(&p, false).await?;
-        let hc = Arc::new(RwLock::new(HypercoreBuilder::new(storage).build().await?));
+        let hc = Arc::new(Mutex::new(HypercoreBuilder::new(storage).build().await?));
         let blocks = BlocksBuilder::default().core(hc).build()?;
         Ok(TreeBuilder::default()
             .blocks(Arc::new(RwLock::new(blocks)))
@@ -143,7 +143,7 @@ impl Tree<random_access_memory::RandomAccessMemory> {
     /// Helper for creating a Hyperbee in RAM
     pub async fn from_ram() -> Result<Tree<random_access_memory::RandomAccessMemory>, HyperbeeError>
     {
-        let hc = Arc::new(RwLock::new(
+        let hc = Arc::new(Mutex::new(
             HypercoreBuilder::new(Storage::new_memory().await?)
                 .build()
                 .await?,

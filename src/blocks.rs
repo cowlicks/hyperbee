@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use derive_builder::Builder;
 use hypercore::{AppendOutcome, Hypercore};
 use prost::Message;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::trace;
 
 use crate::{
@@ -19,7 +19,7 @@ pub struct Blocks<M: CoreMem> {
     #[builder(default)]
     // TODO make the cache smarter. Allow setting max size and strategy
     cache: Shared<BTreeMap<u64, Shared<BlockEntry<M>>>>,
-    core: Shared<Hypercore<M>>,
+    core: Arc<Mutex<Hypercore<M>>>,
 }
 
 impl<M: CoreMem> Blocks<M> {
@@ -56,7 +56,7 @@ impl<M: CoreMem> Blocks<M> {
         seq: &u64,
         blocks: Shared<Self>,
     ) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
-        match self.core.write().await.get(*seq).await? {
+        match self.core.lock().await.get(*seq).await? {
             Some(core_block) => {
                 let node = NodeSchema::decode(&core_block[..])?;
                 Ok(Some(BlockEntry::new(node, blocks)?))
@@ -66,11 +66,11 @@ impl<M: CoreMem> Blocks<M> {
     }
 
     pub async fn info(&self) -> hypercore::Info {
-        self.core.read().await.info()
+        self.core.lock().await.info()
     }
 
     pub async fn append(&self, value: &[u8]) -> Result<AppendOutcome, HyperbeeError> {
-        Ok(self.core.write().await.append(value).await?)
+        Ok(self.core.lock().await.append(value).await?)
     }
 
     #[tracing::instrument(skip(self, changes))]
