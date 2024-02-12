@@ -7,6 +7,7 @@ mod messages {
 mod blocks;
 mod changes;
 mod del;
+mod error;
 mod keys;
 mod put;
 mod test;
@@ -14,22 +15,20 @@ pub mod traverse;
 
 use std::{
     fmt::Debug,
-    num::TryFromIntError,
     ops::{Range, RangeBounds},
     path::{Path, PathBuf},
-    string::FromUtf8Error,
     sync::Arc,
 };
 
 use derive_builder::Builder;
-use hypercore::{AppendOutcome, HypercoreBuilder, HypercoreError, Storage};
-use prost::{bytes::Buf, DecodeError, EncodeError, Message};
+use hypercore::{AppendOutcome, HypercoreBuilder, Storage};
+use prost::{bytes::Buf, DecodeError, Message};
 use random_access_storage::RandomAccess;
-use thiserror::Error;
 use tokio::sync::RwLock;
 use tracing::trace;
 
-use blocks::{Blocks, BlocksBuilder, BlocksBuilderError};
+use blocks::{Blocks, BlocksBuilder};
+use error::HyperbeeError;
 use messages::{header::Metadata, yolo_index, Header, Node as NodeSchema, YoloIndex};
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
@@ -42,38 +41,6 @@ static MAX_KEYS: usize = 8;
 
 fn min_keys(max_keys: usize) -> usize {
     max_keys >> 1
-}
-
-#[derive(Error, Debug)]
-pub enum HyperbeeError {
-    #[error("There was an error in the underlying Hypercore")]
-    HypercoreError(#[from] HypercoreError),
-    #[error("There was an error decoding Hypercore data")]
-    DecodeError(#[from] DecodeError),
-    #[error("No block at seq  `{0}`")]
-    NoBlockAtSeqError(u64),
-    #[error("There was an error building `crate::Hyperbee` from `crate::HyperbeeBuilder`")]
-    HyperbeeBuilderError(#[from] HyperbeeBuilderError),
-    #[error(
-        "There was an error building `crate::blocks::Blocks` from `crate::blocks::BlocksBuilder`"
-    )]
-    BlocksBuilderError(#[from] BlocksBuilderError),
-    #[error("Converting a u64 value [{0}] to usize failed. This is possibly a 32bit platform. Got error {1}")]
-    U64ToUsizeConversionError(u64, TryFromIntError),
-    #[error("Could not traverse child node. Got error: {0}")]
-    GetChildInTraverseError(Box<dyn std::error::Error>),
-    #[error("There was an error encoding a messages::YoloIndex {0}")]
-    YoloIndexEncodingError(EncodeError),
-    #[error("There was an error encoding a messages::Header {0}")]
-    HeaderEncodingError(EncodeError),
-    #[error("There was an error encoding a messages::Node {0}")]
-    NodeEncodingError(EncodeError),
-    #[error("There was an error decoding a key")]
-    KeyFromUtf8Error(#[from] FromUtf8Error),
-    #[error("The tree has no root so this operation failed")]
-    NoRootError,
-    #[error("The tree already has a header")]
-    HeaderAlreadyExists,
 }
 
 #[derive(Clone, Debug)]
