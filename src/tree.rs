@@ -99,8 +99,7 @@ impl<M: CoreMem> Tree<M> {
             protocol: PROTOCOL.to_string(),
             metadata,
         };
-        let mut buf = vec![];
-        buf.reserve(header.encoded_len());
+        let mut buf = Vec::with_capacity(header.encoded_len());
         header
             .encode(&mut buf)
             .map_err(HyperbeeError::HeaderEncodingError)?;

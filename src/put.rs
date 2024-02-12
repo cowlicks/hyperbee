@@ -72,11 +72,11 @@ impl<M: CoreMem> Tree<M> {
         let maybe_root = self.get_root(true).await?;
 
         let seq = self.version().await;
-        let mut changes: Changes<M> = Changes::new(seq, key, value.clone());
+        let mut changes: Changes<M> = Changes::new(seq, key, value);
         let mut cur_key = KeyValue::new(seq, Some(key.to_vec()), Some(value.map(<[u8]>::to_vec)));
         let mut children: Vec<Child<M>> = vec![];
 
-        'new_root: loop {
+        'new_root: {
             // Get root and handle when it don't exist
             let root = match maybe_root {
                 None => break 'new_root,
