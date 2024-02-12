@@ -4,7 +4,7 @@ use thiserror::Error;
 use hypercore::HypercoreError;
 use prost::{DecodeError, EncodeError};
 
-use crate::{blocks::BlocksBuilderError, HyperbeeBuilderError};
+use crate::{blocks::BlocksBuilderError, tree::TreeBuilderError, HyperbeeBuilderError};
 
 #[derive(Error, Debug)]
 pub enum HyperbeeError {
@@ -14,12 +14,14 @@ pub enum HyperbeeError {
     DecodeError(#[from] DecodeError),
     #[error("No block at seq  `{0}`")]
     NoBlockAtSeqError(u64),
-    #[error("There was an error building `crate::Hyperbee` from `crate::HyperbeeBuilder`")]
-    HyperbeeBuilderError(#[from] HyperbeeBuilderError),
+    #[error("There was an error building `crate::Hyperbee` from `crate::tree::Tree`")]
+    TreeBuilderError(#[from] TreeBuilderError),
     #[error(
         "There was an error building `crate::blocks::Blocks` from `crate::blocks::BlocksBuilder`"
     )]
     BlocksBuilderError(#[from] BlocksBuilderError),
+    #[error("There was an error building `crate::Hyperbee` from `crate::HyperbeeBuilder`")]
+    HyperbeeBuilderError(#[from] HyperbeeBuilderError),
     #[error("Converting a u64 value [{0}] to usize failed. This is possibly a 32bit platform. Got error {1}")]
     U64ToUsizeConversionError(u64, TryFromIntError),
     #[error("Could not traverse child node. Got error: {0}")]

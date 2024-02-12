@@ -9,27 +9,32 @@ mod changes;
 mod del;
 mod error;
 mod keys;
+mod prefixed;
 mod put;
 mod test;
 pub mod traverse;
+mod tree;
 
 use std::{
     fmt::Debug,
     ops::{Range, RangeBounds},
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 
 use derive_builder::Builder;
-use hypercore::{AppendOutcome, HypercoreBuilder, Storage};
+use hypercore::AppendOutcome;
 use prost::{bytes::Buf, DecodeError, Message};
 use random_access_storage::RandomAccess;
 use tokio::sync::RwLock;
 use tracing::trace;
 
-use blocks::{Blocks, BlocksBuilder};
+use blocks::Blocks;
 use error::HyperbeeError;
-use messages::{header::Metadata, yolo_index, Header, Node as NodeSchema, YoloIndex};
+use messages::{header::Metadata, yolo_index, YoloIndex};
+use tree::Tree;
+
+pub use prefixed::Prefixed;
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
 impl<T: RandomAccess + Debug + Send> CoreMem for T {}
@@ -94,13 +99,97 @@ pub struct Node<M: CoreMem> {
     blocks: Shared<Blocks<M>>,
 }
 
-/// A key/value store built on [`hypercore::Hypercore`]. It uses an append only
-/// [B-Tree](https://en.wikipedia.org/wiki/B-tree) and is compatible with the [Javascript Hyperbee
-/// library](https://docs.holepunch.to/building-blocks/hyperbee)
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
-    pub blocks: Shared<Blocks<M>>,
+    tree: Shared<Tree<M>>,
+}
+
+impl<M: CoreMem> Hyperbee<M> {
+    /// The number of blocks in the hypercore.
+    /// The first block is always the header block so:
+    /// `version` would be the `seq` of the next block
+    /// `version - 1` is most recent block
+    pub async fn version(&self) -> u64 {
+        self.tree.read().await.version().await
+    }
+    /// Gets the root of the tree.
+    /// When `ensure_header == true` write the hyperbee header onto the hypercore if it does not exist.
+    pub async fn get_root(
+        &self,
+        ensure_header: bool,
+    ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
+        self.tree.write().await.get_root(ensure_header).await
+    }
+
+    /// Create the header for the Hyperbee. This must be done before writing anything else to the
+    /// tree.
+    pub async fn create_header(
+        &self,
+        metadata: Option<Metadata>,
+    ) -> Result<AppendOutcome, HyperbeeError> {
+        self.tree.read().await.create_header(metadata).await
+    }
+    /// Returs a string representing the structure of the tree showing the keys in each node
+    pub async fn print(&self) -> Result<String, HyperbeeError> {
+        self.tree.write().await.print().await
+    }
+
+    /// Get the value corresponding to the provided `key` from the Hyperbee
+    /// # Errors
+    /// When `Hyperbee.get_root` fails
+    pub async fn get(&self, key: &[u8]) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
+        self.tree.write().await.get(key).await
+    }
+
+    /// Insert the given key and value into the tree
+    #[tracing::instrument(level = "trace", skip(self), ret)]
+    pub async fn put(
+        &self,
+        key: &[u8],
+        value: Option<&[u8]>,
+    ) -> Result<(bool, u64), HyperbeeError> {
+        self.tree.write().await.put(key, value).await
+    }
+
+    /// Delete the given key from the tree
+    pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
+        self.tree.write().await.del(key).await
+    }
+
+    pub fn sub(&self, prefix: &[u8]) -> Prefixed<M> {
+        Prefixed::new(prefix, self.tree.clone())
+    }
+}
+
+impl Hyperbee<random_access_disk::RandomAccessDisk> {
+    /// Helper for creating a Hyperbee
+    /// # Panics
+    /// when storage path is incorrect
+    /// when Hypercore failse to build
+    /// when Blocks fails to build
+    ///
+    /// # Errors
+    /// when Hyperbee fails to build
+    pub async fn from_storage_dir<T: AsRef<Path>>(
+        path_to_storage_dir: T,
+    ) -> Result<Hyperbee<random_access_disk::RandomAccessDisk>, HyperbeeError> {
+        let tree = tree::Tree::from_storage_dir(path_to_storage_dir).await?;
+        Ok(HyperbeeBuilder::default()
+            .tree(Arc::new(RwLock::new(tree)))
+            .build()?)
+    }
+}
+
+impl Hyperbee<random_access_memory::RandomAccessMemory> {
+    /// Helper for creating a Hyperbee in RAM
+    pub async fn from_ram(
+    ) -> Result<Hyperbee<random_access_memory::RandomAccessMemory>, HyperbeeError> {
+        let tree = tree::Tree::from_ram().await?;
+        Ok(HyperbeeBuilder::default()
+            .tree(Arc::new(RwLock::new(tree)))
+            .build()?)
+    }
 }
 
 impl KeyValue {
@@ -418,7 +507,7 @@ impl<M: CoreMem> Node<M> {
 }
 
 impl<M: CoreMem> BlockEntry<M> {
-    fn new(entry: NodeSchema, blocks: Shared<Blocks<M>>) -> Result<Self, HyperbeeError> {
+    fn new(entry: messages::Node, blocks: Shared<Blocks<M>>) -> Result<Self, HyperbeeError> {
         Ok(BlockEntry {
             nodes: make_node_vec(&entry.index[..], blocks)?,
             key: entry.key,
@@ -437,146 +526,5 @@ impl<M: CoreMem> BlockEntry<M> {
             )
             .expect("offset *should* always point to a real node")
             .clone())
-    }
-}
-
-impl<M: CoreMem> Hyperbee<M> {
-    /// The number of blocks in the hypercore.
-    /// The first block is always the header block so:
-    /// `version` would be the `seq` of the next block
-    /// `version - 1` is most recent block
-    pub async fn version(&self) -> u64 {
-        self.blocks.read().await.info().await.length
-    }
-    /// Gets the root of the tree.
-    /// When `ensure_header == true` write the hyperbee header onto the hypercore if it does not exist.
-    pub async fn get_root(
-        &mut self,
-        ensure_header: bool,
-    ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
-        let blocks = self.blocks.read().await;
-        let version = self.version().await;
-        if version == 0 {
-            if ensure_header {
-                self.ensure_header().await?;
-            }
-            return Ok(None);
-        }
-        let root = blocks
-            .get(&(version - 1), self.blocks.clone())
-            .await?
-            .read()
-            .await
-            .get_tree_node(0)?;
-        Ok(Some(root))
-    }
-
-    /// Get the value corresponding to the provided `key` from the Hyperbee
-    /// # Errors
-    /// When `Hyperbee.get_root` fails
-    pub async fn get(
-        &mut self,
-        key: &[u8],
-    ) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
-        let node = match self.get_root(false).await? {
-            None => return Ok(None),
-            Some(node) => node,
-        };
-        let (matched, path) = nearest_node(node, key).await?;
-        if matched {
-            let (node, key_index) = path
-                .last()
-                .expect("Since `matched` was true, there must be at least one node in `path`");
-            return Ok(Some(node.read().await.get_value_of_key(*key_index).await?));
-        }
-        Ok(None)
-    }
-
-    /// Ensure the tree has a header
-    async fn ensure_header(&self) -> Result<bool, HyperbeeError> {
-        match self.create_header(None).await {
-            Ok(_) => Ok(true),
-            Err(e) => match e {
-                HyperbeeError::HeaderAlreadyExists => Ok(false),
-                other_errors => Err(other_errors),
-            },
-        }
-    }
-
-    /// Create the header for the Hyperbee. This must be done before writing anything else to the
-    /// tree.
-    pub async fn create_header(
-        &self,
-        metadata: Option<Metadata>,
-    ) -> Result<AppendOutcome, HyperbeeError> {
-        if self.blocks.read().await.info().await.length != 0 {
-            return Err(HyperbeeError::HeaderAlreadyExists);
-        }
-        let header = Header {
-            protocol: PROTOCOL.to_string(),
-            metadata,
-        };
-        let mut buf = vec![];
-        buf.reserve(header.encoded_len());
-        header
-            .encode(&mut buf)
-            .map_err(HyperbeeError::HeaderEncodingError)?;
-        self.blocks.read().await.append(&buf).await
-    }
-
-    /// Returs a string representing the structure of the tree showing the keys in each node
-    pub async fn print(&mut self) -> Result<String, HyperbeeError> {
-        let root = self
-            .get_root(false)
-            .await?
-            .ok_or(HyperbeeError::NoRootError)?;
-        let out = traverse::print(root).await?;
-        Ok(out)
-    }
-}
-
-impl Hyperbee<random_access_disk::RandomAccessDisk> {
-    /// Helper for creating a Hyperbee
-    /// # Panics
-    /// when storage path is incorrect
-    /// when Hypercore failse to build
-    /// when Blocks fails to build
-    ///
-    /// # Errors
-    /// when Hyperbee fails to build
-    pub async fn from_storage_dir<T: AsRef<Path>>(
-        path_to_storage_dir: T,
-    ) -> Result<Hyperbee<random_access_disk::RandomAccessDisk>, HyperbeeError> {
-        let p: PathBuf = path_to_storage_dir.as_ref().to_owned();
-        let storage = Storage::new_disk(&p, false).await?;
-        let hc = Arc::new(RwLock::new(HypercoreBuilder::new(storage).build().await?));
-        let blocks = BlocksBuilder::default().core(hc).build()?;
-        Ok(HyperbeeBuilder::default()
-            .blocks(Arc::new(RwLock::new(blocks)))
-            .build()?)
-    }
-}
-
-impl Hyperbee<random_access_memory::RandomAccessMemory> {
-    /// Helper for creating a Hyperbee in RAM
-    pub async fn from_ram(
-    ) -> Result<Hyperbee<random_access_memory::RandomAccessMemory>, HyperbeeError> {
-        let hc = Arc::new(RwLock::new(
-            HypercoreBuilder::new(Storage::new_memory().await?)
-                .build()
-                .await?,
-        ));
-        let blocks = BlocksBuilder::default().core(hc).build()?;
-        Ok(HyperbeeBuilder::default()
-            .blocks(Arc::new(RwLock::new(blocks)))
-            .build()?)
-    }
-}
-
-impl<M: CoreMem> Clone for Hyperbee<M> {
-    fn clone(&self) -> Self {
-        Self {
-            blocks: self.blocks.clone(),
-        }
     }
 }

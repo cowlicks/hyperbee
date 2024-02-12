@@ -4,8 +4,8 @@ use tokio::sync::RwLock;
 use tracing::trace;
 
 use crate::{
-    changes::Changes, nearest_node, Child, CoreMem, Hyperbee, HyperbeeError, KeyValue, Node,
-    NodePath, SharedNode, MAX_KEYS,
+    changes::Changes, nearest_node, Child, CoreMem, HyperbeeError, KeyValue, Node, NodePath,
+    SharedNode, Tree, MAX_KEYS,
 };
 
 /// After making changes to a tree, this function updates parent references all the way to the
@@ -60,7 +60,7 @@ impl<M: CoreMem> Node<M> {
         )
     }
 }
-impl<M: CoreMem> Hyperbee<M> {
+impl<M: CoreMem> Tree<M> {
     /// Insert the provide key and value into the tree
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub async fn put(
@@ -158,12 +158,12 @@ impl<M: CoreMem> Hyperbee<M> {
 mod test {
     use crate::{
         test::{check_tree, i32_key_vec, Rand},
-        Hyperbee,
+        Tree,
     };
 
     #[tokio::test]
     async fn basic_put() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = Hyperbee::from_ram().await?;
+        let mut hb = Tree::from_ram().await?;
         for i in 0..4 {
             let key = vec![i];
             let val = vec![i];
@@ -181,7 +181,7 @@ mod test {
 
     #[tokio::test]
     async fn basic_put_with_replace() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = Hyperbee::from_ram().await?;
+        let mut hb = Tree::from_ram().await?;
         for i in 0..4 {
             let key = vec![i];
             let val = vec![i];
@@ -203,7 +203,7 @@ mod test {
 
     #[tokio::test]
     async fn print_put() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = Hyperbee::from_ram().await?;
+        let mut hb = Tree::from_ram().await?;
         for i in 0..3 {
             let is = i.to_string();
             let key = is.clone().as_bytes().to_vec();
@@ -223,7 +223,7 @@ mod test {
 
     #[tokio::test]
     async fn multi_put() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = Hyperbee::from_ram().await?;
+        let mut hb = Tree::from_ram().await?;
         for i in 0..100 {
             let is = i.to_string();
             let key = is.clone().as_bytes().to_vec();
@@ -246,7 +246,7 @@ mod test {
     #[tokio::test]
     async fn shuffled_put() -> Result<(), Box<dyn std::error::Error>> {
         let rand = Rand::default();
-        let mut hb = Hyperbee::from_ram().await?;
+        let mut hb = Tree::from_ram().await?;
 
         let keys: Vec<Vec<u8>> = (0..100).map(i32_key_vec).collect();
         let keys = rand.shuffle(keys);

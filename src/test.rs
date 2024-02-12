@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use tokio::sync::OnceCell;
 
-use crate::{min_keys, CoreMem, Hyperbee, SharedNode, MAX_KEYS};
+use crate::{min_keys, CoreMem, SharedNode, Tree, MAX_KEYS};
 
 #[allow(dead_code)]
 static INIT_LOG: OnceCell<()> = OnceCell::const_new();
@@ -106,8 +106,8 @@ pub async fn check_node<M: CoreMem>(node: SharedNode<M>) {
 /// * key's keys are between the nodes
 /// * all children respect these invariants
 pub async fn check_tree<M: CoreMem>(
-    mut hb: Hyperbee<M>,
-) -> Result<Hyperbee<M>, Box<dyn std::error::Error>> {
+    mut hb: Tree<M>,
+) -> Result<Tree<M>, Box<dyn std::error::Error>> {
     let root = hb
         .get_root(false)
         .await?
@@ -146,9 +146,9 @@ pub async fn check_tree<M: CoreMem>(
 macro_rules! hb_put {
     ( $contents:expr ) => {
         async move {
-            use crate::{Hyperbee, HyperbeeError};
+            use crate::{HyperbeeError, Tree};
             use random_access_memory::RandomAccessMemory;
-            let mut hb = Hyperbee::from_ram().await?;
+            let mut hb = Tree::from_ram().await?;
             let mut keys = vec![];
             for i in $contents {
                 let key = i.to_string().clone().as_bytes().to_vec();
@@ -156,7 +156,7 @@ macro_rules! hb_put {
                 let val: Option<&[u8]> = Some(&key);
                 hb.put(&&key, val).await?;
             }
-            Ok::<(Hyperbee<RandomAccessMemory>, Vec<Vec<u8>>), HyperbeeError>((hb, keys))
+            Ok::<(Tree<RandomAccessMemory>, Vec<Vec<u8>>), HyperbeeError>((hb, keys))
         }
     };
 }

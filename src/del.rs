@@ -1,6 +1,6 @@
 use crate::{
     changes::Changes, keys::InfiniteKeys, min_keys, nearest_node, put::propagate_changes_up_tree,
-    Child, CoreMem, Hyperbee, HyperbeeError, KeyValue, NodePath, SharedNode, MAX_KEYS,
+    Child, CoreMem, HyperbeeError, KeyValue, NodePath, SharedNode, Tree, MAX_KEYS,
 };
 
 use Side::{Left, Right};
@@ -213,7 +213,10 @@ impl Side {
         order: usize,
         changes: &mut Changes<M>,
     ) -> Result<Option<SharedNode<M>>, HyperbeeError> {
-        let Some(donor_index) = self.can_rotate(father.clone(), deficient_index, order).await? else {
+        let Some(donor_index) = self
+            .can_rotate(father.clone(), deficient_index, order)
+            .await?
+        else {
             return Ok(None);
         };
         Ok(Some(
@@ -229,11 +232,9 @@ impl Side {
         deficient_index: usize,
         changes: &mut Changes<M>,
     ) -> Result<Option<SharedNode<M>>, HyperbeeError> {
-        let Some(donor_index) = self
-            .get_donor_index(father.clone(), deficient_index)
-            .await else {
-                return Ok(None);
-            };
+        let Some(donor_index) = self.get_donor_index(father.clone(), deficient_index).await else {
+            return Ok(None);
+        };
 
         // Get donor child an deficient child  ordered from lowest to highest.
         // Left lower, right higher
@@ -369,7 +370,7 @@ async fn repair<M: CoreMem>(
     Ok(father_ref)
 }
 
-impl<M: CoreMem> Hyperbee<M> {
+impl<M: CoreMem> Tree<M> {
     pub async fn del(&mut self, key: &[u8]) -> Result<bool, HyperbeeError> {
         let Some(root) = self.get_root(false).await? else {
             return Ok(false);
@@ -492,12 +493,12 @@ impl<M: CoreMem> Hyperbee<M> {
 mod test {
     use crate::{
         test::{check_tree, i32_key_vec, Rand},
-        Hyperbee,
+        Tree,
     };
 
     #[tokio::test]
     async fn empty_tree_no_key() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = Hyperbee::from_ram().await?;
+        let mut hb = Tree::from_ram().await?;
         let key = vec![1];
         let res = hb.del(&key).await?;
         assert!(!res);
@@ -647,7 +648,7 @@ mod test {
     #[tokio::test]
     async fn rand_delete() -> Result<(), Box<dyn std::error::Error>> {
         let rand = Rand::default();
-        let mut hb = Hyperbee::from_ram().await?;
+        let mut hb = Tree::from_ram().await?;
 
         let keys: Vec<Vec<u8>> = (0..100).map(i32_key_vec).collect();
         let keys = rand.shuffle(keys);
