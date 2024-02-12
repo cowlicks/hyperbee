@@ -1,0 +1,11 @@
+{
+  "name": "js",
+  "type": "module",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "hyperbee": "^2.18.2",
+    "hypercore": "^10.32.8"
+  }
+}
