@@ -2,7 +2,7 @@ use hyperbee::Hyperbee;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut hb = Hyperbee::from_ram().await?;
+    let hb = Hyperbee::from_ram().await?;
     // Insert "world" with key "hello"
     hb.put(b"hello", Some(b"world")).await?;
 
