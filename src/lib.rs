@@ -1,3 +1,4 @@
+//! # ⚠️  WARNING 🚧 API unstable ⚒️  and still in development 👷
 //! Rust version of [hyperbee](https://github.com/holepunchto/hyperbee)
 //! A B-tree built on top of Hypercore.
 
