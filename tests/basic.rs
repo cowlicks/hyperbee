@@ -1,4 +1,4 @@
-use hyperbee::Hyperbee;
+use hyperbee::{traverse::TraverseConfig, Hyperbee};
 static HYPERBEE_STORAGE_DIR: &str = "./test_data/basic";
 static HYPERBEE_STORAGE_DIR_MORE_HEIGHT: &str = "./test_data/more_height";
 static HYPERBEE_STORAGE_DIR_SMALL: &str = "./test_data/alphabet";
@@ -41,7 +41,7 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
         .get_root(false)
         .await?
         .expect("Root should be written already");
-    let stream = hyperbee::traverse::traverse(root);
+    let stream = hyperbee::traverse::traverse(root, TraverseConfig::default());
     tokio::pin!(stream);
     while let Some(x) = stream.next().await {
         let (key_data, _node) = x;
