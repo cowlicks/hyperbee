@@ -317,6 +317,69 @@ impl<M: CoreMem> Children<M> {
     }
 }
 
+#[tracing::instrument(skip(node))]
+/// Find the `key` in the `node` with a binary search
+///
+/// # Returns (`matched`, `index`)
+///
+/// `match` == true means we found the `key`.
+///
+/// if `matched` false:
+///     if `node` is not a leaf:
+///         index of the child within the `node` where the `key` could be
+///     if `node` is a leaf:
+///         the index within this `node`'s keys where the `key` wolud be inserted
+/// if `matched` is true:
+///     the index within this `node`'s keys of the `key`
+async fn get_child_index<M: CoreMem, T>(
+    node: SharedNode<M>,
+    key: &T,
+) -> Result<(bool, usize), HyperbeeError>
+where
+    T: PartialOrd<[u8]> + Debug + ?Sized,
+{
+    let child_index: usize = 'found: {
+        // Binary search current node for matching key, or index of next child
+        let n_keys = node.read().await.keys.len();
+        if n_keys == 0 {
+            break 'found n_keys;
+        }
+        let mut low = 0;
+        let mut high = n_keys - 1;
+
+        while low <= high {
+            let mid = low + ((high - low) >> 1);
+            let other_key = node.write().await.get_key(mid).await?;
+
+            // if matching key, we are done!
+            if key == &other_key[..] {
+                trace!(
+                    "key {:?} == other_key {:?} at index {}",
+                    key,
+                    other_key,
+                    mid
+                );
+                //out_path.push((node.clone(), mid));
+                return Ok((true, mid));
+            }
+
+            if key < &other_key[..] {
+                if mid == 0 {
+                    break;
+                }
+                // look lower
+                high = mid - 1;
+            } else {
+                // look higher
+                low = mid + 1;
+            }
+        }
+        //out_path.push((node.clone(), low));
+        break 'found low;
+    };
+    Ok((false, child_index))
+}
+
 /// Descend through tree to the node nearest (or matching) the provided key
 /// Return value describes the path to the key. It looks like:
 /// `(matched, path: Vec<(node, index)>)`
@@ -342,40 +405,11 @@ where
     let mut out_path: NodePath<M> = vec![];
     loop {
         let next_node = {
-            let child_index: usize = 'found: {
-                // Binary search current node for matching key, or index of next child
-                let n_keys = current_node.read().await.keys.len();
-                if n_keys == 0 {
-                    break 'found n_keys;
-                }
-                let mut low = 0;
-                let mut high = n_keys - 1;
-
-                while low <= high {
-                    let mid = low + ((high - low) >> 1);
-                    let val = current_node.write().await.get_key(mid).await?;
-
-                    // if matching key, we are done!
-                    if key == &val[..] {
-                        trace!("key {:?} == val {:?} at index {}", key, val, mid);
-                        out_path.push((current_node.clone(), mid));
-                        return Ok((true, out_path));
-                    }
-
-                    if key < &val[..] {
-                        if mid == 0 {
-                            break;
-                        }
-                        // look lower
-                        high = mid - 1;
-                    } else {
-                        // look higher
-                        low = mid + 1;
-                    }
-                }
-                out_path.push((current_node.clone(), low));
-                break 'found low;
-            };
+            let (matched, child_index) = get_child_index(current_node.clone(), key).await?;
+            out_path.push((current_node.clone(), child_index));
+            if matched {
+                return Ok((true, out_path));
+            }
 
             // leaf node with no match
             if current_node.read().await.is_leaf().await {
