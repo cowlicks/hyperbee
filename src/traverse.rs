@@ -51,11 +51,11 @@ pub struct TraverseConfig {
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
     min_value: LimitValue,
     #[builder(default = "true")]
-    greter_than_or_equal_to: bool,
+    min_inclusive: bool,
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Positive)")]
     max_value: LimitValue,
     #[builder(default = "true")]
-    less_than_or_equal_to: bool,
+    max_inclusive: bool,
     #[builder(default = "false")]
     reversed: bool,
 }
@@ -63,9 +63,9 @@ impl Default for TraverseConfig {
     fn default() -> Self {
         Self {
             min_value: LimitValue::Infinite(InfiniteKeys::Negative),
-            greter_than_or_equal_to: true,
+            min_inclusive: true,
             max_value: LimitValue::Infinite(InfiniteKeys::Positive),
-            less_than_or_equal_to: true,
+            max_inclusive: true,
             reversed: false,
         }
     }
@@ -80,19 +80,22 @@ async fn make_child_key_index_iter<M: CoreMem>(
     let step_by = if is_leaf { 2 } else { 1 };
 
     let (starting_key, inclusive) = if conf.reversed {
-        (conf.max_value.clone(), conf.less_than_or_equal_to)
+        (conf.max_value.clone(), conf.max_inclusive)
     } else {
-        (conf.min_value.clone(), conf.greter_than_or_equal_to)
+        (conf.min_value.clone(), conf.min_inclusive)
     };
 
     let (matched, index) = get_child_index(node, &starting_key).await?;
     let start = if matched {
+        println!("MATCHED");
         let key_index = index * 2 + 1;
         if !conf.reversed {
+            println!("NOT REV");
             if inclusive {
                 // start at the key
                 key_index
             } else {
+                println!("NOT INCLUSIVE");
                 // start at the next child
                 // TODO handle key_index + step_by > n_keys + n_children - 1
                 key_index + step_by
@@ -151,12 +154,12 @@ impl TraverseConfig {
             None => todo!(),
             Some(res) => match res {
                 std::cmp::Ordering::Greater => false,
-                std::cmp::Ordering::Equal => self.greter_than_or_equal_to,
+                std::cmp::Ordering::Equal => self.min_inclusive,
                 std::cmp::Ordering::Less => match self.max_value.partial_cmp(value) {
                     None => todo!(),
                     Some(res) => match res {
                         std::cmp::Ordering::Greater => true,
-                        std::cmp::Ordering::Equal => self.less_than_or_equal_to,
+                        std::cmp::Ordering::Equal => self.max_inclusive,
                         std::cmp::Ordering::Less => false,
                     },
                 },
@@ -388,12 +391,19 @@ pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeEr
 
 #[cfg(test)]
 mod test {
+    // enumerating possibilities for traversal conf
+    // all these have
+    // min: inf, val
+    // min_inclusive: true, false
+    // max: inf, val
+    // max_inclusive: true, false
+    // reversed: true false
     macro_rules! traverse_check {
-        ( $range:expr, $tarverse_conf:expr ) => {
+        ( $range:expr, $traverse_conf:expr ) => {
             async move {
                 let (mut hb, keys) = crate::test::hb_put!($range).await?;
                 let root = hb.get_root(false).await?.unwrap();
-                let stream = traverse(root, $tarverse_conf);
+                let stream = traverse(root, $traverse_conf);
                 tokio::pin!(stream);
                 let mut res = vec![];
                 while let Some((Ok(key_data), _node)) = stream.next().await {
@@ -403,69 +413,175 @@ mod test {
             }
         };
     }
+
+    macro_rules! call_attr {
+        ( $traverse_conf:expr, $attr:ident, $val:expr ) => {
+            $traverse_conf.$attr($val)
+        };
+    }
+
+    macro_rules! multiple_attrs {
+        ( $conf:expr$(,)?) => {
+            $conf
+        };
+        ( $conf:expr,  $label:ident = $val:expr) => {
+            call_attr!($conf, $label, $val)
+        };
+        ( $conf:expr,  $label:ident = $val:expr, $($tail:tt)+) => {{
+            multiple_attrs!(call_attr!($conf, $label, $val), $($tail)*)
+        }};
+    }
+
+    macro_rules! conf_with {
+        () => {{
+            let conf = TraverseConfigBuilder::default();
+            conf.build()
+
+        }};
+        ( $($attrs:tt)+ ) => {{
+            let mut conf = TraverseConfigBuilder::default();
+            let conf = multiple_attrs!(conf, $($attrs)*);
+            conf.build()
+        }};
+    }
+
+    macro_rules! traverse_test {
+        ($($attrs:tt)*) => {
+            async move {
+            let conf = conf_with!($($attrs)*)?;
+            let out = traverse_check!(0..10, conf).await?;
+            Ok::<(Vec<Vec<u8>>, Vec<Vec<u8>>), HyperbeeError>(out)
+            }
+        }
+    }
+
+    fn to_limit(x: usize) -> LimitValue {
+        LimitValue::Finite(x.to_string().clone().as_bytes().to_vec())
+    }
+
     use super::*;
     #[tokio::test]
+    /// [min, max]
     async fn forwards() -> Result<(), Box<dyn std::error::Error>> {
-        let conf = TraverseConfig::default();
-        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        let (input_keys, resulting_keys) = traverse_test!().await?;
         assert_eq!(input_keys, resulting_keys);
         Ok(())
     }
 
     #[tokio::test]
+    /// [max, min]
     async fn backwards() -> Result<(), Box<dyn std::error::Error>> {
-        let conf = TraverseConfigBuilder::default().reversed(true).build()?;
-        let (mut input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        let (mut input_keys, resulting_keys) = traverse_test!(reversed = true).await?;
         input_keys.reverse();
         assert_eq!(input_keys, resulting_keys);
         Ok(())
     }
 
     #[tokio::test]
+    /// [min, 5]
     async fn less_than_or_equal() -> Result<(), Box<dyn std::error::Error>> {
-        let max = 5.to_string().clone().as_bytes().to_vec();
-        let conf = TraverseConfigBuilder::default()
-            .max_value(LimitValue::Finite(max))
-            .build()?;
-        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        let max = to_limit(5);
+        let (input_keys, resulting_keys) = traverse_test!(max_value = max).await?;
         assert_eq!(input_keys[..6], resulting_keys);
         Ok(())
     }
 
     #[tokio::test]
+    /// [min, 5)
     async fn less_than() -> Result<(), Box<dyn std::error::Error>> {
-        let lim = 5.to_string().clone().as_bytes().to_vec();
-        let conf = TraverseConfigBuilder::default()
-            .max_value(LimitValue::Finite(lim))
-            .less_than_or_equal_to(false)
-            .build()?;
-        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        let max = to_limit(5);
+
+        let (input_keys, resulting_keys) =
+            traverse_test!(max_inclusive = false, max_value = max).await?;
         assert_eq!(input_keys[..5], resulting_keys);
         Ok(())
     }
 
     #[tokio::test]
+    /// [5, max]
     async fn greater_than_or_equal() -> Result<(), Box<dyn std::error::Error>> {
-        let lim = 5.to_string().clone().as_bytes().to_vec();
+        let min = 5.to_string().clone().as_bytes().to_vec();
         let conf = TraverseConfigBuilder::default()
-            .min_value(LimitValue::Finite(lim))
+            .min_value(LimitValue::Finite(min))
             .build()?;
         let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
         assert_eq!(resulting_keys, input_keys[5..]);
         Ok(())
     }
 
-    /*
     #[tokio::test]
+    /// (5, max]
     async fn greater_than() -> Result<(), Box<dyn std::error::Error>> {
-        let lim = 5.to_string().clone().as_bytes().to_vec();
+        let min = 5.to_string().clone().as_bytes().to_vec();
         let conf = TraverseConfigBuilder::default()
-            .max_value(Arc::new(lim))
-            .greter_than_or_equal_to(false)
+            .min_value(LimitValue::Finite(min))
+            .min_inclusive(false)
             .build()?;
         let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
-        assert_eq!(input_keys[6..], resulting_keys);
+        assert_eq!(resulting_keys, input_keys[6..]);
         Ok(())
     }
-    */
+
+    #[tokio::test]
+    /// [2, 8]
+    async fn greater_than_less_than() -> Result<(), Box<dyn std::error::Error>> {
+        let min = 2.to_string().clone().as_bytes().to_vec();
+        let max = 8.to_string().clone().as_bytes().to_vec();
+        let conf = TraverseConfigBuilder::default()
+            .min_value(LimitValue::Finite(min))
+            .max_value(LimitValue::Finite(max))
+            .build()?;
+        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        assert_eq!(resulting_keys, input_keys[2..9]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    /// [2, 8)
+    async fn greater_than_inclusive_less_than_exclusive() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let min = 2.to_string().clone().as_bytes().to_vec();
+        let max = 8.to_string().clone().as_bytes().to_vec();
+        let conf = TraverseConfigBuilder::default()
+            .min_value(LimitValue::Finite(min))
+            .max_value(LimitValue::Finite(max))
+            .max_inclusive(false)
+            .build()?;
+        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        assert_eq!(resulting_keys, input_keys[2..8]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    /// (2, 8]
+    async fn greater_than_exclusive_less_than_inclusive() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let min = 2.to_string().clone().as_bytes().to_vec();
+        let max = 8.to_string().clone().as_bytes().to_vec();
+        let conf = TraverseConfigBuilder::default()
+            .min_value(LimitValue::Finite(min))
+            .max_value(LimitValue::Finite(max))
+            .min_inclusive(false)
+            .build()?;
+        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        assert_eq!(resulting_keys, input_keys[3..9]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    /// (2, 8)
+    async fn greater_than_exclusive_less_than_exclusive() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let min = 2.to_string().clone().as_bytes().to_vec();
+        let max = 8.to_string().clone().as_bytes().to_vec();
+        let conf = TraverseConfigBuilder::default()
+            .min_value(LimitValue::Finite(min))
+            .max_value(LimitValue::Finite(max))
+            .max_inclusive(false)
+            .min_inclusive(false)
+            .build()?;
+        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        assert_eq!(resulting_keys, input_keys[3..8]);
+        Ok(())
+    }
 }

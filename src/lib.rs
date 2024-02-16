@@ -359,7 +359,6 @@ where
                     other_key,
                     mid
                 );
-                //out_path.push((node.clone(), mid));
                 return Ok((true, mid));
             }
 
@@ -374,7 +373,6 @@ where
                 low = mid + 1;
             }
         }
-        //out_path.push((node.clone(), low));
         break 'found low;
     };
     Ok((false, child_index))
