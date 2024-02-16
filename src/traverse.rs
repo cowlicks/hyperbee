@@ -10,7 +10,7 @@ use derive_builder::Builder;
 use futures_lite::{future::FutureExt, StreamExt};
 use tokio_stream::Stream;
 
-use crate::{keys::InfiniteKeys, CoreMem, HyperbeeError, SharedNode};
+use crate::{get_child_index, keys::InfiniteKeys, CoreMem, HyperbeeError, SharedNode};
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
@@ -18,23 +18,43 @@ type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 type KeyData = Result<(Vec<u8>, (u64, Option<Vec<u8>>)), HyperbeeError>;
 type TreeItem<M> = (KeyData, SharedNode<M>);
 
-trait Bound: PartialOrd<Vec<u8>> + Debug {}
-impl<T: PartialOrd<Vec<u8>> + Debug> Bound for T {}
-
-struct Limit {
-    inclusive: bool,
-    value: Arc<dyn Bound>,
+#[derive(Clone, Debug)]
+enum LimitValue {
+    Finite(Vec<u8>),
+    Infinite(InfiniteKeys),
 }
 
+impl PartialEq<[u8]> for LimitValue {
+    fn eq(&self, other: &[u8]) -> bool {
+        match &self {
+            LimitValue::Finite(vec) => vec.eq(other),
+            LimitValue::Infinite(inf) => inf.eq(other),
+        }
+    }
+}
+impl PartialOrd<[u8]> for LimitValue {
+    fn partial_cmp(&self, other: &[u8]) -> Option<std::cmp::Ordering> {
+        match &self {
+            LimitValue::Finite(vec) => {
+                let slice: &[u8] = vec.as_ref();
+                slice.partial_cmp(other)
+            }
+            LimitValue::Infinite(inf) => inf.partial_cmp(other),
+        }
+    }
+}
+
+// TODO assert that max > min when building
+// TODO make using min_value/max_value setters take a Bound instead of Arce<Bound>
 #[derive(Builder, Debug, Clone)]
 #[builder(derive(Debug))]
 pub struct TraverseConfig {
-    #[builder(default = "Arc::new(InfiniteKeys::Negative)")]
-    min_value: Arc<dyn Bound>,
+    #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
+    min_value: LimitValue,
     #[builder(default = "true")]
     greter_than_or_equal_to: bool,
-    #[builder(default = "Arc::new(InfiniteKeys::Positive)")]
-    max_value: Arc<dyn Bound>,
+    #[builder(default = "LimitValue::Infinite(InfiniteKeys::Positive)")]
+    max_value: LimitValue,
     #[builder(default = "true")]
     less_than_or_equal_to: bool,
     #[builder(default = "false")]
