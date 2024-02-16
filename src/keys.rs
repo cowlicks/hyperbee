@@ -36,35 +36,6 @@ impl PartialOrd<InfiniteKeys> for [u8] {
         })
     }
 }
-impl PartialEq<Vec<u8>> for InfiniteKeys {
-    fn eq(&self, _other: &Vec<u8>) -> bool {
-        false
-    }
-}
-
-impl PartialEq<InfiniteKeys> for Vec<u8> {
-    fn eq(&self, _other: &InfiniteKeys) -> bool {
-        false
-    }
-}
-
-impl PartialOrd<Vec<u8>> for InfiniteKeys {
-    fn partial_cmp(&self, _other: &Vec<u8>) -> Option<std::cmp::Ordering> {
-        Some(match self {
-            Positive => Ordering::Greater,
-            Negative => Ordering::Less,
-        })
-    }
-}
-
-impl PartialOrd<InfiniteKeys> for Vec<u8> {
-    fn partial_cmp(&self, other: &InfiniteKeys) -> Option<Ordering> {
-        Some(match other {
-            Positive => Ordering::Less,
-            Negative => Ordering::Greater,
-        })
-    }
-}
 
 #[cfg(test)]
 mod test {
@@ -79,13 +50,5 @@ mod test {
         assert!(*b < InfiniteKeys::Positive);
         assert!(a[..] >= InfiniteKeys::Negative);
         assert!(*b >= InfiniteKeys::Negative);
-    }
-    #[test]
-    fn test_vec() {
-        let a: Vec<u8> = vec![1, 2, 3];
-        assert!(InfiniteKeys::Positive > a);
-        assert!(InfiniteKeys::Negative < a);
-        assert!(a < InfiniteKeys::Positive);
-        assert!(a > InfiniteKeys::Negative);
     }
 }
