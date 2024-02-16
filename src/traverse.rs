@@ -2,7 +2,6 @@ use std::{
     fmt::Debug,
     future::Future,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -19,7 +18,7 @@ type KeyData = Result<(Vec<u8>, (u64, Option<Vec<u8>>)), HyperbeeError>;
 type TreeItem<M> = (KeyData, SharedNode<M>);
 
 #[derive(Clone, Debug)]
-enum LimitValue {
+pub enum LimitValue {
     Finite(Vec<u8>),
     Infinite(InfiniteKeys),
 }
@@ -63,33 +62,90 @@ pub struct TraverseConfig {
 impl Default for TraverseConfig {
     fn default() -> Self {
         Self {
-            min_value: Arc::new(InfiniteKeys::Negative),
+            min_value: LimitValue::Infinite(InfiniteKeys::Negative),
             greter_than_or_equal_to: true,
-            max_value: Arc::new(InfiniteKeys::Positive),
+            max_value: LimitValue::Infinite(InfiniteKeys::Positive),
             less_than_or_equal_to: true,
             reversed: false,
         }
     }
 }
-impl TraverseConfig {
-    fn make_child_and_key_iter(
-        &self,
-        n_keys: usize,
-        is_leaf: bool,
-    ) -> Box<dyn DoubleEndedIterator<Item = usize>> {
-        // TODO do this better, having problems getting boxed traits to do what I want
-        let iter = if !is_leaf {
-            (0..(n_keys * 2 + 1)).step_by(1)
+async fn make_child_key_index_iter<M: CoreMem>(
+    conf: TraverseConfig,
+    node: SharedNode<M>,
+    n_keys: usize,
+    n_children: usize,
+) -> Result<Box<dyn DoubleEndedIterator<Item = usize>>, HyperbeeError> {
+    let is_leaf = n_children == 0;
+    let step_by = if is_leaf { 2 } else { 1 };
+
+    let (starting_key, inclusive) = if conf.reversed {
+        (conf.max_value.clone(), conf.less_than_or_equal_to)
+    } else {
+        (conf.min_value.clone(), conf.greter_than_or_equal_to)
+    };
+
+    let (matched, index) = get_child_index(node, &starting_key).await?;
+    let start = if matched {
+        let key_index = index * 2 + 1;
+        if !conf.reversed {
+            if inclusive {
+                // start at the key
+                key_index
+            } else {
+                // start at the next child
+                // TODO handle key_index + step_by > n_keys + n_children - 1
+                key_index + step_by
+            }
         } else {
-            // if leaf .step_by(2) to skip children
-            (1..(n_keys * 2 + 1)).step_by(2)
-        };
-        if self.reversed {
-            Box::new(iter.rev())
-        } else {
-            Box::new(iter)
+            if inclusive {
+                key_index
+            } else {
+                // TODO handle key_index - step_by < 0
+                key_index - step_by
+            }
         }
+    } else {
+        if !conf.reversed {
+            if is_leaf {
+                index * 2 + 1
+            } else {
+                index * 2
+            }
+        } else {
+            if is_leaf {
+                if index == 0 {
+                    0
+                } else {
+                    index * 2 - 1
+                }
+            } else {
+                index * 2
+            }
+        }
+    };
+
+    let (start, stop) = if !conf.reversed {
+        (start, (n_keys * 2 + 1))
+    } else {
+        if is_leaf {
+            (1, start + 1)
+        } else {
+            (0, start + 1)
+        }
+    };
+
+    let iter = (start..stop).step_by(step_by);
+
+    if conf.reversed {
+        let x: Vec<usize> = iter.rev().collect();
+        Ok(Box::new(x.into_iter()))
+    } else {
+        Ok(Box::new(iter))
     }
+}
+
+impl TraverseConfig {
     fn in_bounds(&self, value: &Vec<u8>) -> bool {
         match self.min_value.partial_cmp(value) {
             None => todo!(),
@@ -115,16 +171,21 @@ impl TraverseConfig {
 /// Each iteration yields the key it's value, and the "seq" for the value (the index of the value
 /// in the hypercore).
 pub struct Traverse<'a, M: CoreMem> {
+    /// Configuration for the traversal
     config: TraverseConfig,
+    /// The current node
     root: SharedNode<M>,
     /// Option holding (number_of_keys, number_of_children) for this node
-    n_keys_and_children: Option<PinnedFut<'a, (usize, usize)>>,
+    n_keys_and_children_fut: Option<PinnedFut<'a, (usize, usize)>>,
+    n_keys_and_children: Option<(usize, usize)>,
 
     /// Iterator over this node's keys and children.
     /// For a yielded value `i`. Even `i`'s are for children, odd are for keys.
     /// The index to the current key/child within the keys/children is geven by `i >> 1`.
     /// Leaf nodes get an iterator that on yields odd values.
-    iter: Option<Box<dyn DoubleEndedIterator<Item = usize>>>,
+    iter_fut:
+        Option<PinnedFut<'a, Result<Box<dyn DoubleEndedIterator<Item = usize>>, HyperbeeError>>>,
+    iter: Option<Pin<Box<dyn DoubleEndedIterator<Item = usize> + Unpin>>>,
 
     /// Future holding the next key
     next_key: Option<PinnedFut<'a, KeyData>>,
@@ -132,7 +193,6 @@ pub struct Traverse<'a, M: CoreMem> {
     next_child: Option<PinnedFut<'a, Result<Traverse<'a, M>, HyperbeeError>>>,
     /// Another instance of [`Traverse`] from a child node.
     child_stream: Option<Pin<Box<Traverse<'a, M>>>>,
-    done: bool,
 }
 
 impl<M: CoreMem> Traverse<'_, M> {
@@ -140,12 +200,13 @@ impl<M: CoreMem> Traverse<'_, M> {
         Traverse {
             config,
             root,
+            n_keys_and_children_fut: Option::None,
             n_keys_and_children: Option::None,
+            iter_fut: Option::None,
             iter: Option::None,
             next_key: Option::None,
             next_child: Option::None,
             child_stream: Option::None,
-            done: false,
         }
     }
 }
@@ -164,6 +225,7 @@ async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> Key
     Ok((key, value))
 }
 
+#[tracing::instrument]
 async fn get_child_stream<'a, M: CoreMem>(
     node: SharedNode<M>,
     index: usize,
@@ -177,16 +239,12 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
     type Item = TreeItem<M>;
     #[tracing::instrument(skip(self, cx))]
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // getting next key & value
-        if self.done {
-            return Poll::Ready(None);
-        }
+        // await next key & value. yield if ready
         if let Some(key_fut) = &mut self.next_key {
             match key_fut.poll(cx) {
                 Poll::Ready(out) => {
                     if let Ok(res) = &out {
                         if !self.config.in_bounds(&res.0) {
-                            self.done = true;
                             cx.waker().wake_by_ref();
                             return Poll::Ready(None);
                         }
@@ -220,7 +278,7 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
             return Poll::Pending;
         }
 
-        // pull from child stream
+        // await child stream and yield it's values
         if let Some(stream) = &mut self.child_stream {
             if let Poll::Ready(out_opt) = stream.poll_next(cx) {
                 match out_opt {
@@ -232,43 +290,75 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
             return Poll::Pending;
         }
 
-        // set up prerequisites to get the iterator over children & keys for this node
-        let iter = match &mut self.iter {
-            None => {
-                match &mut self.n_keys_and_children {
-                    None => {
-                        self.n_keys_and_children =
-                            Some(Box::pin(get_n_keys_and_children(self.root.clone())));
-                    }
-                    Some(fut) => match fut.poll(cx) {
-                        Poll::Ready((n_keys, n_children)) => {
-                            self.iter =
-                                Some(self.config.make_child_and_key_iter(n_keys, n_children == 0))
-                        }
-                        Poll::Pending => (),
-                    },
+        let (n_keys, n_children) = match self.n_keys_and_children {
+            Some(x) => x,
+            None => match &mut self.n_keys_and_children_fut {
+                None => {
+                    self.n_keys_and_children_fut =
+                        Some(Box::pin(get_n_keys_and_children(self.root.clone())));
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
                 }
-                cx.waker().wake_by_ref();
-                return Poll::Pending;
-            }
-            Some(iter) => iter,
+                Some(fut) => {
+                    match fut.poll(cx) {
+                        Poll::Pending => (),
+                        Poll::Ready(n_keys_and_children) => {
+                            self.n_keys_and_children = Some(n_keys_and_children);
+                        }
+                    }
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+            },
+        };
+        // set up prerequisites to get the iterator over children & keys for this node
+        match &self.iter {
+            Some(_) => (),
+            None => match &mut self.iter_fut {
+                None => {
+                    let conf = self.config.clone();
+                    let node = self.root.clone();
+                    let iter_fut = make_child_key_index_iter(conf, node, n_keys, n_children);
+                    self.iter_fut = Some(Box::pin(iter_fut));
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Some(iter_fut) => match iter_fut.poll(cx) {
+                    Poll::Ready(iter_result) => match iter_result {
+                        Ok(iter) => {
+                            self.iter = Some(Box::pin(iter));
+                            cx.waker().wake_by_ref();
+                            return Poll::Pending;
+                        }
+                        Err(_e) => todo!(),
+                    },
+                    Poll::Pending => {
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
+                    }
+                },
+            },
         };
 
-        // start getting next child or key
-        if let Some(index) = iter.next() {
-            if index % 2 == 0 {
-                self.next_child = Some(Box::pin(get_child_stream(
-                    self.root.clone(),
-                    index >> 1,
-                    self.config.clone(),
-                )));
-            } else {
-                self.next_key = Some(Box::pin(get_key_and_value(self.root.clone(), index >> 1)));
+        if let Some(iter) = &mut self.iter {
+            if let Some(index) = iter.next() {
+                if index % 2 == 0 {
+                    self.next_child = Some(Box::pin(get_child_stream(
+                        self.root.clone(),
+                        index >> 1,
+                        self.config.clone(),
+                    )));
+                } else {
+                    self.next_key =
+                        Some(Box::pin(get_key_and_value(self.root.clone(), index >> 1)));
+                }
+                cx.waker().wake_by_ref();
+                // start waiting for next_key or next_child
+                return Poll::Pending;
             }
-            cx.waker().wake_by_ref();
-            // start waiting for next_key or next_child
-            return Poll::Pending;
         }
+        // create future for next child or key
+        // index iterator is exhausted. We're done.
         cx.waker().wake_by_ref();
         Poll::Ready(None)
     }
@@ -298,71 +388,84 @@ pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeEr
 
 #[cfg(test)]
 mod test {
+    macro_rules! traverse_check {
+        ( $range:expr, $tarverse_conf:expr ) => {
+            async move {
+                let (mut hb, keys) = crate::test::hb_put!($range).await?;
+                let root = hb.get_root(false).await?.unwrap();
+                let stream = traverse(root, $tarverse_conf);
+                tokio::pin!(stream);
+                let mut res = vec![];
+                while let Some((Ok(key_data), _node)) = stream.next().await {
+                    res.push(key_data.0);
+                }
+                Ok::<(Vec<Vec<u8>>, Vec<Vec<u8>>), HyperbeeError>((keys, res))
+            }
+        };
+    }
     use super::*;
     #[tokio::test]
     async fn forwards() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..10).await?;
-        let root = hb.get_root(false).await?.unwrap();
-        let stream = traverse(root, TraverseConfig::default());
-        tokio::pin!(stream);
-        let mut res = vec![];
-        while let Some((Ok(key_data), node)) = stream.next().await {
-            res.push(key_data.0);
-        }
-        assert_eq!(keys, res);
+        let conf = TraverseConfig::default();
+        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        assert_eq!(input_keys, resulting_keys);
         Ok(())
     }
+
     #[tokio::test]
     async fn backwards() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, mut keys) = crate::test::hb_put!(0..10).await?;
-        let root = hb.get_root(false).await?.unwrap();
         let conf = TraverseConfigBuilder::default().reversed(true).build()?;
-        dbg!(&conf);
-        let stream = traverse(root, conf);
-        tokio::pin!(stream);
-        let mut res = vec![];
-        while let Some((Ok(key_data), node)) = stream.next().await {
-            res.push(key_data.0);
-        }
-        keys.reverse();
-        assert_eq!(keys, res);
+        let (mut input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        input_keys.reverse();
+        assert_eq!(input_keys, resulting_keys);
         Ok(())
     }
+
     #[tokio::test]
     async fn less_than_or_equal() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, mut keys) = crate::test::hb_put!(0..10).await?;
-        let root = hb.get_root(false).await?.unwrap();
         let max = 5.to_string().clone().as_bytes().to_vec();
         let conf = TraverseConfigBuilder::default()
-            .max_value(Arc::new(max))
+            .max_value(LimitValue::Finite(max))
             .build()?;
-
-        let stream = traverse(root, conf);
-        tokio::pin!(stream);
-        let mut res = vec![];
-        while let Some((Ok(key_data), node)) = stream.next().await {
-            res.push(key_data.0);
-        }
-        assert_eq!(keys[..6], res);
+        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        assert_eq!(input_keys[..6], resulting_keys);
         Ok(())
     }
+
     #[tokio::test]
     async fn less_than() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, mut keys) = crate::test::hb_put!(0..10).await?;
-        let root = hb.get_root(false).await?.unwrap();
-        let max = 5.to_string().clone().as_bytes().to_vec();
+        let lim = 5.to_string().clone().as_bytes().to_vec();
         let conf = TraverseConfigBuilder::default()
-            .max_value(Arc::new(max))
+            .max_value(LimitValue::Finite(lim))
             .less_than_or_equal_to(false)
             .build()?;
-
-        let stream = traverse(root, conf);
-        tokio::pin!(stream);
-        let mut res = vec![];
-        while let Some((Ok(key_data), node)) = stream.next().await {
-            res.push(key_data.0);
-        }
-        assert_eq!(keys[..5], res);
+        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        assert_eq!(input_keys[..5], resulting_keys);
         Ok(())
     }
+
+    #[tokio::test]
+    async fn greater_than_or_equal() -> Result<(), Box<dyn std::error::Error>> {
+        let lim = 5.to_string().clone().as_bytes().to_vec();
+        let conf = TraverseConfigBuilder::default()
+            .min_value(LimitValue::Finite(lim))
+            .build()?;
+        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        assert_eq!(resulting_keys, input_keys[5..]);
+        Ok(())
+    }
+
+    /*
+    #[tokio::test]
+    async fn greater_than() -> Result<(), Box<dyn std::error::Error>> {
+        let lim = 5.to_string().clone().as_bytes().to_vec();
+        let conf = TraverseConfigBuilder::default()
+            .max_value(Arc::new(lim))
+            .greter_than_or_equal_to(false)
+            .build()?;
+        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+        assert_eq!(input_keys[6..], resulting_keys);
+        Ok(())
+    }
+    */
 }
