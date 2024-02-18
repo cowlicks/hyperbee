@@ -214,19 +214,22 @@ async fn make_child_key_index_iter<M: CoreMem>(
 
 impl TraverseConfig {
     fn in_bounds(&self, value: &Vec<u8>) -> bool {
-        match self.min_value.partial_cmp(value) {
-            None => todo!(),
-            Some(res) => match res {
-                std::cmp::Ordering::Greater => false,
-                std::cmp::Ordering::Equal => self.min_inclusive,
-                std::cmp::Ordering::Less => match self.max_value.partial_cmp(value) {
-                    None => todo!(),
-                    Some(res) => match res {
-                        std::cmp::Ordering::Greater => true,
-                        std::cmp::Ordering::Equal => self.max_inclusive,
-                        std::cmp::Ordering::Less => false,
-                    },
-                },
+        // TODO impl Ord for LimitValue and remove the expects
+        match self
+            .min_value
+            .partial_cmp(value)
+            .expect("partial_cmp never returns none")
+        {
+            std::cmp::Ordering::Greater => false,
+            std::cmp::Ordering::Equal => self.min_inclusive,
+            std::cmp::Ordering::Less => match self
+                .max_value
+                .partial_cmp(value)
+                .expect("partial_cmp never returns none")
+            {
+                std::cmp::Ordering::Greater => true,
+                std::cmp::Ordering::Equal => self.max_inclusive,
+                std::cmp::Ordering::Less => false,
             },
         }
     }
@@ -400,7 +403,13 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
                             cx.waker().wake_by_ref();
                             return Poll::Pending;
                         }
-                        Err(_e) => todo!(),
+                        Err(e) => {
+                            // Push error into stream
+                            return Poll::Ready(Some((
+                                Err(HyperbeeError::BuildIteratorInTraverseError(Box::new(e))),
+                                self.root.clone(),
+                            )));
+                        }
                     },
                     Poll::Pending => {
                         cx.waker().wake_by_ref();

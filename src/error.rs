@@ -31,6 +31,8 @@ pub enum HyperbeeError {
     GetChildInTraverseError(Box<dyn std::error::Error>),
     #[error("There was an error building TraverseConfig")]
     TraverseConfigBuilderError(#[from] TraverseConfigBuilderError),
+    #[error("There was an error building the iterator to traverse a node. Got error: {0}")]
+    BuildIteratorInTraverseError(Box<dyn std::error::Error>),
     #[error("There was an error encoding a messages::YoloIndex {0}")]
     YoloIndexEncodingError(EncodeError),
     #[error("There was an error encoding a messages::Header {0}")]
