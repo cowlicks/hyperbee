@@ -619,7 +619,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn delete_from_internal_node_with_underflow_rotate_foo(
+    async fn delete_from_internal_node_with_underflow_rotate(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (mut hb, keys) = crate::test::hb_put!(0..25).await?;
         let k = keys[10].clone();
