@@ -22,31 +22,36 @@ pub enum LimitValue {
     Finite(Vec<u8>),
     Infinite(InfiniteKeys),
 }
+use LimitValue::*;
+
+impl From<usize> for LimitValue {
+    fn from(value: usize) -> Self {
+        Finite(value.to_string().clone().as_bytes().to_vec())
+    }
+}
 
 impl PartialEq<[u8]> for LimitValue {
     fn eq(&self, other: &[u8]) -> bool {
         match &self {
-            LimitValue::Finite(vec) => vec.eq(other),
-            LimitValue::Infinite(inf) => inf.eq(other),
+            Finite(vec) => vec.eq(other),
+            Infinite(inf) => inf.eq(other),
         }
     }
 }
 impl PartialOrd<[u8]> for LimitValue {
     fn partial_cmp(&self, other: &[u8]) -> Option<std::cmp::Ordering> {
         match &self {
-            LimitValue::Finite(vec) => {
+            Finite(vec) => {
                 let slice: &[u8] = vec.as_ref();
                 slice.partial_cmp(other)
             }
-            LimitValue::Infinite(inf) => inf.partial_cmp(other),
+            Infinite(inf) => inf.partial_cmp(other),
         }
     }
 }
 
-// TODO assert that max > min when building
-// TODO make using min_value/max_value setters take a Bound instead of Arce<Bound>
 #[derive(Builder, Debug, Clone)]
-#[builder(derive(Debug))]
+#[builder(derive(Debug), build_fn(validate = "validate_traverse_config_builder"))]
 pub struct TraverseConfig {
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
     min_value: LimitValue,
@@ -59,17 +64,71 @@ pub struct TraverseConfig {
     #[builder(default = "false")]
     reversed: bool,
 }
+
+fn validate_traverse_config_builder(builder: &TraverseConfigBuilder) -> Result<(), String> {
+    match (&builder.min_value, &builder.max_value) {
+        (Some(min), Some(max)) => match (min, max) {
+            (_, Infinite(InfiniteKeys::Negative)) => {
+                return Err("Maximum value is negative infinity".to_string())
+            }
+            (Infinite(InfiniteKeys::Positive), _) => {
+                return Err("Minimum value is positive infinity".to_string())
+            }
+            (Finite(min), Finite(max)) => {
+                if max < min {
+                    return Err(format!(
+                        "Minimum value [{min:?}] is greater than max [{max:?}]"
+                    ));
+                }
+                if min == max {
+                    #[allow(clippy::match_like_matches_macro)]
+                    if match (builder.min_inclusive, builder.max_inclusive) {
+                        (Some(false), _) => true,
+                        (_, Some(false)) => true,
+                        _ => false,
+                    } {
+                        return Err(format!(
+                        "Minimum and maximum are equal [{min:?}] but the bounds are not both both inclusive min_inclusive = [{:?}] max_inclusive = [{:?}]",
+                        builder.min_inclusive,
+                        builder.max_inclusive
+                    ));
+                    }
+                    return Ok(());
+                }
+            }
+            (min, max) => {
+                return Err(format!(
+                    "Min limit [{min:?}] is greater than max limit [{max:?}]!"
+                ))
+            }
+        },
+        (_, _) => return Ok(()),
+    }
+    Ok(())
+}
+
 impl Default for TraverseConfig {
     fn default() -> Self {
         Self {
-            min_value: LimitValue::Infinite(InfiniteKeys::Negative),
+            min_value: Infinite(InfiniteKeys::Negative),
             min_inclusive: true,
-            max_value: LimitValue::Infinite(InfiniteKeys::Positive),
+            max_value: Infinite(InfiniteKeys::Positive),
             max_inclusive: true,
             reversed: false,
         }
     }
 }
+
+/// This looks crazy but... An explanation will help.
+/// We are creating the iterator over the children and keys that are in bounds (set by `conf`) for
+/// this `node`. Recall that in the iterator, even values are nodes, and odd values are the keys
+/// between the nodes. And for leaf nodes we just get an iterator over even numbers.
+///
+/// Our stratagey is to find the index (`start`) for the first item which we iterate over. Note
+/// that for `conf.reverse == true` this would be the item bounded by `conf.max_value`.
+/// Once we have this value, we just iterate in the correct direction, until the end of the node.
+/// We don't care about the other bounding value here because that is handled within the Traverse
+/// logic.
 async fn make_child_key_index_iter<M: CoreMem>(
     conf: TraverseConfig,
     node: SharedNode<M>,
@@ -87,28 +146,33 @@ async fn make_child_key_index_iter<M: CoreMem>(
 
     let (matched, index) = get_child_index(node, &starting_key).await?;
     let start = if matched {
-        println!("MATCHED");
         let key_index = index * 2 + 1;
         if !conf.reversed {
-            println!("NOT REV");
             if inclusive {
-                // start at the key
+                // matched, inclusive, forward. Simplest case.
                 key_index
             } else {
-                println!("NOT INCLUSIVE");
-                // start at the next child
-                // TODO handle key_index + step_by > n_keys + n_children - 1
+                // exclusive, go to the next key/child forward
                 key_index + step_by
             }
         } else {
+            // reversed
             if inclusive {
                 key_index
             } else {
-                // TODO handle key_index - step_by < 0
-                key_index - step_by
+                // exclusive
+                if key_index == 1 && step_by == 2 {
+                    // when reversed, and matched, max limit is exlusive
+                    // and matched key is the lowest key and node is a leaf.
+                    // Then we can't take any keys or children from this node
+                    return Ok(Box::new(0..0));
+                } else {
+                    key_index - step_by
+                }
             }
         }
     } else {
+        // no match
         if !conf.reversed {
             if is_leaf {
                 index * 2 + 1
@@ -116,6 +180,7 @@ async fn make_child_key_index_iter<M: CoreMem>(
                 index * 2
             }
         } else {
+            // reversed
             if is_leaf {
                 if index == 0 {
                     0
@@ -123,6 +188,7 @@ async fn make_child_key_index_iter<M: CoreMem>(
                     index * 2 - 1
                 }
             } else {
+                // not leaf
                 index * 2
             }
         }
@@ -130,12 +196,10 @@ async fn make_child_key_index_iter<M: CoreMem>(
 
     let (start, stop) = if !conf.reversed {
         (start, (n_keys * 2 + 1))
+    } else if is_leaf {
+        (1, start + 1)
     } else {
-        if is_leaf {
-            (1, start + 1)
-        } else {
-            (0, start + 1)
-        }
+        (0, start + 1)
     };
 
     let iter = (start..stop).step_by(step_by);
@@ -168,7 +232,6 @@ impl TraverseConfig {
     }
 }
 
-// TODO add options for gt lt gte lte, reverse, and versions for just key/seq
 // TODO add options for just yielding keys without value
 /// Struct used for iterating over hyperbee with a Stream.
 /// Each iteration yields the key it's value, and the "seq" for the value (the index of the value
@@ -186,6 +249,7 @@ pub struct Traverse<'a, M: CoreMem> {
     /// For a yielded value `i`. Even `i`'s are for children, odd are for keys.
     /// The index to the current key/child within the keys/children is geven by `i >> 1`.
     /// Leaf nodes get an iterator that on yields odd values.
+    #[allow(clippy::type_complexity)]
     iter_fut:
         Option<PinnedFut<'a, Result<Box<dyn DoubleEndedIterator<Item = usize>>, HyperbeeError>>>,
     iter: Option<Pin<Box<dyn DoubleEndedIterator<Item = usize> + Unpin>>>,
@@ -259,7 +323,7 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
             }
         }
 
-        // setting up next child stream
+        // if awaiting next child stream, and it is ready, set it up
         if let Some(child_fut) = &mut self.next_child {
             if let Poll::Ready(out) = child_fut.poll(cx) {
                 self.next_child = None;
@@ -281,7 +345,7 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
             return Poll::Pending;
         }
 
-        // await child stream and yield it's values
+        // if we have an active child stream yield values from it if ready
         if let Some(stream) = &mut self.child_stream {
             if let Poll::Ready(out_opt) = stream.poll_next(cx) {
                 match out_opt {
@@ -293,6 +357,8 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
             return Poll::Pending;
         }
 
+        // get the number of keys and children in this node.
+        // This is needed to build the iterator over keys and children
         let (n_keys, n_children) = match self.n_keys_and_children {
             Some(x) => x,
             None => match &mut self.n_keys_and_children_fut {
@@ -314,7 +380,8 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
                 }
             },
         };
-        // set up prerequisites to get the iterator over children & keys for this node
+
+        // Ensure we have the iterator over keys and children
         match &self.iter {
             Some(_) => (),
             None => match &mut self.iter_fut {
@@ -358,12 +425,13 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
                 cx.waker().wake_by_ref();
                 // start waiting for next_key or next_child
                 return Poll::Pending;
+            } else {
+                // This node is done!
+                cx.waker().wake_by_ref();
+                return Poll::Ready(None);
             }
         }
-        // create future for next child or key
-        // index iterator is exhausted. We're done.
-        cx.waker().wake_by_ref();
-        Poll::Ready(None)
+        panic!("This sholud never happen");
     }
 }
 
@@ -391,13 +459,11 @@ pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeEr
 
 #[cfg(test)]
 mod test {
-    // enumerating possibilities for traversal conf
-    // all these have
-    // min: inf, val
-    // min_inclusive: true, false
-    // max: inf, val
-    // max_inclusive: true, false
-    // reversed: true false
+    use once_cell::sync::Lazy;
+    use random_access_memory::RandomAccessMemory;
+
+    use super::*;
+
     macro_rules! traverse_check {
         ( $range:expr, $traverse_conf:expr ) => {
             async move {
@@ -456,14 +522,111 @@ mod test {
     }
 
     fn to_limit(x: usize) -> LimitValue {
-        LimitValue::Finite(x.to_string().clone().as_bytes().to_vec())
+        Finite(x.to_string().clone().as_bytes().to_vec())
     }
 
-    use once_cell::sync::Lazy;
+    #[tokio::test]
+    async fn fix_usize_underlow_when_matched_max_val_inclusive_and_reversed(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let (mut hb, mut keys) = crate::test::hb_put!(0..10).await?;
+        let conf = TraverseConfigBuilder::default()
+            .max_value(5.into())
+            .max_inclusive(false)
+            .reversed(true)
+            .build()?;
+        let root = hb.get_root(false).await?.unwrap();
+        let stream = traverse(root, conf);
+        let res: Vec<Vec<u8>> = stream
+            .collect::<Vec<TreeItem<RandomAccessMemory>>>()
+            .await
+            .into_iter()
+            .map(|x| x.0.unwrap().0)
+            .collect();
+        keys.reverse();
+        assert_eq!(res, keys[5..]);
+        Ok(())
+    }
 
-    use super::*;
+    #[tokio::test]
+    async fn fix_match_last_key_exclusive_in_leaf() -> Result<(), Box<dyn std::error::Error>> {
+        let (mut hb, keys) = crate::test::hb_put!(0..10).await?;
+        let conf = TraverseConfigBuilder::default()
+            .min_value(3.into())
+            .min_inclusive(false)
+            .build()?;
+        let root = hb.get_root(false).await?.unwrap();
+        let stream = traverse(root, conf);
+        let res: Vec<Vec<u8>> = stream
+            .collect::<Vec<TreeItem<RandomAccessMemory>>>()
+            .await
+            .into_iter()
+            .map(|x| x.0.unwrap().0)
+            .collect();
+        assert_eq!(res, keys[4..]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fix_match_last_key_exclusive_in_node() -> Result<(), Box<dyn std::error::Error>> {
+        let (mut hb, keys) = crate::test::hb_put!(0..10).await?;
+        let conf = TraverseConfigBuilder::default()
+            .min_value(4.into())
+            .min_inclusive(false)
+            .build()?;
+        let root = hb.get_root(false).await?.unwrap();
+        let stream = traverse(root, conf);
+        let res: Vec<Vec<u8>> = stream
+            .collect::<Vec<TreeItem<RandomAccessMemory>>>()
+            .await
+            .into_iter()
+            .map(|x| x.0.unwrap().0)
+            .collect();
+        assert_eq!(res, keys[5..]);
+        Ok(())
+    }
     static MAX: Lazy<LimitValue> = Lazy::new(|| to_limit(7));
     static MIN: Lazy<LimitValue> = Lazy::new(|| to_limit(3));
+
+    #[tokio::test]
+    async fn min_eq_max_inf() -> Result<(), Box<dyn std::error::Error>> {
+        let (_input_keys, resulting_keys) =
+            traverse_test!(max_value = LimitValue::Infinite(InfiniteKeys::Negative)).await?;
+        assert_eq!(resulting_keys, Vec::<Vec<u8>>::new());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn min_eq_max_fin() -> Result<(), Box<dyn std::error::Error>> {
+        let (input_keys, resulting_keys) =
+            traverse_test!(min_value = 5.into(), max_value = 5.into()).await?;
+        assert_eq!(resulting_keys, input_keys[5..6]);
+
+        assert!(traverse_test!(
+            min_value = 5.into(),
+            max_value = 5.into(),
+            min_inclusive = false
+        )
+        .await
+        .is_err());
+
+        assert!(traverse_test!(
+            min_value = 5.into(),
+            max_value = 5.into(),
+            max_inclusive = false
+        )
+        .await
+        .is_err());
+
+        assert!(traverse_test!(
+            min_value = 5.into(),
+            max_value = 5.into(),
+            min_inclusive = false,
+            max_inclusive = false
+        )
+        .await
+        .is_err());
+        Ok(())
+    }
 
     #[tokio::test]
     async fn forwards() -> Result<(), Box<dyn std::error::Error>> {
