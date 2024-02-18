@@ -655,7 +655,7 @@ mod test {
 
         for k in keys.iter() {
             let val: Option<&[u8]> = Some(k);
-            hb.put(&k, val).await?;
+            hb.put(k, val).await?;
         }
 
         for k in rand.shuffle(keys).iter() {

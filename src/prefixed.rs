@@ -68,7 +68,7 @@ mod test {
         assert_eq!(res, b"with prefix");
         // regular no prefix
         // with prefix
-        let manually_prefixed_key = vec![prefix.to_vec(), key.to_vec()].concat();
+        let manually_prefixed_key = [prefix.to_vec(), key.to_vec()].concat();
 
         // with prefix from regular
         let Some((_, Some(res))) = hb.get(&manually_prefixed_key).await? else {
