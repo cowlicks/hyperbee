@@ -459,9 +459,13 @@ mod test {
         LimitValue::Finite(x.to_string().clone().as_bytes().to_vec())
     }
 
+    use once_cell::sync::Lazy;
+
     use super::*;
+    static MAX: Lazy<LimitValue> = Lazy::new(|| to_limit(7));
+    static MIN: Lazy<LimitValue> = Lazy::new(|| to_limit(3));
+
     #[tokio::test]
-    /// [min, max]
     async fn forwards() -> Result<(), Box<dyn std::error::Error>> {
         let (input_keys, resulting_keys) = traverse_test!().await?;
         assert_eq!(input_keys, resulting_keys);
@@ -469,8 +473,7 @@ mod test {
     }
 
     #[tokio::test]
-    /// [max, min]
-    async fn backwards() -> Result<(), Box<dyn std::error::Error>> {
+    async fn reversed() -> Result<(), Box<dyn std::error::Error>> {
         let (mut input_keys, resulting_keys) = traverse_test!(reversed = true).await?;
         input_keys.reverse();
         assert_eq!(input_keys, resulting_keys);
@@ -478,110 +481,120 @@ mod test {
     }
 
     #[tokio::test]
-    /// [min, 5]
-    async fn less_than_or_equal() -> Result<(), Box<dyn std::error::Error>> {
-        let max = to_limit(5);
-        let (input_keys, resulting_keys) = traverse_test!(max_value = max).await?;
-        assert_eq!(input_keys[..6], resulting_keys);
+    async fn min_exclusive_max_exclusive_backwards() -> Result<(), Box<dyn std::error::Error>> {
+        let (mut input_keys, resulting_keys) = traverse_test!(
+            reversed = true,
+            min_value = MIN.clone(),
+            max_value = MAX.clone(),
+            max_inclusive = false,
+            min_inclusive = false
+        )
+        .await?;
+        input_keys.reverse();
+        assert_eq!(input_keys[3..6], resulting_keys);
         Ok(())
     }
 
     #[tokio::test]
-    /// [min, 5)
-    async fn less_than() -> Result<(), Box<dyn std::error::Error>> {
-        let max = to_limit(5);
+    async fn min_max_exclusive_backwards() -> Result<(), Box<dyn std::error::Error>> {
+        let (mut input_keys, resulting_keys) = traverse_test!(
+            reversed = true,
+            min_value = MIN.clone(),
+            max_value = MAX.clone(),
+            max_inclusive = false
+        )
+        .await?;
+        input_keys.reverse();
+        assert_eq!(input_keys[3..7], resulting_keys);
+        Ok(())
+    }
 
+    #[tokio::test]
+    async fn min_exclusive_max_backwards() -> Result<(), Box<dyn std::error::Error>> {
+        let (mut input_keys, resulting_keys) = traverse_test!(
+            reversed = true,
+            min_value = MIN.clone(),
+            max_value = MAX.clone(),
+            min_inclusive = false
+        )
+        .await?;
+        input_keys.reverse();
+        assert_eq!(input_keys[2..6], resulting_keys);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn max() -> Result<(), Box<dyn std::error::Error>> {
+        let (input_keys, resulting_keys) = traverse_test!(max_value = MAX.clone()).await?;
+        assert_eq!(input_keys[..8], resulting_keys);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn max_exclusive() -> Result<(), Box<dyn std::error::Error>> {
         let (input_keys, resulting_keys) =
-            traverse_test!(max_inclusive = false, max_value = max).await?;
-        assert_eq!(input_keys[..5], resulting_keys);
+            traverse_test!(max_inclusive = false, max_value = MAX.clone()).await?;
+        assert_eq!(input_keys[..7], resulting_keys);
         Ok(())
     }
 
     #[tokio::test]
-    /// [5, max]
-    async fn greater_than_or_equal() -> Result<(), Box<dyn std::error::Error>> {
-        let min = 5.to_string().clone().as_bytes().to_vec();
-        let conf = TraverseConfigBuilder::default()
-            .min_value(LimitValue::Finite(min))
-            .build()?;
-        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
-        assert_eq!(resulting_keys, input_keys[5..]);
+    async fn min() -> Result<(), Box<dyn std::error::Error>> {
+        let (input_keys, resulting_keys) = traverse_test!(min_value = MIN.clone()).await?;
+        assert_eq!(resulting_keys, input_keys[3..]);
         Ok(())
     }
 
     #[tokio::test]
-    /// (5, max]
-    async fn greater_than() -> Result<(), Box<dyn std::error::Error>> {
-        let min = 5.to_string().clone().as_bytes().to_vec();
-        let conf = TraverseConfigBuilder::default()
-            .min_value(LimitValue::Finite(min))
-            .min_inclusive(false)
-            .build()?;
-        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
-        assert_eq!(resulting_keys, input_keys[6..]);
+    async fn min_exclusive() -> Result<(), Box<dyn std::error::Error>> {
+        let (input_keys, resulting_keys) =
+            traverse_test!(min_value = MIN.clone(), min_inclusive = false).await?;
+        assert_eq!(resulting_keys, input_keys[4..]);
         Ok(())
     }
 
     #[tokio::test]
-    /// [2, 8]
-    async fn greater_than_less_than() -> Result<(), Box<dyn std::error::Error>> {
-        let min = 2.to_string().clone().as_bytes().to_vec();
-        let max = 8.to_string().clone().as_bytes().to_vec();
-        let conf = TraverseConfigBuilder::default()
-            .min_value(LimitValue::Finite(min))
-            .max_value(LimitValue::Finite(max))
-            .build()?;
-        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
-        assert_eq!(resulting_keys, input_keys[2..9]);
-        Ok(())
-    }
-
-    #[tokio::test]
-    /// [2, 8)
-    async fn greater_than_inclusive_less_than_exclusive() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let min = 2.to_string().clone().as_bytes().to_vec();
-        let max = 8.to_string().clone().as_bytes().to_vec();
-        let conf = TraverseConfigBuilder::default()
-            .min_value(LimitValue::Finite(min))
-            .max_value(LimitValue::Finite(max))
-            .max_inclusive(false)
-            .build()?;
-        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
-        assert_eq!(resulting_keys, input_keys[2..8]);
-        Ok(())
-    }
-
-    #[tokio::test]
-    /// (2, 8]
-    async fn greater_than_exclusive_less_than_inclusive() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let min = 2.to_string().clone().as_bytes().to_vec();
-        let max = 8.to_string().clone().as_bytes().to_vec();
-        let conf = TraverseConfigBuilder::default()
-            .min_value(LimitValue::Finite(min))
-            .max_value(LimitValue::Finite(max))
-            .min_inclusive(false)
-            .build()?;
-        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
-        assert_eq!(resulting_keys, input_keys[3..9]);
-        Ok(())
-    }
-
-    #[tokio::test]
-    /// (2, 8)
-    async fn greater_than_exclusive_less_than_exclusive() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let min = 2.to_string().clone().as_bytes().to_vec();
-        let max = 8.to_string().clone().as_bytes().to_vec();
-        let conf = TraverseConfigBuilder::default()
-            .min_value(LimitValue::Finite(min))
-            .max_value(LimitValue::Finite(max))
-            .max_inclusive(false)
-            .min_inclusive(false)
-            .build()?;
-        let (input_keys, resulting_keys) = traverse_check!(0..10, conf).await?;
+    async fn min_max() -> Result<(), Box<dyn std::error::Error>> {
+        let (input_keys, resulting_keys) =
+            traverse_test!(min_value = MIN.clone(), max_value = MAX.clone()).await?;
         assert_eq!(resulting_keys, input_keys[3..8]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn min_max_inclusive() -> Result<(), Box<dyn std::error::Error>> {
+        let (input_keys, resulting_keys) = traverse_test!(
+            min_value = MIN.clone(),
+            max_value = MAX.clone(),
+            max_inclusive = false
+        )
+        .await?;
+        assert_eq!(resulting_keys, input_keys[3..7]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn min_inclusive_max() -> Result<(), Box<dyn std::error::Error>> {
+        let (input_keys, resulting_keys) = traverse_test!(
+            min_value = MIN.clone(),
+            max_value = MAX.clone(),
+            min_inclusive = false
+        )
+        .await?;
+        assert_eq!(resulting_keys, input_keys[4..8]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn min_exclusive_max_exclusive() -> Result<(), Box<dyn std::error::Error>> {
+        let (input_keys, resulting_keys) = traverse_test!(
+            min_value = MIN.clone(),
+            max_value = MAX.clone(),
+            max_inclusive = false,
+            min_inclusive = false
+        )
+        .await?;
+        assert_eq!(resulting_keys, input_keys[4..7]);
         Ok(())
     }
 }
