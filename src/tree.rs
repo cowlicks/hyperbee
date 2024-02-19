@@ -69,7 +69,7 @@ impl<M: CoreMem> Tree<M> {
             let (node, key_index) = path
                 .last()
                 .expect("Since `matched` was true, there must be at least one node in `path`");
-            return Ok(Some(node.read().await.get_value_of_key(*key_index).await?));
+            return Ok(Some(node.read().await.get_value(*key_index).await?));
         }
         Ok(None)
     }

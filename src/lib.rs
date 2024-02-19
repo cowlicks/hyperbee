@@ -505,10 +505,7 @@ impl<M: CoreMem> Node<M> {
     // Use given index to get Key.seq, which points to the block in the core where this value
     // lives. Load that BlockEntry and return (Key.seq, BlockEntry.value)
     /// Get the value for the key at the provided index
-    async fn get_value_of_key(
-        &self,
-        index: usize,
-    ) -> Result<(u64, Option<Vec<u8>>), HyperbeeError> {
+    async fn get_value(&self, index: usize) -> Result<(u64, Option<Vec<u8>>), HyperbeeError> {
         match &self.keys[index] {
             KeyValue {
                 seq,
