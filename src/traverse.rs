@@ -53,6 +53,7 @@ impl PartialOrd<[u8]> for LimitValue {
 
 #[derive(Builder, Debug, Clone)]
 #[builder(derive(Debug), build_fn(validate = "validate_traverse_config_builder"))]
+/// Configuration for [`Traverse`]
 pub struct TraverseConfig {
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
     /// lower bound for traversal
@@ -265,10 +266,12 @@ pub struct Traverse<'a, M: CoreMem> {
 }
 
 impl<M: CoreMem> Traverse<'_, M> {
-    fn new(root: SharedNode<M>, config: TraverseConfig) -> Self {
+    /// Create [`Traverse`] struct and to traverse the provided `node` based on the provided
+    /// [`TraverseConfig`]
+    pub fn new(note: SharedNode<M>, config: TraverseConfig) -> Self {
         Traverse {
             config,
-            root,
+            root: note,
             n_keys_and_children_fut: Option::None,
             n_keys_and_children: Option::None,
             iter_fut: Option::None,
