@@ -4,7 +4,10 @@ use thiserror::Error;
 use hypercore::HypercoreError;
 use prost::{DecodeError, EncodeError};
 
-use crate::{blocks::BlocksBuilderError, tree::TreeBuilderError, HyperbeeBuilderError};
+use crate::{
+    blocks::BlocksBuilderError, traverse::TraverseConfigBuilderError, tree::TreeBuilderError,
+    HyperbeeBuilderError,
+};
 
 #[derive(Error, Debug)]
 pub enum HyperbeeError {
@@ -26,6 +29,10 @@ pub enum HyperbeeError {
     U64ToUsizeConversionError(u64, TryFromIntError),
     #[error("Could not traverse child node. Got error: {0}")]
     GetChildInTraverseError(Box<dyn std::error::Error>),
+    #[error("There was an error building TraverseConfig")]
+    TraverseConfigBuilderError(#[from] TraverseConfigBuilderError),
+    #[error("There was an error building the iterator to traverse a node. Got error: {0}")]
+    BuildIteratorInTraverseError(Box<dyn std::error::Error>),
     #[error("There was an error encoding a messages::YoloIndex {0}")]
     YoloIndexEncodingError(EncodeError),
     #[error("There was an error encoding a messages::Header {0}")]

@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, fmt::Debug};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InfiniteKeys {
     Positive,
     Negative,
@@ -41,9 +41,11 @@ impl PartialOrd<InfiniteKeys> for [u8] {
 mod test {
     use super::*;
     #[test]
-    fn test_inf() {
+    fn test_slice() {
         let a: Vec<u8> = vec![1, 2, 3];
         let b: &[u8] = &[5, 6, 7];
+        assert!(InfiniteKeys::Positive > a[..]);
+        assert!(InfiniteKeys::Positive > *b);
         assert!(a[..] < InfiniteKeys::Positive);
         assert!(*b < InfiniteKeys::Positive);
         assert!(a[..] >= InfiniteKeys::Negative);

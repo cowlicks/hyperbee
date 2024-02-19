@@ -619,7 +619,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn delete_from_internal_node_with_underflow_rotate_foo(
+    async fn delete_from_internal_node_with_underflow_rotate(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (mut hb, keys) = crate::test::hb_put!(0..25).await?;
         let k = keys[10].clone();
@@ -655,7 +655,7 @@ mod test {
 
         for k in keys.iter() {
             let val: Option<&[u8]> = Some(k);
-            hb.put(&k, val).await?;
+            hb.put(k, val).await?;
         }
 
         for k in rand.shuffle(keys).iter() {
