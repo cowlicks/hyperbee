@@ -147,22 +147,16 @@ async fn make_child_key_index_iter<M: CoreMem>(
     let (matched, index) = get_child_index(node, &starting_key).await?;
     let start = if matched {
         let key_index = index * 2 + 1;
-        if !conf.reversed {
-            if inclusive {
-                // matched, inclusive, forward. Simplest case.
-                key_index
-            } else {
-                // exclusive, go to the next key/child forward
-                key_index + step_by
-            }
+        if inclusive {
+            key_index
         } else {
-            // reversed
-            if inclusive {
-                key_index
+            // exclusive
+            if !conf.reversed {
+                key_index + step_by
             } else {
-                // exclusive
+                // reversed
                 if key_index == 1 && step_by == 2 {
-                    // when reversed, and matched, max limit is exlusive
+                    // when reversed, and matched, and the max limit is exclusive
                     // and matched key is the lowest key and node is a leaf.
                     // Then we can't take any keys or children from this node
                     return Ok(Box::new(0..0));
@@ -172,34 +166,32 @@ async fn make_child_key_index_iter<M: CoreMem>(
             }
         }
     } else {
-        // no match
-        if !conf.reversed {
-            if is_leaf {
-                index * 2 + 1
-            } else {
-                index * 2
-            }
+        // not matched
+        let child_index = index * 2;
+        if !is_leaf {
+            child_index
         } else {
-            // reversed
-            if is_leaf {
-                if index == 0 {
+            // is leaf
+            if !conf.reversed {
+                child_index + 1
+            } else {
+                if child_index == 0 {
                     0
                 } else {
-                    index * 2 - 1
+                    child_index - 1
                 }
-            } else {
-                // not leaf
-                index * 2
             }
         }
     };
 
     let (start, stop) = if !conf.reversed {
         (start, (n_keys * 2 + 1))
-    } else if is_leaf {
-        (1, start + 1)
     } else {
-        (0, start + 1)
+        if is_leaf {
+            (1, start + 1)
+        } else {
+            (0, start + 1)
+        }
     };
 
     let iter = (start..stop).step_by(step_by);
@@ -535,7 +527,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fix_usize_underlow_when_matched_max_val_inclusive_and_reversed(
+    async fn fix_usize_underflow_when_matched_max_val_inclusive_and_reversed(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (mut hb, mut keys) = crate::test::hb_put!(0..10).await?;
         let conf = TraverseConfigBuilder::default()
