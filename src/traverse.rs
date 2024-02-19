@@ -447,16 +447,12 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
     }
 }
 
-pub fn traverse<'a, M: CoreMem>(node: SharedNode<M>, config: TraverseConfig) -> Traverse<'a, M> {
-    Traverse::new(node, config)
-}
-
 static LEADER: &str = "\t";
 
 pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeError> {
     let starting_height = node.read().await.height().await?;
     let mut out = "".to_string();
-    let stream = traverse(node, TraverseConfig::default());
+    let stream = Traverse::new(node, TraverseConfig::default());
     tokio::pin!(stream);
     while let Some((key_data, node)) = stream.next().await {
         let h = node.read().await.height().await?;
@@ -480,8 +476,7 @@ mod test {
         ( $range:expr, $traverse_conf:expr ) => {
             async move {
                 let (hb, keys) = crate::test::hb_put!($range).await?;
-                let root = hb.get_root(false).await?.unwrap();
-                let stream = traverse(root, $traverse_conf);
+                let stream = hb.traverse($traverse_conf).await?;
                 tokio::pin!(stream);
                 let mut res = vec![];
                 while let Some((Ok(key_data), _node)) = stream.next().await {
@@ -546,8 +541,7 @@ mod test {
             .max_inclusive(false)
             .reversed(true)
             .build()?;
-        let root = hb.get_root(false).await?.unwrap();
-        let stream = traverse(root, conf);
+        let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
             .collect::<Vec<TreeItem<RandomAccessMemory>>>()
             .await
@@ -566,8 +560,7 @@ mod test {
             .min_value(3.into())
             .min_inclusive(false)
             .build()?;
-        let root = hb.get_root(false).await?.unwrap();
-        let stream = traverse(root, conf);
+        let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
             .collect::<Vec<TreeItem<RandomAccessMemory>>>()
             .await
@@ -585,8 +578,7 @@ mod test {
             .min_value(4.into())
             .min_inclusive(false)
             .build()?;
-        let root = hb.get_root(false).await?.unwrap();
-        let stream = traverse(root, conf);
+        let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
             .collect::<Vec<TreeItem<RandomAccessMemory>>>()
             .await
