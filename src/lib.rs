@@ -120,7 +120,7 @@ impl<M: CoreMem> Hyperbee<M> {
         &self,
         ensure_header: bool,
     ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
-        self.tree.write().await.get_root(ensure_header).await
+        self.tree.read().await.get_root(ensure_header).await
     }
 
     /// Create the header for the Hyperbee. This must be done before writing anything else to the
@@ -133,14 +133,14 @@ impl<M: CoreMem> Hyperbee<M> {
     }
     /// Returs a string representing the structure of the tree showing the keys in each node
     pub async fn print(&self) -> Result<String, HyperbeeError> {
-        self.tree.write().await.print().await
+        self.tree.read().await.print().await
     }
 
     /// Get the value corresponding to the provided `key` from the Hyperbee
     /// # Errors
     /// When `Hyperbee.get_root` fails
     pub async fn get(&self, key: &[u8]) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
-        self.tree.write().await.get(key).await
+        self.tree.read().await.get(key).await
     }
 
     /// Insert the given key and value into the tree
