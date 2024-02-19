@@ -146,7 +146,7 @@ macro_rules! hb_put {
         async move {
             use crate::{HyperbeeError, Tree};
             use random_access_memory::RandomAccessMemory;
-            let mut hb = Tree::from_ram().await?;
+            let hb = Tree::from_ram().await?;
             let mut keys = vec![];
             for i in $contents {
                 let key = i.to_string().clone().as_bytes().to_vec();
