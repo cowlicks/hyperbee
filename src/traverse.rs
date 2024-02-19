@@ -38,6 +38,7 @@ impl PartialEq<[u8]> for LimitValue {
         }
     }
 }
+
 impl PartialOrd<[u8]> for LimitValue {
     fn partial_cmp(&self, other: &[u8]) -> Option<std::cmp::Ordering> {
         match &self {
@@ -129,6 +130,7 @@ impl Default for TraverseConfig {
 /// Once we have this value, we just iterate in the correct direction, until the end of the node.
 /// We don't care about the other bounding value here because that is handled within the Traverse
 /// logic.
+#[allow(clippy::collapsible_else_if)]
 async fn make_child_key_index_iter<M: CoreMem>(
     conf: TraverseConfig,
     node: SharedNode<M>,
