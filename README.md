@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - [x] full functional interoperability with JS Hyperbee files
 - [x] read, write, and delete operations
 - [x] in order key streaming like JS's [`createReadStream`](https://docs.holepunch.to/building-blocks/hyperbee#const-stream-db.createreadstream-range-options)
-- [ ] support `gt`, `lt`,  etc bounds for key streaming
+- [x] support `gt`, `lt`,  etc bounds for key streaming
 - [ ] accept compare-and-swap for `put` and `del`.
 - [x] support prefixed key operations like JS's [`sub`](https://docs.holepunch.to/building-blocks/hyperbee#const-sub-db.sub-sub-prefix-options)
 - [ ] one-to-one binary output
