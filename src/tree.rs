@@ -6,7 +6,9 @@ use crate::{
     blocks::{Blocks, BlocksBuilder},
     error::HyperbeeError,
     messages::{header::Metadata, Header},
-    nearest_node, traverse, CoreMem, Node, Shared, PROTOCOL,
+    nearest_node,
+    traverse::{self, Traverse, TraverseConfig},
+    CoreMem, Node, Shared, PROTOCOL,
 };
 use std::{
     path::{Path, PathBuf},
@@ -114,6 +116,15 @@ impl<M: CoreMem> Tree<M> {
             .ok_or(HyperbeeError::NoRootError)?;
         let out = traverse::print(root).await?;
         Ok(out)
+    }
+
+    /// Traverse the tree based on the given [`TraverseConfig`]
+    pub async fn traverse(&mut self, conf: TraverseConfig) -> Result<Traverse<M>, HyperbeeError> {
+        let root = self
+            .get_root(false)
+            .await?
+            .ok_or(HyperbeeError::NoRootError)?;
+        Ok(Traverse::new(root, conf))
     }
 }
 
