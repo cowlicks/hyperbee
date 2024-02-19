@@ -168,7 +168,7 @@ impl<M: CoreMem> Hyperbee<M> {
         &self,
         conf: TraverseConfig,
     ) -> Result<Traverse<'a, M>, HyperbeeError> {
-        Ok(self.tree.read().await.traverse(conf).await?)
+        self.tree.read().await.traverse(conf).await
     }
 }
 

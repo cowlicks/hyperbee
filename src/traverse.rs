@@ -6,6 +6,7 @@ use std::{
 };
 
 use derive_builder::Builder;
+// TODO use tokio stream & streamext
 use futures_lite::{future::FutureExt, StreamExt};
 use tokio_stream::Stream;
 
@@ -15,7 +16,7 @@ type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
 /// Result<(Key's key, (seq, Key's value))>
 type KeyData = Result<(Vec<u8>, (u64, Option<Vec<u8>>)), HyperbeeError>;
-type TreeItem<M> = (KeyData, SharedNode<M>);
+pub type TreeItem<M> = (KeyData, SharedNode<M>);
 
 #[derive(Clone, Debug)]
 pub enum LimitValue {
@@ -57,19 +58,19 @@ impl PartialOrd<[u8]> for LimitValue {
 pub struct TraverseConfig {
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
     /// lower bound for traversal
-    min_value: LimitValue,
+    pub(crate) min_value: LimitValue,
     #[builder(default = "true")]
     /// whether `min_value` is inclusive
-    min_inclusive: bool,
+    pub(crate) min_inclusive: bool,
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Positive)")]
     /// upper bound for traversal
-    max_value: LimitValue,
+    pub(crate) max_value: LimitValue,
     #[builder(default = "true")]
     /// whether `max_value` is inclusive
-    max_inclusive: bool,
+    pub(crate) max_inclusive: bool,
     #[builder(default = "false")]
     /// traverse in reverse
-    reversed: bool,
+    pub(crate) reversed: bool,
 }
 
 fn validate_traverse_config_builder(builder: &TraverseConfigBuilder) -> Result<(), String> {
