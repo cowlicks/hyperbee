@@ -33,6 +33,7 @@ use tracing::trace;
 use blocks::Blocks;
 use error::HyperbeeError;
 use messages::{header::Metadata, yolo_index, YoloIndex};
+use traverse::{Traverse, TraverseConfig};
 use tree::Tree;
 
 pub use prefixed::Prefixed;
@@ -150,16 +151,24 @@ impl<M: CoreMem> Hyperbee<M> {
         key: &[u8],
         value: Option<&[u8]>,
     ) -> Result<(bool, u64), HyperbeeError> {
-        self.tree.write().await.put(key, value).await
+        self.tree.read().await.put(key, value).await
     }
 
     /// Delete the given key from the tree
     pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
-        self.tree.write().await.del(key).await
+        self.tree.read().await.del(key).await
     }
 
     pub fn sub(&self, prefix: &[u8]) -> Prefixed<M> {
         Prefixed::new(prefix, self.tree.clone())
+    }
+
+    /// Traverse the tree based on the given [`TraverseConfig`]
+    pub async fn traverse<'a>(
+        &self,
+        conf: TraverseConfig,
+    ) -> Result<Traverse<'a, M>, HyperbeeError> {
+        Ok(self.tree.read().await.traverse(conf).await?)
     }
 }
 

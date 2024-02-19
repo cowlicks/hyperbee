@@ -116,7 +116,10 @@ impl<M: CoreMem> Tree<M> {
     }
 
     /// Traverse the tree based on the given [`TraverseConfig`]
-    pub async fn traverse(&self, conf: TraverseConfig) -> Result<Traverse<M>, HyperbeeError> {
+    pub async fn traverse<'a>(
+        &self,
+        conf: TraverseConfig,
+    ) -> Result<Traverse<'a, M>, HyperbeeError> {
         let root = self
             .get_root(false)
             .await?
