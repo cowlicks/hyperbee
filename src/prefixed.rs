@@ -25,8 +25,7 @@ impl<M: CoreMem> Prefixed<M> {
     /// When `Hyperbee.get_root` fails
     pub async fn get(&self, key: &[u8]) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
         let prefixed_key: &[u8] = &[&self.prefix, key].concat();
-        // TODO rm write?
-        self.tree.write().await.get(prefixed_key).await
+        self.tree.read().await.get(prefixed_key).await
     }
 
     /// Insert the given key and value into the tree
@@ -37,15 +36,13 @@ impl<M: CoreMem> Prefixed<M> {
         value: Option<&[u8]>,
     ) -> Result<(bool, u64), HyperbeeError> {
         let prefixed_key: &[u8] = &[&self.prefix, key].concat();
-        // TODO rm write?
-        self.tree.write().await.put(prefixed_key, value).await
+        self.tree.read().await.put(prefixed_key, value).await
     }
 
     /// Delete the given key from the tree
     pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
         let prefixed_key: &[u8] = &[&self.prefix, key].concat();
-        // TODO rm write?
-        self.tree.write().await.del(prefixed_key).await
+        self.tree.read().await.del(prefixed_key).await
     }
 
     /// Travese prefixed keys. If you provide [`TraverseConfig::min_value`] or
