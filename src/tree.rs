@@ -59,10 +59,7 @@ impl<M: CoreMem> Tree<M> {
     /// Get the value corresponding to the provided `key` from the Hyperbee
     /// # Errors
     /// When `Hyperbee.get_root` fails
-    pub async fn get(
-        &mut self,
-        key: &[u8],
-    ) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
+    pub async fn get(&self, key: &[u8]) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
         let node = match self.get_root(false).await? {
             None => return Ok(None),
             Some(node) => node,
@@ -109,7 +106,7 @@ impl<M: CoreMem> Tree<M> {
     }
 
     /// Returs a string representing the structure of the tree showing the keys in each node
-    pub async fn print(&mut self) -> Result<String, HyperbeeError> {
+    pub async fn print(&self) -> Result<String, HyperbeeError> {
         let root = self
             .get_root(false)
             .await?
@@ -119,7 +116,7 @@ impl<M: CoreMem> Tree<M> {
     }
 
     /// Traverse the tree based on the given [`TraverseConfig`]
-    pub async fn traverse(&mut self, conf: TraverseConfig) -> Result<Traverse<M>, HyperbeeError> {
+    pub async fn traverse(&self, conf: TraverseConfig) -> Result<Traverse<M>, HyperbeeError> {
         let root = self
             .get_root(false)
             .await?
