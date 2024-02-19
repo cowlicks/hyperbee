@@ -55,14 +55,19 @@ impl PartialOrd<[u8]> for LimitValue {
 #[builder(derive(Debug), build_fn(validate = "validate_traverse_config_builder"))]
 pub struct TraverseConfig {
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
+    /// lower bound for traversal
     min_value: LimitValue,
     #[builder(default = "true")]
+    /// whether `min_value` is inclusive
     min_inclusive: bool,
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Positive)")]
+    /// upper bound for traversal
     max_value: LimitValue,
     #[builder(default = "true")]
+    /// whether `max_value` is inclusive
     max_inclusive: bool,
     #[builder(default = "false")]
+    /// traverse in reverse
     reversed: bool,
 }
 
