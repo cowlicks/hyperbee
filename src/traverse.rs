@@ -478,7 +478,7 @@ mod test {
     macro_rules! traverse_check {
         ( $range:expr, $traverse_conf:expr ) => {
             async move {
-                let (mut hb, keys) = crate::test::hb_put!($range).await?;
+                let (hb, keys) = crate::test::hb_put!($range).await?;
                 let root = hb.get_root(false).await?.unwrap();
                 let stream = traverse(root, $traverse_conf);
                 tokio::pin!(stream);
@@ -539,7 +539,7 @@ mod test {
     #[tokio::test]
     async fn fix_usize_underflow_when_matched_max_val_inclusive_and_reversed(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, mut keys) = crate::test::hb_put!(0..10).await?;
+        let (hb, mut keys) = crate::test::hb_put!(0..10).await?;
         let conf = TraverseConfigBuilder::default()
             .max_value(5.into())
             .max_inclusive(false)
@@ -560,7 +560,7 @@ mod test {
 
     #[tokio::test]
     async fn fix_match_last_key_exclusive_in_leaf() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..10).await?;
+        let (hb, keys) = crate::test::hb_put!(0..10).await?;
         let conf = TraverseConfigBuilder::default()
             .min_value(3.into())
             .min_inclusive(false)
@@ -579,7 +579,7 @@ mod test {
 
     #[tokio::test]
     async fn fix_match_last_key_exclusive_in_node() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..10).await?;
+        let (hb, keys) = crate::test::hb_put!(0..10).await?;
         let conf = TraverseConfigBuilder::default()
             .min_value(4.into())
             .min_inclusive(false)

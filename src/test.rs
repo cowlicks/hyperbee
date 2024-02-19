@@ -105,9 +105,7 @@ pub async fn check_node<M: CoreMem>(node: SharedNode<M>) {
 /// * # keys + 1 == # children unless this is a leaf node
 /// * key's keys are between the nodes
 /// * all children respect these invariants
-pub async fn check_tree<M: CoreMem>(
-    mut hb: Tree<M>,
-) -> Result<Tree<M>, Box<dyn std::error::Error>> {
+pub async fn check_tree<M: CoreMem>(hb: Tree<M>) -> Result<Tree<M>, Box<dyn std::error::Error>> {
     let root = hb
         .get_root(false)
         .await?
