@@ -340,10 +340,13 @@ impl<M: CoreMem> Children<M> {
 ///         the index within this `node`'s keys where the `key` wolud be inserted
 /// if `matched` is true:
 ///     the index within this `node`'s keys of the `key`
+// TODO rename me because it is not just child index
+// TODO return Result<(Option<KeyValue>, usize), HyperbeeError>
+// TODO rewrite doc
 async fn get_child_index<M: CoreMem, T>(
     node: SharedNode<M>,
     key: &T,
-) -> Result<(bool, usize), HyperbeeError>
+) -> Result<(Option<u64>, usize), HyperbeeError>
 where
     T: PartialOrd<[u8]> + Debug + ?Sized,
 {
@@ -358,7 +361,7 @@ where
 
         while low <= high {
             let mid = low + ((high - low) >> 1);
-            let other_key = node.write().await.get_key(mid).await?;
+            let (seq, other_key) = node.write().await.get_seq_and_key(mid).await?;
 
             // if matching key, we are done!
             if key == &other_key[..] {
@@ -368,7 +371,7 @@ where
                     other_key,
                     mid
                 );
-                return Ok((true, mid));
+                return Ok((Some(seq), mid));
             }
 
             if key < &other_key[..] {
@@ -384,7 +387,7 @@ where
         }
         break 'found low;
     };
-    Ok((false, child_index))
+    Ok((None, child_index))
 }
 
 /// Descend through tree to the node nearest (or matching) the provided key
@@ -404,7 +407,7 @@ where
 async fn nearest_node<M: CoreMem, T>(
     node: SharedNode<M>,
     key: &T,
-) -> Result<(bool, NodePath<M>), HyperbeeError>
+) -> Result<(Option<u64>, NodePath<M>), HyperbeeError>
 where
     T: PartialOrd<[u8]> + Debug + ?Sized,
 {
@@ -414,14 +417,10 @@ where
         let next_node = {
             let (matched, child_index) = get_child_index(current_node.clone(), key).await?;
             out_path.push((current_node.clone(), child_index));
-            if matched {
-                return Ok((true, out_path));
-            }
 
-            // leaf node with no match
-            if current_node.read().await.is_leaf().await {
-                trace!("Reached leaf, we're done.");
-                return Ok((false, out_path));
+            // found match or reached leaf
+            if matched.is_some() || current_node.read().await.is_leaf().await {
+                return Ok((matched, out_path));
             }
 
             // continue to next node
@@ -524,6 +523,16 @@ impl<M: CoreMem> Node<M> {
             .await?
             .cached_key
             .expect("cached_key pulled in get_key_value"))
+    }
+
+    /// Get the key at the provided index
+    #[tracing::instrument(skip(self))]
+    async fn get_seq_and_key(&mut self, index: usize) -> Result<(u64, Vec<u8>), HyperbeeError> {
+        let kv = self.get_key_value(index, true, false).await?;
+        Ok((
+            kv.seq,
+            kv.cached_key.expect("cached key pulled in get_key_value"),
+        ))
     }
 
     // Use given index to get Key.seq, which points to the block in the core where this value

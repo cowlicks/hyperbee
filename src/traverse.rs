@@ -14,6 +14,7 @@ use crate::{get_child_index, keys::InfiniteKeys, CoreMem, HyperbeeError, SharedN
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
 /// Result<(Key's key, (seq, Key's value))>
+// TODO replace this with KeyValue
 type KeyData = Result<(Vec<u8>, (u64, Option<Vec<u8>>)), HyperbeeError>;
 pub type TreeItem<M> = (KeyData, SharedNode<M>);
 
@@ -153,7 +154,7 @@ async fn make_child_key_index_iter<M: CoreMem>(
     };
 
     let (matched, index) = get_child_index(node, &starting_key).await?;
-    let start = if matched {
+    let start = if matched.is_some() {
         let key_index = index * 2 + 1;
         if inclusive {
             key_index

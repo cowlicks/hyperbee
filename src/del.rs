@@ -378,7 +378,7 @@ impl<M: CoreMem> Tree<M> {
 
         let (matched, mut path) = nearest_node(root.clone(), key).await?;
 
-        if !matched {
+        if matched.is_none() {
             return Ok(false);
         }
 

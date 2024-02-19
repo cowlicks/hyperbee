@@ -65,7 +65,7 @@ impl<M: CoreMem> Tree<M> {
             Some(node) => node,
         };
         let (matched, path) = nearest_node(node, key).await?;
-        if matched {
+        if matched.is_some() {
             let (node, key_index) = path
                 .last()
                 .expect("Since `matched` was true, there must be at least one node in `path`");

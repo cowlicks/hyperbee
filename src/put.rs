@@ -94,9 +94,9 @@ impl<M: CoreMem> Tree<M> {
                 // If this is a replacemet but we have not replaced yet
                 // OR there is room on this node to insert the current key
                 let room_for_more_keys = cur_node.read().await.keys.len() < MAX_KEYS;
-                if matched || room_for_more_keys {
+                if matched.is_some() || room_for_more_keys {
                     trace!("room for more keys or key matched");
-                    let stop = match matched {
+                    let stop = match matched.is_some() {
                         true => cur_index + 1,
                         false => cur_index,
                     };
@@ -111,11 +111,11 @@ impl<M: CoreMem> Tree<M> {
                         trace!("inserted into some child");
                         let changes = propagate_changes_up_tree(changes, path, child).await;
                         let outcome = self.blocks.read().await.add_changes(changes).await?;
-                        return Ok((matched, outcome.length));
+                        return Ok((matched.is_some(), outcome.length));
                     };
 
                     let outcome = self.blocks.read().await.add_changes(changes).await?;
-                    return Ok((matched, outcome.length));
+                    return Ok((matched.is_some(), outcome.length));
                 }
 
                 // No room in leaf for another key. So we split and continue.
