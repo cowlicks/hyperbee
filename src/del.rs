@@ -371,7 +371,11 @@ async fn repair<M: CoreMem>(
 }
 
 impl<M: CoreMem> Tree<M> {
-    pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
+    pub async fn del_compare_and_swap(
+        &self,
+        key: &[u8],
+        cas: Option<Box<dyn FnOnce(&[u8], u64, &Option<Vec<u8>>) -> bool>>,
+    ) -> Result<bool, HyperbeeError> {
         let Some(root) = self.get_root(false).await? else {
             return Ok(false);
         };
@@ -382,6 +386,21 @@ impl<M: CoreMem> Tree<M> {
             return Ok(false);
         }
 
+        // run user provided `cas` function
+        if let Some(cas_func) = cas {
+            let len = path.len();
+            let (node, index) = &mut path[len - 1];
+            let kv = node.write().await.get_key_value(*index, true, true).await?;
+            let result = cas_func(
+                &kv.cached_key.expect("pulled in get_key_value"),
+                kv.seq,
+                &kv.cached_value.expect("pulled in get_key_value"),
+            );
+            if !result {
+                // abort
+                return Ok(false);
+            }
+        }
         // NB: jS hyperbee stores the "key" the deleted "key" in the created BlockEntry. So we are
         // doing that too
         let mut changes: Changes<M> = Changes::new(self.version().await, key, None);
@@ -456,6 +475,10 @@ impl<M: CoreMem> Tree<M> {
 
         self.blocks.read().await.add_changes(changes).await?;
         Ok(true)
+    }
+
+    pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
+        self.del_compare_and_swap(key, None).await
     }
 }
 
