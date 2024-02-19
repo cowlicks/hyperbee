@@ -208,7 +208,7 @@ mod test {
                 .collect()
         }
 
-        let stream = prefixed_hb.traverse(TraverseConfig::default()).await?;
+        let stream = prefixed_hb.traverse(&TraverseConfig::default()).await?;
         let res = collect(stream).await;
         assert_eq!(res, expected);
 
@@ -216,7 +216,7 @@ mod test {
         let conf = TraverseConfigBuilder::default()
             .min_value(Finite(b"b".into()))
             .build()?;
-        let stream = prefixed_hb.traverse(conf).await?;
+        let stream = prefixed_hb.traverse(&conf).await?;
         let res = collect(stream).await;
         assert_eq!(res, expected[1..]);
 
@@ -225,7 +225,7 @@ mod test {
             .min_value(Finite(b"a".into()))
             .min_inclusive(false)
             .build()?;
-        let stream = prefixed_hb.traverse(conf).await?;
+        let stream = prefixed_hb.traverse(&conf).await?;
         let res = collect(stream).await;
         assert_eq!(res, expected[1..]);
 
@@ -233,7 +233,7 @@ mod test {
         let conf = TraverseConfigBuilder::default()
             .max_value(Finite(b"e".into()))
             .build()?;
-        let stream = prefixed_hb.traverse(conf).await?;
+        let stream = prefixed_hb.traverse(&conf).await?;
         let res = collect(stream).await;
         assert_eq!(res, expected[..4]);
 
@@ -242,14 +242,14 @@ mod test {
             .max_value(Finite(b"f".into()))
             .max_inclusive(false)
             .build()?;
-        let stream = prefixed_hb.traverse(conf).await?;
+        let stream = prefixed_hb.traverse(&conf).await?;
         let res = collect(stream).await;
         assert_eq!(res, expected[..4]);
 
         expected.reverse();
         // reversed
         let conf = TraverseConfigBuilder::default().reversed(true).build()?;
-        let stream = prefixed_hb.traverse(conf).await?;
+        let stream = prefixed_hb.traverse(&conf).await?;
         let res = collect(stream).await;
         assert_eq!(res, expected);
 
@@ -258,7 +258,7 @@ mod test {
             .reversed(true)
             .min_value(Finite(b"b".into()))
             .build()?;
-        let stream = prefixed_hb.traverse(conf).await?;
+        let stream = prefixed_hb.traverse(&conf).await?;
         let res = collect(stream).await;
         assert_eq!(res, expected[..4]);
 
@@ -268,7 +268,7 @@ mod test {
             .min_value(Finite(b"a".into()))
             .min_inclusive(false)
             .build()?;
-        let stream = prefixed_hb.traverse(conf).await?;
+        let stream = prefixed_hb.traverse(&conf).await?;
         let res = collect(stream).await;
         assert_eq!(res, expected[..4]);
 
@@ -277,7 +277,7 @@ mod test {
             .reversed(true)
             .max_value(Finite(b"e".into()))
             .build()?;
-        let stream = prefixed_hb.traverse(conf).await?;
+        let stream = prefixed_hb.traverse(&conf).await?;
         let res = collect(stream).await;
         assert_eq!(res, expected[1..]);
 
@@ -287,7 +287,7 @@ mod test {
             .max_value(Finite(b"f".into()))
             .max_inclusive(false)
             .build()?;
-        let stream = prefixed_hb.traverse(conf).await?;
+        let stream = prefixed_hb.traverse(&conf).await?;
         let res = collect(stream).await;
         assert_eq!(res, expected[1..]);
         Ok(())
