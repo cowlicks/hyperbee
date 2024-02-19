@@ -479,56 +479,63 @@ impl<M: CoreMem> Node<M> {
         }
     }
 
-    /// Get the key at the provided index
     #[tracing::instrument(skip(self))]
-    async fn get_key(&mut self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
+    async fn get_key_value(
+        &mut self,
+        index: usize,
+        pull_key: bool,
+        pull_value: bool,
+    ) -> Result<KeyValue, HyperbeeError> {
         let key = &mut self.keys[index];
-        if let Some(value) = &key.cached_key {
-            trace!("has cached value");
-            return Ok(value.clone());
-        }
-        trace!("no cached value");
-        let value = self
-            .blocks
-            .read()
-            .await
-            .get(&key.seq, self.blocks.clone())
-            .await?
-            .read()
-            .await
-            .key
-            .clone();
-        key.cached_key = Some(value.clone());
-        Ok(value)
-    }
-
-    // Use given index to get Key.seq, which points to the block in the core where this value
-    // lives. Load that BlockEntry and return (Key.seq, BlockEntry.value)
-    /// Get the value for the key at the provided index
-    async fn get_value(&self, index: usize) -> Result<(u64, Option<Vec<u8>>), HyperbeeError> {
-        match &self.keys[index] {
-            KeyValue {
-                seq,
-                cached_value: Some(value),
-                ..
-            } => Ok((*seq, value.clone())),
-            KeyValue {
-                seq,
-                cached_value: None,
-                ..
-            } => Ok((
-                *seq,
+        if pull_key && key.cached_key.is_none() {
+            key.cached_key = Some(
                 self.blocks
                     .read()
                     .await
-                    .get(seq, self.blocks.clone())
+                    .get(&key.seq, self.blocks.clone())
+                    .await?
+                    .read()
+                    .await
+                    .key
+                    .clone(),
+            );
+        }
+        if pull_value && key.cached_value.is_none() {
+            key.cached_value = Some(
+                self.blocks
+                    .read()
+                    .await
+                    .get(&key.seq, self.blocks.clone())
                     .await?
                     .read()
                     .await
                     .value
                     .clone(),
-            )),
+            );
         }
+        Ok(key.clone())
+    }
+
+    /// Get the key at the provided index
+    #[tracing::instrument(skip(self))]
+    async fn get_key(&mut self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
+        Ok(self
+            .get_key_value(index, true, false)
+            .await?
+            .cached_key
+            .expect("cached_key pulled in get_key_value"))
+    }
+
+    // Use given index to get Key.seq, which points to the block in the core where this value
+    // lives. Load that BlockEntry and return (Key.seq, BlockEntry.value)
+    /// Get the value for the key at the provided index
+    async fn get_value(&mut self, index: usize) -> Result<(u64, Option<Vec<u8>>), HyperbeeError> {
+        let kv = self.get_key_value(index, false, true).await?;
+        Ok((
+            kv.seq,
+            kv.cached_value
+                .expect("cached value pulled in get_key_value"),
+        ))
     }
 
     /// Get the child at the provided index
