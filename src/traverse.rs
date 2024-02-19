@@ -15,7 +15,7 @@ type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
 /// Result<(Key's key, (seq, Key's value))>
 type KeyData = Result<(Vec<u8>, (u64, Option<Vec<u8>>)), HyperbeeError>;
-type TreeItem<M> = (KeyData, SharedNode<M>);
+pub type TreeItem<M> = (KeyData, SharedNode<M>);
 
 #[derive(Clone, Debug)]
 pub enum LimitValue {
@@ -57,19 +57,19 @@ impl PartialOrd<[u8]> for LimitValue {
 pub struct TraverseConfig {
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
     /// lower bound for traversal
-    min_value: LimitValue,
+    pub(crate) min_value: LimitValue,
     #[builder(default = "true")]
     /// whether `min_value` is inclusive
-    min_inclusive: bool,
+    pub(crate) min_inclusive: bool,
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Positive)")]
     /// upper bound for traversal
-    max_value: LimitValue,
+    pub(crate) max_value: LimitValue,
     #[builder(default = "true")]
     /// whether `max_value` is inclusive
-    max_inclusive: bool,
+    pub(crate) max_inclusive: bool,
     #[builder(default = "false")]
     /// traverse in reverse
-    reversed: bool,
+    pub(crate) reversed: bool,
 }
 
 fn validate_traverse_config_builder(builder: &TraverseConfigBuilder) -> Result<(), String> {
@@ -446,16 +446,12 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
     }
 }
 
-pub fn traverse<'a, M: CoreMem>(node: SharedNode<M>, config: TraverseConfig) -> Traverse<'a, M> {
-    Traverse::new(node, config)
-}
-
 static LEADER: &str = "\t";
 
 pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeError> {
     let starting_height = node.read().await.height().await?;
     let mut out = "".to_string();
-    let stream = traverse(node, TraverseConfig::default());
+    let stream = Traverse::new(node, TraverseConfig::default());
     tokio::pin!(stream);
     while let Some((key_data, node)) = stream.next().await {
         let h = node.read().await.height().await?;
@@ -478,9 +474,8 @@ mod test {
     macro_rules! traverse_check {
         ( $range:expr, $traverse_conf:expr ) => {
             async move {
-                let (mut hb, keys) = crate::test::hb_put!($range).await?;
-                let root = hb.get_root(false).await?.unwrap();
-                let stream = traverse(root, $traverse_conf);
+                let (hb, keys) = crate::test::hb_put!($range).await?;
+                let stream = hb.traverse($traverse_conf).await?;
                 tokio::pin!(stream);
                 let mut res = vec![];
                 while let Some((Ok(key_data), _node)) = stream.next().await {
@@ -539,14 +534,13 @@ mod test {
     #[tokio::test]
     async fn fix_usize_underflow_when_matched_max_val_inclusive_and_reversed(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, mut keys) = crate::test::hb_put!(0..10).await?;
+        let (hb, mut keys) = crate::test::hb_put!(0..10).await?;
         let conf = TraverseConfigBuilder::default()
             .max_value(5.into())
             .max_inclusive(false)
             .reversed(true)
             .build()?;
-        let root = hb.get_root(false).await?.unwrap();
-        let stream = traverse(root, conf);
+        let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
             .collect::<Vec<TreeItem<RandomAccessMemory>>>()
             .await
@@ -560,13 +554,12 @@ mod test {
 
     #[tokio::test]
     async fn fix_match_last_key_exclusive_in_leaf() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..10).await?;
+        let (hb, keys) = crate::test::hb_put!(0..10).await?;
         let conf = TraverseConfigBuilder::default()
             .min_value(3.into())
             .min_inclusive(false)
             .build()?;
-        let root = hb.get_root(false).await?.unwrap();
-        let stream = traverse(root, conf);
+        let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
             .collect::<Vec<TreeItem<RandomAccessMemory>>>()
             .await
@@ -579,13 +572,12 @@ mod test {
 
     #[tokio::test]
     async fn fix_match_last_key_exclusive_in_node() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..10).await?;
+        let (hb, keys) = crate::test::hb_put!(0..10).await?;
         let conf = TraverseConfigBuilder::default()
             .min_value(4.into())
             .min_inclusive(false)
             .build()?;
-        let root = hb.get_root(false).await?.unwrap();
-        let stream = traverse(root, conf);
+        let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
             .collect::<Vec<TreeItem<RandomAccessMemory>>>()
             .await

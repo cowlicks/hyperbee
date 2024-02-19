@@ -371,7 +371,7 @@ async fn repair<M: CoreMem>(
 }
 
 impl<M: CoreMem> Tree<M> {
-    pub async fn del(&mut self, key: &[u8]) -> Result<bool, HyperbeeError> {
+    pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
         let Some(root) = self.get_root(false).await? else {
             return Ok(false);
         };
@@ -498,7 +498,7 @@ mod test {
 
     #[tokio::test]
     async fn empty_tree_no_key() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = Tree::from_ram().await?;
+        let hb = Tree::from_ram().await?;
         let key = vec![1];
         let res = hb.del(&key).await?;
         assert!(!res);
@@ -507,7 +507,7 @@ mod test {
 
     #[tokio::test]
     async fn no_key() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, ..) = crate::test::hb_put!(0..10).await?;
+        let (hb, ..) = crate::test::hb_put!(0..10).await?;
         let key = vec![1];
         let res = hb.del(&key).await?;
         assert!(!res);
@@ -516,7 +516,7 @@ mod test {
 
     #[tokio::test]
     async fn delete_from_root_that_is_leaf() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..4).await?;
+        let (hb, keys) = crate::test::hb_put!(0..4).await?;
         let k = &keys[0].clone();
         let res = hb.del(k).await?;
         assert!(res);
@@ -532,7 +532,7 @@ mod test {
 
     #[tokio::test]
     async fn delete_from_leaf_no_underflow() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..10).await?;
+        let (hb, keys) = crate::test::hb_put!(0..10).await?;
         let k = &keys.last().unwrap().clone();
         let res = hb.del(k).await?;
         assert!(res);
@@ -544,7 +544,7 @@ mod test {
 
     #[tokio::test]
     async fn delete_last_key() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..1).await?;
+        let (hb, keys) = crate::test::hb_put!(0..1).await?;
         let k = &keys.last().unwrap().clone();
         let res = hb.del(k).await?;
         assert!(res);
@@ -557,7 +557,7 @@ mod test {
     #[tokio::test]
     async fn delete_from_leaf_with_underflow_rotate_left() -> Result<(), Box<dyn std::error::Error>>
     {
-        let (mut hb, keys) = crate::test::hb_put!(0..6).await?;
+        let (hb, keys) = crate::test::hb_put!(0..6).await?;
         let k = keys[0].clone();
         let res = hb.del(&k).await?;
         assert!(res);
@@ -570,7 +570,7 @@ mod test {
     #[tokio::test]
     async fn delete_from_leaf_with_underflow_rotate_right() -> Result<(), Box<dyn std::error::Error>>
     {
-        let (mut hb, keys) = crate::test::hb_put!(&[1, 2, 3, 4, 5, 0]).await?;
+        let (hb, keys) = crate::test::hb_put!(&[1, 2, 3, 4, 5, 0]).await?;
         let k = keys[keys.len() - 2].clone();
         let res = hb.del(&k).await?;
         assert!(res);
@@ -583,7 +583,7 @@ mod test {
     #[tokio::test]
     async fn delete_from_leaf_with_underflow_merge_left() -> Result<(), Box<dyn std::error::Error>>
     {
-        let (mut hb, keys) = crate::test::hb_put!(0..5).await?;
+        let (hb, keys) = crate::test::hb_put!(0..5).await?;
         let k = keys[0].clone();
         let res = hb.del(&k).await?;
         assert!(res);
@@ -595,7 +595,7 @@ mod test {
 
     #[tokio::test]
     async fn delete_from_internal_no_underflow() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..19).await?;
+        let (hb, keys) = crate::test::hb_put!(0..19).await?;
         let k = keys[5].clone();
         let res = hb.del(&k).await?;
         assert!(res);
@@ -608,7 +608,7 @@ mod test {
     #[tokio::test]
     async fn delete_from_internal_node_with_underflow_merge(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..19).await?;
+        let (hb, keys) = crate::test::hb_put!(0..19).await?;
         let k = keys[10].clone();
         let res = hb.del(&k).await?;
         assert!(res);
@@ -621,7 +621,7 @@ mod test {
     #[tokio::test]
     async fn delete_from_internal_node_with_underflow_rotate(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..25).await?;
+        let (hb, keys) = crate::test::hb_put!(0..25).await?;
         let k = keys[10].clone();
         let res = hb.del(&k).await?;
         assert!(res);
@@ -633,7 +633,7 @@ mod test {
 
     #[tokio::test]
     async fn bug_where_root_was_not_getting_replaced() -> Result<(), Box<dyn std::error::Error>> {
-        let (mut hb, keys) = crate::test::hb_put!(0..5).await?;
+        let (hb, keys) = crate::test::hb_put!(0..5).await?;
         for k in keys.iter() {
             hb.del(k).await?;
             let res = hb.get(k).await?;
@@ -648,7 +648,7 @@ mod test {
     #[tokio::test]
     async fn rand_delete() -> Result<(), Box<dyn std::error::Error>> {
         let rand = Rand::default();
-        let mut hb = Tree::from_ram().await?;
+        let hb = Tree::from_ram().await?;
 
         let keys: Vec<Vec<u8>> = (0..100).map(i32_key_vec).collect();
         let keys = rand.shuffle(keys);

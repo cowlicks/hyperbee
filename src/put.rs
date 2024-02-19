@@ -64,7 +64,7 @@ impl<M: CoreMem> Tree<M> {
     /// Insert the provide key and value into the tree
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub async fn put(
-        &mut self,
+        &self,
         key: &[u8],
         value: Option<&[u8]>,
     ) -> Result<(bool, u64), HyperbeeError> {
@@ -163,7 +163,7 @@ mod test {
 
     #[tokio::test]
     async fn basic_put() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = Tree::from_ram().await?;
+        let hb = Tree::from_ram().await?;
         for i in 0..4 {
             let key = vec![i];
             let val = vec![i];
@@ -181,7 +181,7 @@ mod test {
 
     #[tokio::test]
     async fn basic_put_with_replace() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = Tree::from_ram().await?;
+        let hb = Tree::from_ram().await?;
         for i in 0..4 {
             let key = vec![i];
             let val = vec![i];
@@ -203,7 +203,7 @@ mod test {
 
     #[tokio::test]
     async fn print_put() -> Result<(), Box<dyn std::error::Error>> {
-        let mut hb = Tree::from_ram().await?;
+        let hb = Tree::from_ram().await?;
         for i in 0..3 {
             let is = i.to_string();
             let key = is.clone().as_bytes().to_vec();

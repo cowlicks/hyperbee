@@ -6,7 +6,9 @@ use crate::{
     blocks::{Blocks, BlocksBuilder},
     error::HyperbeeError,
     messages::{header::Metadata, Header},
-    nearest_node, traverse, CoreMem, Node, Shared, PROTOCOL,
+    nearest_node,
+    traverse::{self, Traverse, TraverseConfig},
+    CoreMem, Node, Shared, PROTOCOL,
 };
 use std::{
     path::{Path, PathBuf},
@@ -34,7 +36,7 @@ impl<M: CoreMem> Tree<M> {
     /// Gets the root of the tree.
     /// When `ensure_header == true` write the hyperbee header onto the hypercore if it does not exist.
     pub async fn get_root(
-        &mut self,
+        &self,
         ensure_header: bool,
     ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
         let blocks = self.blocks.read().await;
@@ -57,10 +59,7 @@ impl<M: CoreMem> Tree<M> {
     /// Get the value corresponding to the provided `key` from the Hyperbee
     /// # Errors
     /// When `Hyperbee.get_root` fails
-    pub async fn get(
-        &mut self,
-        key: &[u8],
-    ) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
+    pub async fn get(&self, key: &[u8]) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
         let node = match self.get_root(false).await? {
             None => return Ok(None),
             Some(node) => node,
@@ -107,13 +106,25 @@ impl<M: CoreMem> Tree<M> {
     }
 
     /// Returs a string representing the structure of the tree showing the keys in each node
-    pub async fn print(&mut self) -> Result<String, HyperbeeError> {
+    pub async fn print(&self) -> Result<String, HyperbeeError> {
         let root = self
             .get_root(false)
             .await?
             .ok_or(HyperbeeError::NoRootError)?;
         let out = traverse::print(root).await?;
         Ok(out)
+    }
+
+    /// Traverse the tree based on the given [`TraverseConfig`]
+    pub async fn traverse<'a>(
+        &self,
+        conf: TraverseConfig,
+    ) -> Result<Traverse<'a, M>, HyperbeeError> {
+        let root = self
+            .get_root(false)
+            .await?
+            .ok_or(HyperbeeError::NoRootError)?;
+        Ok(Traverse::new(root, conf))
     }
 }
 
