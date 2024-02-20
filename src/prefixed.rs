@@ -4,7 +4,7 @@ use crate::{
         LimitValue::{Finite, Infinite},
         Traverse, TraverseConfig,
     },
-    CoreMem, Shared, Tree,
+    CoreMem, KeyValueData, Shared, Tree,
 };
 
 pub struct Prefixed<M: CoreMem> {
@@ -39,10 +39,39 @@ impl<M: CoreMem> Prefixed<M> {
         self.tree.read().await.put(prefixed_key, value).await
     }
 
+    // TODO doc
+    pub async fn put_compare_and_swap(
+        &self,
+        key: &[u8],
+        value: Option<&[u8]>,
+        cas: impl FnOnce(Option<&KeyValueData>, &KeyValueData) -> bool,
+    ) -> Result<(Option<u64>, Option<u64>), HyperbeeError> {
+        let prefixed_key: &[u8] = &[&self.prefix, key].concat();
+        self.tree
+            .read()
+            .await
+            .put_compare_and_swap(prefixed_key, value, cas)
+            .await
+    }
+
     /// Delete the given key from the tree
     pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
         let prefixed_key: &[u8] = &[&self.prefix, key].concat();
         self.tree.read().await.del(prefixed_key).await
+    }
+
+    // TODO doc
+    pub async fn del_compare_and_swap(
+        &self,
+        key: &[u8],
+        cas: impl FnOnce(&KeyValueData) -> bool,
+    ) -> Result<Option<bool>, HyperbeeError> {
+        let prefixed_key: &[u8] = &[&self.prefix, key].concat();
+        self.tree
+            .read()
+            .await
+            .del_compare_and_swap(prefixed_key, cas)
+            .await
     }
 
     /// Travese prefixed keys. If you provide [`TraverseConfig::min_value`] or
