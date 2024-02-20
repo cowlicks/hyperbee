@@ -59,9 +59,9 @@ pub struct KeyValue {
 }
 
 pub struct KeyValueData {
-    seq: u64,
-    key: Vec<u8>,
-    value: Option<Vec<u8>>,
+    pub seq: u64,
+    pub key: Vec<u8>,
+    pub value: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]

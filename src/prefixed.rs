@@ -201,7 +201,7 @@ mod test {
             x.collect::<Vec<TreeItem<M>>>()
                 .await
                 .into_iter()
-                .map(|x| x.0.unwrap().0)
+                .map(|x| x.0.unwrap().key)
                 .collect()
         }
 
