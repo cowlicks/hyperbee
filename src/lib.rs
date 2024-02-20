@@ -56,11 +56,14 @@ fn min_keys(max_keys: usize) -> usize {
 pub struct KeyValue {
     /// Index of key value pair within the [`hypercore::Hypercore`].
     seq: u64,
-    /// Key of the key value pair
-    cached_key: Option<Vec<u8>>,
-    /// Value of the key value pair.
-    cached_value: Option<Option<Vec<u8>>>,
 }
+
+pub struct KeyValueData {
+    seq: u64,
+    key: Vec<u8>,
+    value: Option<Vec<u8>>,
+}
+
 #[derive(Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
 pub struct Child<M: CoreMem> {
@@ -203,12 +206,8 @@ impl Hyperbee<random_access_memory::RandomAccessMemory> {
 }
 
 impl KeyValue {
-    fn new(seq: u64, keys_key: Option<Vec<u8>>, keys_value: Option<Option<Vec<u8>>>) -> Self {
-        KeyValue {
-            seq,
-            cached_key: keys_key,
-            cached_value: keys_value,
-        }
+    fn new(seq: u64) -> Self {
+        KeyValue { seq }
     }
 }
 
@@ -237,11 +236,7 @@ fn make_node_vec<B: Buf, M: CoreMem>(
         .levels
         .iter()
         .map(|level| {
-            let keys = level
-                .keys
-                .iter()
-                .map(|k| KeyValue::new(*k, Option::None, Option::None))
-                .collect();
+            let keys = level.keys.iter().map(|k| KeyValue::new(*k)).collect();
             let mut children = vec![];
             for i in (0..(level.children.len())).step_by(2) {
                 children.push(Child::new(
@@ -484,55 +479,42 @@ impl<M: CoreMem> Node<M> {
         index: usize,
         pull_key: bool,
         pull_value: bool,
-    ) -> Result<KeyValue, HyperbeeError> {
-        let key = &mut self.keys[index];
-        if pull_key && key.cached_key.is_none() {
-            key.cached_key = Some(
-                self.blocks
-                    .read()
-                    .await
-                    .get(&key.seq, self.blocks.clone())
-                    .await?
-                    .read()
-                    .await
-                    .key
-                    .clone(),
-            );
-        }
-        if pull_value && key.cached_value.is_none() {
-            key.cached_value = Some(
-                self.blocks
-                    .read()
-                    .await
-                    .get(&key.seq, self.blocks.clone())
-                    .await?
-                    .read()
-                    .await
-                    .value
-                    .clone(),
-            );
-        }
-        Ok(key.clone())
+    ) -> Result<KeyValueData, HyperbeeError> {
+        let KeyValue { seq, .. } = self.keys[index];
+        let key = self
+            .blocks
+            .read()
+            .await
+            .get(&seq, self.blocks.clone())
+            .await?
+            .read()
+            .await
+            .key
+            .clone();
+        let value = self
+            .blocks
+            .read()
+            .await
+            .get(&seq, self.blocks.clone())
+            .await?
+            .read()
+            .await
+            .value
+            .clone();
+        Ok(KeyValueData { seq, key, value })
     }
 
     /// Get the key at the provided index
     #[tracing::instrument(skip(self))]
     async fn get_key(&mut self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
-        Ok(self
-            .get_key_value(index, true, false)
-            .await?
-            .cached_key
-            .expect("cached_key pulled in get_key_value"))
+        Ok(self.get_key_value(index, true, false).await?.key)
     }
 
     /// Get the key at the provided index
     #[tracing::instrument(skip(self))]
     async fn get_seq_and_key(&mut self, index: usize) -> Result<(u64, Vec<u8>), HyperbeeError> {
         let kv = self.get_key_value(index, true, false).await?;
-        Ok((
-            kv.seq,
-            kv.cached_key.expect("cached key pulled in get_key_value"),
-        ))
+        Ok((kv.seq, kv.key))
     }
 
     // Use given index to get Key.seq, which points to the block in the core where this value
@@ -540,11 +522,7 @@ impl<M: CoreMem> Node<M> {
     /// Get the value for the key at the provided index
     async fn get_value(&mut self, index: usize) -> Result<(u64, Option<Vec<u8>>), HyperbeeError> {
         let kv = self.get_key_value(index, false, true).await?;
-        Ok((
-            kv.seq,
-            kv.cached_value
-                .expect("cached value pulled in get_key_value"),
-        ))
+        Ok((kv.seq, kv.value))
     }
 
     /// Get the child at the provided index

@@ -395,11 +395,7 @@ impl<M: CoreMem> Tree<M> {
             let len = path.len();
             let (node, index) = &mut path[len - 1];
             let kv = node.write().await.get_key_value(*index, true, true).await?;
-            let result = cas(
-                &kv.cached_key.expect("pulled in get_key_value"),
-                kv.seq,
-                &kv.cached_value.expect("pulled in get_key_value"),
-            );
+            let result = cas(&kv.key, kv.seq, &kv.value);
             if !result {
                 // abort
                 return Ok(Some(false));

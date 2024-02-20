@@ -83,7 +83,7 @@ impl<M: CoreMem> Tree<M> {
 
         let seq = self.version().await;
         let mut changes: Changes<M> = Changes::new(seq, key, value);
-        let mut cur_key = KeyValue::new(seq, Some(key.to_vec()), Some(value.map(<[u8]>::to_vec)));
+        let mut cur_key = KeyValue::new(seq);
         let mut children: Vec<Child<M>> = vec![];
 
         let matched = 'new_root: {
