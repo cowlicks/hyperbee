@@ -356,7 +356,11 @@ where
 
         while low <= high {
             let mid = low + ((high - low) >> 1);
-            let (seq, other_key) = node.write().await.get_seq_and_key(mid).await?;
+            let KeyValueData {
+                seq,
+                key: other_key,
+                ..
+            } = node.read().await.get_key_value(mid).await?;
 
             // if matching key, we are done!
             if key == &other_key[..] {
@@ -474,12 +478,7 @@ impl<M: CoreMem> Node<M> {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_key_value(
-        &mut self,
-        index: usize,
-        pull_key: bool,
-        pull_value: bool,
-    ) -> Result<KeyValueData, HyperbeeError> {
+    async fn get_key_value(&self, index: usize) -> Result<KeyValueData, HyperbeeError> {
         let KeyValue { seq, .. } = self.keys[index];
         let key = self
             .blocks
@@ -502,27 +501,6 @@ impl<M: CoreMem> Node<M> {
             .value
             .clone();
         Ok(KeyValueData { seq, key, value })
-    }
-
-    /// Get the key at the provided index
-    #[tracing::instrument(skip(self))]
-    async fn get_key(&mut self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
-        Ok(self.get_key_value(index, true, false).await?.key)
-    }
-
-    /// Get the key at the provided index
-    #[tracing::instrument(skip(self))]
-    async fn get_seq_and_key(&mut self, index: usize) -> Result<(u64, Vec<u8>), HyperbeeError> {
-        let kv = self.get_key_value(index, true, false).await?;
-        Ok((kv.seq, kv.key))
-    }
-
-    // Use given index to get Key.seq, which points to the block in the core where this value
-    // lives. Load that BlockEntry and return (Key.seq, BlockEntry.value)
-    /// Get the value for the key at the provided index
-    async fn get_value(&mut self, index: usize) -> Result<(u64, Option<Vec<u8>>), HyperbeeError> {
-        let kv = self.get_key_value(index, false, true).await?;
-        Ok((kv.seq, kv.value))
     }
 
     /// Get the child at the provided index

@@ -394,7 +394,7 @@ impl<M: CoreMem> Tree<M> {
         {
             let len = path.len();
             let (node, index) = &mut path[len - 1];
-            let kv = node.write().await.get_key_value(*index, true, true).await?;
+            let kv = node.read().await.get_key_value(*index).await?;
             let result = cas(&kv.key, kv.seq, &kv.value);
             if !result {
                 // abort

@@ -293,9 +293,8 @@ async fn get_n_keys_and_children<M: CoreMem>(node: SharedNode<M>) -> (usize, usi
 }
 
 async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> KeyData {
-    let key = node.write().await.get_key(index).await?;
-    let value = node.write().await.get_value(index).await?;
-    Ok((key, value))
+    let kv = node.read().await.get_key_value(index).await?;
+    Ok((kv.key, (kv.seq, kv.value)))
 }
 
 #[tracing::instrument]
