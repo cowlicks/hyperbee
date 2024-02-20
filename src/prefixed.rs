@@ -34,7 +34,7 @@ impl<M: CoreMem> Prefixed<M> {
         &self,
         key: &[u8],
         value: Option<&[u8]>,
-    ) -> Result<(bool, u64), HyperbeeError> {
+    ) -> Result<(Option<u64>, u64), HyperbeeError> {
         let prefixed_key: &[u8] = &[&self.prefix, key].concat();
         self.tree.read().await.put(prefixed_key, value).await
     }

@@ -60,14 +60,24 @@ impl<M: CoreMem> Node<M> {
         )
     }
 }
+
+// TODO return (Option<old_seq> new_seq)
+// TODO should run cas whether or not we are replacing a value
+// Should return Result<Option<foo>, err> where the Option is None if the cas is false
 impl<M: CoreMem> Tree<M> {
-    /// Insert the provide key and value into the tree
+    /// Insert the provide key and value into the tree.
+    /// # Returns
+    /// Result<(
+    ///     Option<u64>,    # `seq` for old value, if replaced
+    ///     u64,            # length of the new hypercore. this - 1 is the `seq` for the block
+    /// ),
+    ///  HyperbeeError>
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub async fn put(
         &self,
         key: &[u8],
         value: Option<&[u8]>,
-    ) -> Result<(bool, u64), HyperbeeError> {
+    ) -> Result<(Option<u64>, u64), HyperbeeError> {
         // NB: do this before we call `version` because it can add the header block
         let maybe_root = self.get_root(true).await?;
 
@@ -76,10 +86,10 @@ impl<M: CoreMem> Tree<M> {
         let mut cur_key = KeyValue::new(seq, Some(key.to_vec()), Some(value.map(<[u8]>::to_vec)));
         let mut children: Vec<Child<M>> = vec![];
 
-        'new_root: {
+        let matched = 'new_root: {
             // Get root and handle when it don't exist
             let root = match maybe_root {
-                None => break 'new_root,
+                None => break 'new_root None,
                 Some(node) => node,
             };
 
@@ -87,7 +97,7 @@ impl<M: CoreMem> Tree<M> {
 
             loop {
                 let (cur_node, cur_index) = match path.pop() {
-                    None => break 'new_root,
+                    None => break 'new_root matched,
                     Some(cur) => cur,
                 };
 
@@ -111,11 +121,11 @@ impl<M: CoreMem> Tree<M> {
                         trace!("inserted into some child");
                         let changes = propagate_changes_up_tree(changes, path, child).await;
                         let outcome = self.blocks.read().await.add_changes(changes).await?;
-                        return Ok((matched.is_some(), outcome.length));
+                        return Ok((matched, outcome.length));
                     };
 
                     let outcome = self.blocks.read().await.add_changes(changes).await?;
-                    return Ok((matched.is_some(), outcome.length));
+                    return Ok((matched, outcome.length));
                 }
 
                 // No room in leaf for another key. So we split and continue.
@@ -133,7 +143,7 @@ impl<M: CoreMem> Tree<M> {
                 ];
                 cur_key = mid_key;
             }
-        }
+        };
         trace!(
             "creating a new root with key = [{:#?}] and children = [{:#?}]",
             &cur_key,
@@ -150,7 +160,7 @@ impl<M: CoreMem> Tree<M> {
         changes.add_root(new_root);
         let outcome = self.blocks.read().await.add_changes(changes).await?;
 
-        Ok((true, outcome.length))
+        Ok((matched, outcome.length))
     }
 }
 
@@ -160,6 +170,22 @@ mod test {
         test::{check_tree, i32_key_vec, Rand},
         Tree,
     };
+
+    #[tokio::test]
+    async fn test_old_seq() -> Result<(), Box<dyn std::error::Error>> {
+        let hb = Tree::from_ram().await?;
+        let (None, new_len) = hb.put(b"a", None).await? else {
+            panic!("should be None")
+        };
+        assert_eq!(new_len, hb.version().await);
+        let first_seq = new_len - 1;
+
+        let (Some(old_seq), _second_seq) = hb.put(b"a", None).await? else {
+            panic!("should be Some")
+        };
+        assert_eq!(first_seq, old_seq);
+        Ok(())
+    }
 
     #[tokio::test]
     async fn basic_put() -> Result<(), Box<dyn std::error::Error>> {

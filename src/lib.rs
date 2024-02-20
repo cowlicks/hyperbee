@@ -150,7 +150,7 @@ impl<M: CoreMem> Hyperbee<M> {
         &self,
         key: &[u8],
         value: Option<&[u8]>,
-    ) -> Result<(bool, u64), HyperbeeError> {
+    ) -> Result<(Option<u64>, u64), HyperbeeError> {
         self.tree.read().await.put(key, value).await
     }
 
