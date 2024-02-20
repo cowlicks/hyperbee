@@ -370,35 +370,39 @@ async fn repair<M: CoreMem>(
     Ok(father_ref)
 }
 
+fn cas_always_true(_key: &[u8], _seq: u64, _val: &Option<Vec<u8>>) -> bool {
+    true
+}
+
 impl<M: CoreMem> Tree<M> {
     pub async fn del_compare_and_swap(
         &self,
         key: &[u8],
-        cas: Option<Box<dyn FnOnce(&[u8], u64, &Option<Vec<u8>>) -> bool>>,
-    ) -> Result<bool, HyperbeeError> {
+        cas: impl FnOnce(&[u8], u64, &Option<Vec<u8>>) -> bool,
+    ) -> Result<Option<bool>, HyperbeeError> {
         let Some(root) = self.get_root(false).await? else {
-            return Ok(false);
+            return Ok(None);
         };
 
         let (matched, mut path) = nearest_node(root.clone(), key).await?;
 
         if matched.is_none() {
-            return Ok(false);
+            return Ok(None);
         }
 
         // run user provided `cas` function
-        if let Some(cas_func) = cas {
+        {
             let len = path.len();
             let (node, index) = &mut path[len - 1];
             let kv = node.write().await.get_key_value(*index, true, true).await?;
-            let result = cas_func(
+            let result = cas(
                 &kv.cached_key.expect("pulled in get_key_value"),
                 kv.seq,
                 &kv.cached_value.expect("pulled in get_key_value"),
             );
             if !result {
                 // abort
-                return Ok(false);
+                return Ok(Some(false));
             }
         }
         // NB: jS hyperbee stores the "key" the deleted "key" in the created BlockEntry. So we are
@@ -474,11 +478,14 @@ impl<M: CoreMem> Tree<M> {
         }
 
         self.blocks.read().await.add_changes(changes).await?;
-        Ok(true)
+        Ok(Some(true))
     }
 
     pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
-        self.del_compare_and_swap(key, None).await
+        Ok(self
+            .del_compare_and_swap(key, cas_always_true)
+            .await?
+            .is_some())
     }
 }
 
@@ -687,6 +694,32 @@ mod test {
             assert_eq!(res, None);
             check_tree(hb.clone()).await?;
         }
+        Ok(())
+    }
+    use super::cas_always_true;
+
+    #[tokio::test]
+    async fn test_del_compare_and_swap() -> Result<(), Box<dyn std::error::Error>> {
+        let (hb, ..) = crate::test::hb_put!(0..5).await?;
+        // key not presest
+        let del_res = hb.del_compare_and_swap(b"foobar", cas_always_true).await?;
+        assert_eq!(del_res, None);
+
+        let k = i32_key_vec(0);
+        // cas is false
+        let del_res = hb
+            .del_compare_and_swap(&k, |key: &[u8], _seq: u64, _val: &Option<Vec<u8>>| key != k)
+            .await?;
+        assert_eq!(del_res, Some(false));
+        let get_res = hb.get(&k).await?;
+        assert!(get_res.is_some());
+
+        // cas is true
+        let del_res = hb.del_compare_and_swap(&k, cas_always_true).await?;
+        assert_eq!(del_res, Some(true));
+
+        let get_res = hb.get(&k).await?;
+        assert!(get_res.is_none());
         Ok(())
     }
 }
