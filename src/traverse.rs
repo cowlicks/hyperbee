@@ -58,19 +58,19 @@ impl PartialOrd<[u8]> for LimitValue {
 pub struct TraverseConfig {
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
     /// lower bound for traversal
-    pub(crate) min_value: LimitValue,
+    pub min_value: LimitValue,
     #[builder(default = "true")]
     /// whether `min_value` is inclusive
-    pub(crate) min_inclusive: bool,
+    pub min_inclusive: bool,
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Positive)")]
     /// upper bound for traversal
-    pub(crate) max_value: LimitValue,
+    pub max_value: LimitValue,
     #[builder(default = "true")]
     /// whether `max_value` is inclusive
-    pub(crate) max_inclusive: bool,
+    pub max_inclusive: bool,
     #[builder(default = "false")]
     /// traverse in reverse
-    pub(crate) reversed: bool,
+    pub reversed: bool,
 }
 
 fn validate_traverse_config_builder(builder: &TraverseConfigBuilder) -> Result<(), String> {
