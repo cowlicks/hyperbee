@@ -64,9 +64,6 @@ impl<M: CoreMem> Node<M> {
 fn cas_always_true(_prev: Option<&KeyValueData>, _next: &KeyValueData) -> bool {
     true
 }
-// TODO return (Option<old_seq> new_seq)
-// TODO should run cas whether or not we are replacing a value
-// Should return Result<Option<foo>, err> where the Option is None if the cas is false
 impl<M: CoreMem> Tree<M> {
     #[tracing::instrument(level = "trace", skip(self, cas), ret)]
     pub async fn put_compare_and_swap(
