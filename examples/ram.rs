@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Deleting a key returns `true` if it was present
     let res = hb.del(b"hello").await?;
-    assert!(res);
+    assert!(res.is_some());
 
     // Getting deleted key returns `None`
     let res = hb.get(b"hello").await?;

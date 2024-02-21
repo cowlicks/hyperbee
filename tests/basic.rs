@@ -45,7 +45,7 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
     }
     let result: Vec<String> = result
         .into_iter()
-        .map(|x| String::from_utf8(x.0).unwrap())
+        .map(|x| String::from_utf8(x.key).unwrap())
         .collect();
     let expected: Vec<String> = expected
         .into_iter()

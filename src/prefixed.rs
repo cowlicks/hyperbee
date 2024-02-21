@@ -4,7 +4,7 @@ use crate::{
         LimitValue::{Finite, Infinite},
         Traverse, TraverseConfig,
     },
-    CoreMem, Shared, Tree,
+    CoreMem, KeyValueData, Shared, Tree,
 };
 
 pub struct Prefixed<M: CoreMem> {
@@ -29,20 +29,59 @@ impl<M: CoreMem> Prefixed<M> {
     }
 
     /// Insert the given key and value into the tree
+    /// Returs the `seq` of the new key, and `Option<u64>` which contains the `seq` of the old key
+    /// if it was replaced.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub async fn put(
         &self,
         key: &[u8],
         value: Option<&[u8]>,
-    ) -> Result<(bool, u64), HyperbeeError> {
+    ) -> Result<(Option<u64>, u64), HyperbeeError> {
         let prefixed_key: &[u8] = &[&self.prefix, key].concat();
         self.tree.read().await.put(prefixed_key, value).await
     }
 
+    /// Like [`Prefixed::put`] but takes a `compare_and_swap` function.
+    /// The `compared_and_swap` function is called with the old key (if present), and the new key.
+    /// The new key is only inserted if `compare_and_swap` returns true.
+    /// Returs two `Option<u64>`s. The first is the old key, the second is the new key.
+    pub async fn put_compare_and_swap(
+        &self,
+        key: &[u8],
+        value: Option<&[u8]>,
+        cas: impl FnOnce(Option<&KeyValueData>, &KeyValueData) -> bool,
+    ) -> Result<(Option<u64>, Option<u64>), HyperbeeError> {
+        let prefixed_key: &[u8] = &[&self.prefix, key].concat();
+        self.tree
+            .read()
+            .await
+            .put_compare_and_swap(prefixed_key, value, cas)
+            .await
+    }
+
     /// Delete the given key from the tree
-    pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
+    /// Returns the `seq` from the key if it was deleted.
+    pub async fn del(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
         let prefixed_key: &[u8] = &[&self.prefix, key].concat();
         self.tree.read().await.del(prefixed_key).await
+    }
+
+    /// Like [`Prefixed::del`] but takes a `compare_and_swap` function.
+    /// Before deleting the function is called with existing key's [`KeyValueData`].
+    /// The key is only deleted if `compare_and_swap` returs true.
+    /// Returns the `bool` representing the result of `compare_and_swap`, and the `seq` for the
+    /// key.
+    pub async fn del_compare_and_swap(
+        &self,
+        key: &[u8],
+        cas: impl FnOnce(&KeyValueData) -> bool,
+    ) -> Result<Option<(bool, u64)>, HyperbeeError> {
+        let prefixed_key: &[u8] = &[&self.prefix, key].concat();
+        self.tree
+            .read()
+            .await
+            .del_compare_and_swap(prefixed_key, cas)
+            .await
     }
 
     /// Travese prefixed keys. If you provide [`TraverseConfig::min_value`] or
@@ -155,7 +194,7 @@ mod test {
         assert_eq!(res, b"with prefix");
 
         // reg delete does not delete prefixed
-        assert!(hb.del(key).await?);
+        assert!(hb.del(key).await?.is_some());
         // reg is gone
         assert!(hb.get(key).await?.is_none());
         // prefixed still there, accessible by reg hb
@@ -163,7 +202,7 @@ mod test {
         // prefixed hb still gets key
         assert!(prefixed_hb.get(key).await?.is_some());
         // prefixed hb delete works
-        assert!(prefixed_hb.del(key).await?);
+        assert!(prefixed_hb.del(key).await?.is_some());
         // it's gone now
         assert!(prefixed_hb.get(key).await?.is_none());
         Ok(())
@@ -201,7 +240,7 @@ mod test {
             x.collect::<Vec<TreeItem<M>>>()
                 .await
                 .into_iter()
-                .map(|x| x.0.unwrap().0)
+                .map(|x| x.0.unwrap().key)
                 .collect()
         }
 

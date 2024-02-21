@@ -56,11 +56,14 @@ fn min_keys(max_keys: usize) -> usize {
 pub struct KeyValue {
     /// Index of key value pair within the [`hypercore::Hypercore`].
     seq: u64,
-    /// Key of the key value pair
-    cached_key: Option<Vec<u8>>,
-    /// Value of the key value pair.
-    cached_value: Option<Option<Vec<u8>>>,
 }
+
+pub struct KeyValueData {
+    pub seq: u64,
+    pub key: Vec<u8>,
+    pub value: Option<Vec<u8>>,
+}
+
 #[derive(Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
 pub struct Child<M: CoreMem> {
@@ -145,20 +148,54 @@ impl<M: CoreMem> Hyperbee<M> {
     }
 
     /// Insert the given key and value into the tree
+    /// Returs the `seq` of the new key, and `Option<u64>` which contains the `seq` of the old key
+    /// if it was replaced.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub async fn put(
         &self,
         key: &[u8],
         value: Option<&[u8]>,
-    ) -> Result<(bool, u64), HyperbeeError> {
+    ) -> Result<(Option<u64>, u64), HyperbeeError> {
         self.tree.read().await.put(key, value).await
     }
 
-    /// Delete the given key from the tree
-    pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
+    /// Like [`Hyperbee::put`] but takes a `compare_and_swap` function.
+    /// The `compared_and_swap` function is called with the old key (if present), and the new key.
+    /// The new key is only inserted if `compare_and_swap` returns true.
+    /// Returs two `Option<u64>`s. The first is the old key, the second is the new key.
+    pub async fn put_compare_and_swap(
+        &self,
+        key: &[u8],
+        value: Option<&[u8]>,
+        cas: impl FnOnce(Option<&KeyValueData>, &KeyValueData) -> bool,
+    ) -> Result<(Option<u64>, Option<u64>), HyperbeeError> {
+        self.tree
+            .read()
+            .await
+            .put_compare_and_swap(key, value, cas)
+            .await
+    }
+
+    /// Delete the given key from the tree.
+    /// Returns the `seq` from the key if it was deleted.
+    pub async fn del(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
         self.tree.read().await.del(key).await
     }
 
+    /// Like [`Hyperbee::del`] but takes a `compare_and_swap` function.
+    /// Before deleting the function is called with existing key's [`KeyValueData`].
+    /// The key is only deleted if `compare_and_swap` returs true.
+    /// Returns the `bool` representing the result of `compare_and_swap`, and the `seq` for the
+    /// key.
+    pub async fn del_compare_and_swap(
+        &self,
+        key: &[u8],
+        cas: impl FnOnce(&KeyValueData) -> bool,
+    ) -> Result<Option<(bool, u64)>, HyperbeeError> {
+        self.tree.read().await.del_compare_and_swap(key, cas).await
+    }
+
+    /// Create a new tree with all it's operation's prefixed by the provided `prefix`.
     pub fn sub(&self, prefix: &[u8]) -> Prefixed<M> {
         Prefixed::new(prefix, self.tree.clone())
     }
@@ -203,12 +240,8 @@ impl Hyperbee<random_access_memory::RandomAccessMemory> {
 }
 
 impl KeyValue {
-    fn new(seq: u64, keys_key: Option<Vec<u8>>, keys_value: Option<Option<Vec<u8>>>) -> Self {
-        KeyValue {
-            seq,
-            cached_key: keys_key,
-            cached_value: keys_value,
-        }
+    fn new(seq: u64) -> Self {
+        KeyValue { seq }
     }
 }
 
@@ -237,11 +270,7 @@ fn make_node_vec<B: Buf, M: CoreMem>(
         .levels
         .iter()
         .map(|level| {
-            let keys = level
-                .keys
-                .iter()
-                .map(|k| KeyValue::new(*k, Option::None, Option::None))
-                .collect();
+            let keys = level.keys.iter().map(|k| KeyValue::new(*k)).collect();
             let mut children = vec![];
             for i in (0..(level.children.len())).step_by(2) {
                 children.push(Child::new(
@@ -331,19 +360,20 @@ impl<M: CoreMem> Children<M> {
 ///
 /// # Returns (`matched`, `index`)
 ///
-/// `match` == true means we found the `key`.
+/// `matched` is Some means we found the `key`.
 ///
-/// if `matched` false:
+/// if `matched` is None:
 ///     if `node` is not a leaf:
 ///         index of the child within the `node` where the `key` could be
 ///     if `node` is a leaf:
 ///         the index within this `node`'s keys where the `key` wolud be inserted
-/// if `matched` is true:
+/// if `matched` is Some:
 ///     the index within this `node`'s keys of the `key`
-async fn get_child_index<M: CoreMem, T>(
+// TODO rename me because it is not just child index
+async fn get_index_of_key<M: CoreMem, T>(
     node: SharedNode<M>,
     key: &T,
-) -> Result<(bool, usize), HyperbeeError>
+) -> Result<(Option<u64>, usize), HyperbeeError>
 where
     T: PartialOrd<[u8]> + Debug + ?Sized,
 {
@@ -358,7 +388,11 @@ where
 
         while low <= high {
             let mid = low + ((high - low) >> 1);
-            let other_key = node.write().await.get_key(mid).await?;
+            let KeyValueData {
+                seq,
+                key: other_key,
+                ..
+            } = node.read().await.get_key_value(mid).await?;
 
             // if matching key, we are done!
             if key == &other_key[..] {
@@ -368,7 +402,7 @@ where
                     other_key,
                     mid
                 );
-                return Ok((true, mid));
+                return Ok((Some(seq), mid));
             }
 
             if key < &other_key[..] {
@@ -384,7 +418,7 @@ where
         }
         break 'found low;
     };
-    Ok((false, child_index))
+    Ok((None, child_index))
 }
 
 /// Descend through tree to the node nearest (or matching) the provided key
@@ -404,7 +438,7 @@ where
 async fn nearest_node<M: CoreMem, T>(
     node: SharedNode<M>,
     key: &T,
-) -> Result<(bool, NodePath<M>), HyperbeeError>
+) -> Result<(Option<u64>, NodePath<M>), HyperbeeError>
 where
     T: PartialOrd<[u8]> + Debug + ?Sized,
 {
@@ -412,16 +446,12 @@ where
     let mut out_path: NodePath<M> = vec![];
     loop {
         let next_node = {
-            let (matched, child_index) = get_child_index(current_node.clone(), key).await?;
+            let (matched, child_index) = get_index_of_key(current_node.clone(), key).await?;
             out_path.push((current_node.clone(), child_index));
-            if matched {
-                return Ok((true, out_path));
-            }
 
-            // leaf node with no match
-            if current_node.read().await.is_leaf().await {
-                trace!("Reached leaf, we're done.");
-                return Ok((false, out_path));
+            // found match or reached leaf
+            if matched.is_some() || current_node.read().await.is_leaf().await {
+                return Ok((matched, out_path));
             }
 
             // continue to next node
@@ -479,59 +509,30 @@ impl<M: CoreMem> Node<M> {
         }
     }
 
-    /// Get the key at the provided index
     #[tracing::instrument(skip(self))]
-    async fn get_key(&mut self, index: usize) -> Result<Vec<u8>, HyperbeeError> {
-        let key = &mut self.keys[index];
-        if let Some(value) = &key.cached_key {
-            trace!("has cached value");
-            return Ok(value.clone());
-        }
-        trace!("no cached value");
-        let value = self
+    async fn get_key_value(&self, index: usize) -> Result<KeyValueData, HyperbeeError> {
+        let KeyValue { seq, .. } = self.keys[index];
+        let key = self
             .blocks
             .read()
             .await
-            .get(&key.seq, self.blocks.clone())
+            .get(&seq, self.blocks.clone())
             .await?
             .read()
             .await
             .key
             .clone();
-        key.cached_key = Some(value.clone());
-        Ok(value)
-    }
-
-    // Use given index to get Key.seq, which points to the block in the core where this value
-    // lives. Load that BlockEntry and return (Key.seq, BlockEntry.value)
-    /// Get the value for the key at the provided index
-    async fn get_value_of_key(
-        &self,
-        index: usize,
-    ) -> Result<(u64, Option<Vec<u8>>), HyperbeeError> {
-        match &self.keys[index] {
-            KeyValue {
-                seq,
-                cached_value: Some(value),
-                ..
-            } => Ok((*seq, value.clone())),
-            KeyValue {
-                seq,
-                cached_value: None,
-                ..
-            } => Ok((
-                *seq,
-                self.blocks
-                    .read()
-                    .await
-                    .get(seq, self.blocks.clone())
-                    .await?
-                    .read()
-                    .await
-                    .value
-                    .clone(),
-            )),
-        }
+        let value = self
+            .blocks
+            .read()
+            .await
+            .get(&seq, self.blocks.clone())
+            .await?
+            .read()
+            .await
+            .value
+            .clone();
+        Ok(KeyValueData { seq, key, value })
     }
 
     /// Get the child at the provided index

@@ -9,13 +9,14 @@ use derive_builder::Builder;
 use futures_lite::{future::FutureExt, StreamExt};
 use tokio_stream::Stream;
 
-use crate::{get_child_index, keys::InfiniteKeys, CoreMem, HyperbeeError, SharedNode};
+use crate::{
+    get_index_of_key, keys::InfiniteKeys, CoreMem, HyperbeeError, KeyValueData, SharedNode,
+};
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
-/// Result<(Key's key, (seq, Key's value))>
-type KeyData = Result<(Vec<u8>, (u64, Option<Vec<u8>>)), HyperbeeError>;
-pub type TreeItem<M> = (KeyData, SharedNode<M>);
+type KeyDataResult = Result<KeyValueData, HyperbeeError>;
+pub type TreeItem<M> = (KeyDataResult, SharedNode<M>);
 
 #[derive(Clone, Debug)]
 pub enum LimitValue {
@@ -152,8 +153,8 @@ async fn make_child_key_index_iter<M: CoreMem>(
         (conf.min_value.clone(), conf.min_inclusive)
     };
 
-    let (matched, index) = get_child_index(node, &starting_key).await?;
-    let start = if matched {
+    let (matched, index) = get_index_of_key(node, &starting_key).await?;
+    let start = if matched.is_some() {
         let key_index = index * 2 + 1;
         if inclusive {
             key_index
@@ -258,7 +259,7 @@ pub struct Traverse<'a, M: CoreMem> {
     iter: Option<Pin<Box<dyn DoubleEndedIterator<Item = usize> + Unpin>>>,
 
     /// Future holding the next key
-    next_key: Option<PinnedFut<'a, KeyData>>,
+    next_key: Option<PinnedFut<'a, KeyDataResult>>,
     /// Future holding the next child
     next_child: Option<PinnedFut<'a, Result<Traverse<'a, M>, HyperbeeError>>>,
     /// Another instance of [`Traverse`] from a child node.
@@ -291,10 +292,8 @@ async fn get_n_keys_and_children<M: CoreMem>(node: SharedNode<M>) -> (usize, usi
     )
 }
 
-async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> KeyData {
-    let key = node.write().await.get_key(index).await?;
-    let value = node.read().await.get_value_of_key(index).await?;
-    Ok((key, value))
+async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> KeyDataResult {
+    node.read().await.get_key_value(index).await
 }
 
 #[tracing::instrument]
@@ -316,7 +315,7 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
             match key_fut.poll(cx) {
                 Poll::Ready(out) => {
                     if let Ok(res) = &out {
-                        if !self.config.in_bounds(&res.0) {
+                        if !self.config.in_bounds(&res.key) {
                             cx.waker().wake_by_ref();
                             return Poll::Ready(None);
                         }
@@ -456,7 +455,7 @@ pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeEr
     while let Some((key_data, node)) = stream.next().await {
         let h = node.read().await.height().await?;
         out += &LEADER.repeat(starting_height - h);
-        let k = key_data?.0;
+        let k = key_data?.key;
         let decoded_k = String::from_utf8(k)?;
         out += &decoded_k;
         out += "\n";
@@ -479,7 +478,7 @@ mod test {
                 tokio::pin!(stream);
                 let mut res = vec![];
                 while let Some((Ok(key_data), _node)) = stream.next().await {
-                    res.push(key_data.0);
+                    res.push(key_data.key);
                 }
                 Ok::<(Vec<Vec<u8>>, Vec<Vec<u8>>), HyperbeeError>((keys, res))
             }
@@ -545,7 +544,7 @@ mod test {
             .collect::<Vec<TreeItem<RandomAccessMemory>>>()
             .await
             .into_iter()
-            .map(|x| x.0.unwrap().0)
+            .map(|x| x.0.unwrap().key)
             .collect();
         keys.reverse();
         assert_eq!(res, keys[5..]);
@@ -564,7 +563,7 @@ mod test {
             .collect::<Vec<TreeItem<RandomAccessMemory>>>()
             .await
             .into_iter()
-            .map(|x| x.0.unwrap().0)
+            .map(|x| x.0.unwrap().key)
             .collect();
         assert_eq!(res, keys[4..]);
         Ok(())
@@ -582,7 +581,7 @@ mod test {
             .collect::<Vec<TreeItem<RandomAccessMemory>>>()
             .await
             .into_iter()
-            .map(|x| x.0.unwrap().0)
+            .map(|x| x.0.unwrap().key)
             .collect();
         assert_eq!(res, keys[5..]);
         Ok(())

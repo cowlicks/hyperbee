@@ -1,6 +1,6 @@
 use crate::{
     changes::Changes, keys::InfiniteKeys, min_keys, nearest_node, put::propagate_changes_up_tree,
-    Child, CoreMem, HyperbeeError, KeyValue, NodePath, SharedNode, Tree, MAX_KEYS,
+    Child, CoreMem, HyperbeeError, KeyValue, KeyValueData, NodePath, SharedNode, Tree, MAX_KEYS,
 };
 
 use Side::{Left, Right};
@@ -370,18 +370,35 @@ async fn repair<M: CoreMem>(
     Ok(father_ref)
 }
 
+fn cas_always_true(_kv: &KeyValueData) -> bool {
+    true
+}
+
 impl<M: CoreMem> Tree<M> {
-    pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
+    pub async fn del_compare_and_swap(
+        &self,
+        key: &[u8],
+        compare_and_swap: impl FnOnce(&KeyValueData) -> bool,
+    ) -> Result<Option<(bool, u64)>, HyperbeeError> {
         let Some(root) = self.get_root(false).await? else {
-            return Ok(false);
+            return Ok(None);
         };
 
         let (matched, mut path) = nearest_node(root.clone(), key).await?;
 
-        if !matched {
-            return Ok(false);
-        }
+        let Some(seq) = matched else {
+            return Ok(None);
+        };
 
+        // run user provided `cas` function
+        {
+            let len = path.len();
+            let (node, index) = &path[len - 1];
+            let kv = node.read().await.get_key_value(*index).await?;
+            if !compare_and_swap(&kv) {
+                return Ok(Some((false, seq)));
+            }
+        }
         // NB: jS hyperbee stores the "key" the deleted "key" in the created BlockEntry. So we are
         // doing that too
         let mut changes: Changes<M> = Changes::new(self.version().await, key, None);
@@ -455,7 +472,17 @@ impl<M: CoreMem> Tree<M> {
         }
 
         self.blocks.read().await.add_changes(changes).await?;
-        Ok(true)
+        Ok(Some((true, seq)))
+    }
+
+    pub async fn del(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
+        let Some((deleted, seq)) = self.del_compare_and_swap(key, cas_always_true).await? else {
+            return Ok(None);
+        };
+        if deleted {
+            return Ok(Some(seq));
+        }
+        panic!("cas_always_true implies `deleted` always true");
     }
 }
 
@@ -493,7 +520,7 @@ impl<M: CoreMem> Tree<M> {
 mod test {
     use crate::{
         test::{check_tree, i32_key_vec, Rand},
-        Tree,
+        Hyperbee, Tree,
     };
 
     #[tokio::test]
@@ -501,7 +528,7 @@ mod test {
         let hb = Tree::from_ram().await?;
         let key = vec![1];
         let res = hb.del(&key).await?;
-        assert!(!res);
+        assert!(res.is_none());
         Ok(())
     }
 
@@ -510,7 +537,7 @@ mod test {
         let (hb, ..) = crate::test::hb_put!(0..10).await?;
         let key = vec![1];
         let res = hb.del(&key).await?;
-        assert!(!res);
+        assert!(res.is_none());
         Ok(())
     }
 
@@ -519,7 +546,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..4).await?;
         let k = &keys[0].clone();
         let res = hb.del(k).await?;
-        assert!(res);
+        assert!(res.is_some());
 
         let res = hb.get(k).await?;
         assert_eq!(res, None);
@@ -535,7 +562,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..10).await?;
         let k = &keys.last().unwrap().clone();
         let res = hb.del(k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -547,7 +574,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..1).await?;
         let k = &keys.last().unwrap().clone();
         let res = hb.del(k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -560,7 +587,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..6).await?;
         let k = keys[0].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -573,7 +600,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(&[1, 2, 3, 4, 5, 0]).await?;
         let k = keys[keys.len() - 2].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -586,7 +613,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..5).await?;
         let k = keys[0].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -598,7 +625,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..19).await?;
         let k = keys[5].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -611,7 +638,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..19).await?;
         let k = keys[10].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -624,7 +651,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..25).await?;
         let k = keys[10].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -664,6 +691,33 @@ mod test {
             assert_eq!(res, None);
             check_tree(hb.clone()).await?;
         }
+        Ok(())
+    }
+    use super::cas_always_true;
+
+    #[tokio::test]
+    async fn test_del_compare_and_swap() -> Result<(), Box<dyn std::error::Error>> {
+        let hb = Hyperbee::from_ram().await?;
+        let k = b"foo";
+
+        let res = hb.del_compare_and_swap(k, |_old| false).await?;
+        assert_eq!(res, None);
+
+        let _ = hb.put(k, None).await?;
+
+        let res = hb.del_compare_and_swap(b"no_key", |_| false).await?;
+        assert_eq!(res, None);
+        let res = hb.del_compare_and_swap(b"no_key", |_| true).await?;
+        assert_eq!(res, None);
+
+        let res = hb.del_compare_and_swap(k, |_old| false).await?;
+        assert_eq!(res, Some((false, 1)));
+
+        assert!(hb.get(k).await?.is_some());
+
+        let res = hb.del_compare_and_swap(k, |_old| true).await?;
+        assert_eq!(res, Some((true, 1)));
+        assert!(hb.get(k).await?.is_none());
         Ok(())
     }
 }

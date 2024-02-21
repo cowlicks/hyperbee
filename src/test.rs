@@ -64,11 +64,12 @@ pub async fn check_node<M: CoreMem>(node: SharedNode<M>) {
     let mut keys_vec = vec![];
     for i in 0..n_keys {
         keys_vec.push(
-            node.write()
+            node.read()
                 .await
-                .get_key(i)
+                .get_key_value(i)
                 .await
-                .expect("should always get key in tests"),
+                .expect("should always get key in tests")
+                .key,
         );
     }
 
@@ -83,11 +84,12 @@ pub async fn check_node<M: CoreMem>(node: SharedNode<M>) {
             .expect("get child always works in tests");
         children_vec.push(
             child
-                .write()
+                .read()
                 .await
-                .get_key(0)
+                .get_key_value(0)
                 .await
-                .expect("nodes must always have a key"),
+                .expect("nodes must always have a key")
+                .key,
         );
         check_node(child).await;
     }

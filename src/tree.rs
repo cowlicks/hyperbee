@@ -41,8 +41,8 @@ impl<M: CoreMem> Tree<M> {
     ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
         let blocks = self.blocks.read().await;
         let version = self.version().await;
-        if version == 0 {
-            if ensure_header {
+        if version <= 1 {
+            if version == 0 && ensure_header {
                 self.ensure_header().await?;
             }
             return Ok(None);
@@ -65,11 +65,12 @@ impl<M: CoreMem> Tree<M> {
             Some(node) => node,
         };
         let (matched, path) = nearest_node(node, key).await?;
-        if matched {
+        if matched.is_some() {
             let (node, key_index) = path
                 .last()
                 .expect("Since `matched` was true, there must be at least one node in `path`");
-            return Ok(Some(node.read().await.get_value_of_key(*key_index).await?));
+            let kv = node.read().await.get_key_value(*key_index).await?;
+            return Ok(Some((kv.seq, kv.value)));
         }
         Ok(None)
     }
