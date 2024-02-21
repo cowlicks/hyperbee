@@ -360,19 +360,17 @@ impl<M: CoreMem> Children<M> {
 ///
 /// # Returns (`matched`, `index`)
 ///
-/// `match` == true means we found the `key`.
+/// `matched` is Some means we found the `key`.
 ///
-/// if `matched` false:
+/// if `matched` is None:
 ///     if `node` is not a leaf:
 ///         index of the child within the `node` where the `key` could be
 ///     if `node` is a leaf:
 ///         the index within this `node`'s keys where the `key` wolud be inserted
-/// if `matched` is true:
+/// if `matched` is Some:
 ///     the index within this `node`'s keys of the `key`
 // TODO rename me because it is not just child index
-// TODO return Result<(Option<KeyValue>, usize), HyperbeeError>
-// TODO rewrite doc
-async fn get_child_index<M: CoreMem, T>(
+async fn get_index_of_key<M: CoreMem, T>(
     node: SharedNode<M>,
     key: &T,
 ) -> Result<(Option<u64>, usize), HyperbeeError>
@@ -448,7 +446,7 @@ where
     let mut out_path: NodePath<M> = vec![];
     loop {
         let next_node = {
-            let (matched, child_index) = get_child_index(current_node.clone(), key).await?;
+            let (matched, child_index) = get_index_of_key(current_node.clone(), key).await?;
             out_path.push((current_node.clone(), child_index));
 
             // found match or reached leaf

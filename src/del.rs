@@ -482,7 +482,7 @@ impl<M: CoreMem> Tree<M> {
         if deleted {
             return Ok(Some(seq));
         }
-        panic!("cas_always_true should me `deleted` always true");
+        panic!("cas_always_true implies `deleted` always true");
     }
 }
 

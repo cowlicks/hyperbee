@@ -10,7 +10,7 @@ use futures_lite::{future::FutureExt, StreamExt};
 use tokio_stream::Stream;
 
 use crate::{
-    get_child_index, keys::InfiniteKeys, CoreMem, HyperbeeError, KeyValueData, SharedNode,
+    get_index_of_key, keys::InfiniteKeys, CoreMem, HyperbeeError, KeyValueData, SharedNode,
 };
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
@@ -153,7 +153,7 @@ async fn make_child_key_index_iter<M: CoreMem>(
         (conf.min_value.clone(), conf.min_inclusive)
     };
 
-    let (matched, index) = get_child_index(node, &starting_key).await?;
+    let (matched, index) = get_index_of_key(node, &starting_key).await?;
     let start = if matched.is_some() {
         let key_index = index * 2 + 1;
         if inclusive {
