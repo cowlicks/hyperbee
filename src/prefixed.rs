@@ -65,7 +65,7 @@ impl<M: CoreMem> Prefixed<M> {
         &self,
         key: &[u8],
         cas: impl FnOnce(&KeyValueData) -> bool,
-    ) -> Result<Option<bool>, HyperbeeError> {
+    ) -> Result<Option<(bool, u64)>, HyperbeeError> {
         let prefixed_key: &[u8] = &[&self.prefix, key].concat();
         self.tree
             .read()

@@ -181,7 +181,7 @@ impl<M: CoreMem> Hyperbee<M> {
         &self,
         key: &[u8],
         cas: impl FnOnce(&KeyValueData) -> bool,
-    ) -> Result<Option<bool>, HyperbeeError> {
+    ) -> Result<Option<(bool, u64)>, HyperbeeError> {
         self.tree.read().await.del_compare_and_swap(key, cas).await
     }
 

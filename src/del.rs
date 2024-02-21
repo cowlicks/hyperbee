@@ -375,30 +375,32 @@ fn cas_always_true(_kv: &KeyValueData) -> bool {
 }
 
 impl<M: CoreMem> Tree<M> {
+    /// Like [`Tree::del`] but acceps a `compare_and_swap` function.
+    /// Before deleting the function is called with existing key's [`KeyValueData`].
+    /// The key is only deleted if `compare_and_swap` returs true.
+    ///
     pub async fn del_compare_and_swap(
         &self,
         key: &[u8],
-        cas: impl FnOnce(&KeyValueData) -> bool,
-    ) -> Result<Option<bool>, HyperbeeError> {
+        compare_and_swap: impl FnOnce(&KeyValueData) -> bool,
+    ) -> Result<Option<(bool, u64)>, HyperbeeError> {
         let Some(root) = self.get_root(false).await? else {
             return Ok(None);
         };
 
         let (matched, mut path) = nearest_node(root.clone(), key).await?;
 
-        if matched.is_none() {
+        let Some(seq) = matched else {
             return Ok(None);
-        }
+        };
 
         // run user provided `cas` function
         {
             let len = path.len();
-            let (node, index) = &mut path[len - 1];
+            let (node, index) = &path[len - 1];
             let kv = node.read().await.get_key_value(*index).await?;
-            let result = cas(&kv);
-            if !result {
-                // abort
-                return Ok(Some(false));
+            if !compare_and_swap(&kv) {
+                return Ok(Some((false, seq)));
             }
         }
         // NB: jS hyperbee stores the "key" the deleted "key" in the created BlockEntry. So we are
@@ -474,7 +476,7 @@ impl<M: CoreMem> Tree<M> {
         }
 
         self.blocks.read().await.add_changes(changes).await?;
-        Ok(Some(true))
+        Ok(Some((true, seq)))
     }
 
     pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
@@ -704,13 +706,13 @@ mod test {
         let k = i32_key_vec(0);
         // cas is false
         let del_res = hb.del_compare_and_swap(&k, |kv| kv.key != k).await?;
-        assert_eq!(del_res, Some(false));
+        assert_eq!(del_res.unwrap(), (false, 1));
         let get_res = hb.get(&k).await?;
-        assert!(get_res.is_some());
+        assert_eq!(get_res.unwrap().0, 1);
 
         // cas is true
         let del_res = hb.del_compare_and_swap(&k, cas_always_true).await?;
-        assert_eq!(del_res, Some(true));
+        assert_eq!(del_res.unwrap(), (true, 1));
 
         let get_res = hb.get(&k).await?;
         assert!(get_res.is_none());
