@@ -520,7 +520,7 @@ impl<M: CoreMem> Tree<M> {
 mod test {
     use crate::{
         test::{check_tree, i32_key_vec, Rand},
-        Tree,
+        Hyperbee, Tree,
     };
 
     #[tokio::test]
@@ -697,24 +697,27 @@ mod test {
 
     #[tokio::test]
     async fn test_del_compare_and_swap() -> Result<(), Box<dyn std::error::Error>> {
-        let (hb, ..) = crate::test::hb_put!(0..5).await?;
-        // key not presest
-        let del_res = hb.del_compare_and_swap(b"foobar", cas_always_true).await?;
-        assert_eq!(del_res, None);
+        let hb = Hyperbee::from_ram().await?;
+        let k = b"foo";
 
-        let k = i32_key_vec(0);
-        // cas is false
-        let del_res = hb.del_compare_and_swap(&k, |kv| kv.key != k).await?;
-        assert_eq!(del_res.unwrap(), (false, 1));
-        let get_res = hb.get(&k).await?;
-        assert_eq!(get_res.unwrap().0, 1);
+        let res = hb.del_compare_and_swap(k, |_old| false).await?;
+        assert_eq!(res, None);
 
-        // cas is true
-        let del_res = hb.del_compare_and_swap(&k, cas_always_true).await?;
-        assert_eq!(del_res.unwrap(), (true, 1));
+        let _ = hb.put(k, None).await?;
 
-        let get_res = hb.get(&k).await?;
-        assert!(get_res.is_none());
+        let res = hb.del_compare_and_swap(b"no_key", |_| false).await?;
+        assert_eq!(res, None);
+        let res = hb.del_compare_and_swap(b"no_key", |_| true).await?;
+        assert_eq!(res, None);
+
+        let res = hb.del_compare_and_swap(k, |_old| false).await?;
+        assert_eq!(res, Some((false, 1)));
+
+        assert!(hb.get(k).await?.is_some());
+
+        let res = hb.del_compare_and_swap(k, |_old| true).await?;
+        assert_eq!(res, Some((true, 1)));
+        assert!(hb.get(k).await?.is_none());
         Ok(())
     }
 }
