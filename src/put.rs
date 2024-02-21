@@ -208,8 +208,26 @@ impl<M: CoreMem> Tree<M> {
 mod test {
     use crate::{
         test::{check_tree, i32_key_vec, Rand},
-        Tree,
+        Hyperbee, Tree,
     };
+
+    #[tokio::test]
+    async fn test_cas() -> Result<(), Box<dyn std::error::Error>> {
+        let hb = Hyperbee::from_ram().await?;
+        let k = b"foo";
+        let res = hb.put_compare_and_swap(k, None, |_old, _new| false).await?;
+        assert_eq!(res, (None, None));
+
+        let res = hb.put_compare_and_swap(k, None, |_old, _new| true).await?;
+        assert_eq!(res, (None, Some(1)));
+
+        let res = hb.put_compare_and_swap(k, None, |_old, _new| false).await?;
+        assert_eq!(res, (Some(1), None));
+
+        let res = hb.put_compare_and_swap(k, None, |_old, _new| true).await?;
+        assert_eq!(res, (Some(1), Some(2)));
+        Ok(())
+    }
 
     #[tokio::test]
     async fn test_old_seq() -> Result<(), Box<dyn std::error::Error>> {
