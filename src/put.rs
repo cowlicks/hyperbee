@@ -185,7 +185,7 @@ impl<M: CoreMem> Tree<M> {
     /// # Returns
     /// Result<(
     ///     Option<u64>,    # `seq` for old value, if replaced
-    ///     u64,            # length of the new hypercore. this - 1 is the `seq` for the block
+    ///     u64,            # `seq` of the inserted key
     /// ),
     ///  HyperbeeError>
     #[tracing::instrument(level = "trace", skip(self), ret)]
