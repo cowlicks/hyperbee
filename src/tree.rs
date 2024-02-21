@@ -41,8 +41,8 @@ impl<M: CoreMem> Tree<M> {
     ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
         let blocks = self.blocks.read().await;
         let version = self.version().await;
-        if version == 0 {
-            if ensure_header {
+        if version <= 1 {
+            if version == 0 && ensure_header {
                 self.ensure_header().await?;
             }
             return Ok(None);
