@@ -148,6 +148,8 @@ impl<M: CoreMem> Hyperbee<M> {
     }
 
     /// Insert the given key and value into the tree
+    /// Returs the `seq` of the new key, and `Option<u64>` which contains the `seq` of the old key
+    /// if it was replaced.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub async fn put(
         &self,
@@ -157,7 +159,10 @@ impl<M: CoreMem> Hyperbee<M> {
         self.tree.read().await.put(key, value).await
     }
 
-    // TODO doc
+    /// Like [`Hyperbee::put`] but takes a `compare_and_swap` function.
+    /// The `compared_and_swap` function is called with the old key (if present), and the new key.
+    /// The new key is only inserted if `compare_and_swap` returns true.
+    /// Returs two `Option<u64>`s. The first is the old key, the second is the new key.
     pub async fn put_compare_and_swap(
         &self,
         key: &[u8],
@@ -171,12 +176,17 @@ impl<M: CoreMem> Hyperbee<M> {
             .await
     }
 
-    /// Delete the given key from the tree
+    /// Delete the given key from the tree.
+    /// Returns the `seq` from the key if it was deleted.
     pub async fn del(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
         self.tree.read().await.del(key).await
     }
 
-    // TODO doc
+    /// Like [`Hyperbee::del`] but takes a `compare_and_swap` function.
+    /// Before deleting the function is called with existing key's [`KeyValueData`].
+    /// The key is only deleted if `compare_and_swap` returs true.
+    /// Returns the `bool` representing the result of `compare_and_swap`, and the `seq` for the
+    /// key.
     pub async fn del_compare_and_swap(
         &self,
         key: &[u8],
@@ -185,6 +195,7 @@ impl<M: CoreMem> Hyperbee<M> {
         self.tree.read().await.del_compare_and_swap(key, cas).await
     }
 
+    /// Create a new tree with all it's operation's prefixed by the provided `prefix`.
     pub fn sub(&self, prefix: &[u8]) -> Prefixed<M> {
         Prefixed::new(prefix, self.tree.clone())
     }

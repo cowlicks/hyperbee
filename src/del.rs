@@ -375,10 +375,6 @@ fn cas_always_true(_kv: &KeyValueData) -> bool {
 }
 
 impl<M: CoreMem> Tree<M> {
-    /// Like [`Tree::del`] but acceps a `compare_and_swap` function.
-    /// Before deleting the function is called with existing key's [`KeyValueData`].
-    /// The key is only deleted if `compare_and_swap` returs true.
-    ///
     pub async fn del_compare_and_swap(
         &self,
         key: &[u8],
