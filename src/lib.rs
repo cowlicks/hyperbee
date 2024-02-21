@@ -172,7 +172,7 @@ impl<M: CoreMem> Hyperbee<M> {
     }
 
     /// Delete the given key from the tree
-    pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
+    pub async fn del(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
         self.tree.read().await.del(key).await
     }
 

@@ -55,7 +55,7 @@ impl<M: CoreMem> Prefixed<M> {
     }
 
     /// Delete the given key from the tree
-    pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
+    pub async fn del(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
         let prefixed_key: &[u8] = &[&self.prefix, key].concat();
         self.tree.read().await.del(prefixed_key).await
     }
@@ -184,7 +184,7 @@ mod test {
         assert_eq!(res, b"with prefix");
 
         // reg delete does not delete prefixed
-        assert!(hb.del(key).await?);
+        assert!(hb.del(key).await?.is_some());
         // reg is gone
         assert!(hb.get(key).await?.is_none());
         // prefixed still there, accessible by reg hb
@@ -192,7 +192,7 @@ mod test {
         // prefixed hb still gets key
         assert!(prefixed_hb.get(key).await?.is_some());
         // prefixed hb delete works
-        assert!(prefixed_hb.del(key).await?);
+        assert!(prefixed_hb.del(key).await?.is_some());
         // it's gone now
         assert!(prefixed_hb.get(key).await?.is_none());
         Ok(())

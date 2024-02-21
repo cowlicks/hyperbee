@@ -479,11 +479,14 @@ impl<M: CoreMem> Tree<M> {
         Ok(Some((true, seq)))
     }
 
-    pub async fn del(&self, key: &[u8]) -> Result<bool, HyperbeeError> {
-        Ok(self
-            .del_compare_and_swap(key, cas_always_true)
-            .await?
-            .is_some())
+    pub async fn del(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
+        let Some((deleted, seq)) = self.del_compare_and_swap(key, cas_always_true).await? else {
+            return Ok(None);
+        };
+        if deleted {
+            return Ok(Some(seq));
+        }
+        panic!("cas_always_true should me `deleted` always true");
     }
 }
 
@@ -529,7 +532,7 @@ mod test {
         let hb = Tree::from_ram().await?;
         let key = vec![1];
         let res = hb.del(&key).await?;
-        assert!(!res);
+        assert!(res.is_none());
         Ok(())
     }
 
@@ -538,7 +541,7 @@ mod test {
         let (hb, ..) = crate::test::hb_put!(0..10).await?;
         let key = vec![1];
         let res = hb.del(&key).await?;
-        assert!(!res);
+        assert!(res.is_none());
         Ok(())
     }
 
@@ -547,7 +550,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..4).await?;
         let k = &keys[0].clone();
         let res = hb.del(k).await?;
-        assert!(res);
+        assert!(res.is_some());
 
         let res = hb.get(k).await?;
         assert_eq!(res, None);
@@ -563,7 +566,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..10).await?;
         let k = &keys.last().unwrap().clone();
         let res = hb.del(k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -575,7 +578,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..1).await?;
         let k = &keys.last().unwrap().clone();
         let res = hb.del(k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -588,7 +591,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..6).await?;
         let k = keys[0].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -601,7 +604,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(&[1, 2, 3, 4, 5, 0]).await?;
         let k = keys[keys.len() - 2].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -614,7 +617,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..5).await?;
         let k = keys[0].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -626,7 +629,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..19).await?;
         let k = keys[5].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -639,7 +642,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..19).await?;
         let k = keys[10].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
@@ -652,7 +655,7 @@ mod test {
         let (hb, keys) = crate::test::hb_put!(0..25).await?;
         let k = keys[10].clone();
         let res = hb.del(&k).await?;
-        assert!(res);
+        assert!(res.is_some());
         let res = hb.get(&k).await?;
         assert_eq!(res, None);
         check_tree(hb).await?;
