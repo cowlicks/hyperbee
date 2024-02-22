@@ -693,7 +693,6 @@ mod test {
         }
         Ok(())
     }
-    use super::cas_always_true;
 
     #[tokio::test]
     async fn test_del_compare_and_swap() -> Result<(), Box<dyn std::error::Error>> {
