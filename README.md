@@ -15,7 +15,7 @@ use hyperbee::Hyperbee;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut hb = Hyperbee::from_ram().await?;
+    let hb = Hyperbee::from_ram().await?;
     // Insert "world" with key "hello"
     hb.put(b"hello", Some(b"world")).await?;
 
@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Deleting a key returns `true` if it was present
     let res = hb.del(b"hello").await?;
-    assert_eq!(res, true);
+    assert!(res.is_some());
 
     // Getting deleted key returns `None`
     let res = hb.get(b"hello").await?;
