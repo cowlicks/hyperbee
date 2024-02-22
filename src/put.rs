@@ -83,7 +83,7 @@ impl<M: CoreMem> Tree<M> {
         let new_key_data = KeyValueData {
             seq,
             key: key.to_vec(),
-            value: value.clone().map(|v| v.to_vec()),
+            value: value.map(|v| v.to_vec()),
         };
 
         let matched = 'new_root: {
