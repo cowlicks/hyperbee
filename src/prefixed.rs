@@ -7,8 +7,11 @@ use crate::{
     CoreMem, KeyValueData, Shared, Tree,
 };
 
+/// A "sub" [`Hyperbee`](crate::Hyperbee), which can be used for grouping data. When inserted keyss are automatically prefixed
+/// with [`Prefixed::prefix`].
 pub struct Prefixed<M: CoreMem> {
-    prefix: Vec<u8>,
+    /// All keys inserted with [`Prefixed::put`] are prefixed with this value
+    pub prefix: Vec<u8>,
     tree: Shared<Tree<M>>,
 }
 

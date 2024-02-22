@@ -50,9 +50,10 @@ fn min_keys(max_keys: usize) -> usize {
     max_keys >> 1
 }
 
+// TODO make not pub
 #[derive(Clone, Debug)]
-/// Pointer used within a [`Node`] to point to the block where a (key, value) pair is stored.
-/// A key can be inserted without a value, so it's value is optional.
+/// Reference used within a [`Node`] of the [Hypercore](hypercore::Hypercore) block where a
+/// key-value  pair is stored.
 pub struct KeyValue {
     /// Index of key value pair within the [`hypercore::Hypercore`].
     seq: u64,
@@ -64,6 +65,7 @@ pub struct KeyValueData {
     pub value: Option<Vec<u8>>,
 }
 
+// TODO make not pub
 #[derive(Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
 pub struct Child<M: CoreMem> {
@@ -75,8 +77,10 @@ pub struct Child<M: CoreMem> {
     cached_node: Option<SharedNode<M>>,
 }
 
+//TODO make not pub
 #[derive(Clone, Debug)]
-/// A block off the hypercore deserialized into the form we use in the BTree
+/// A "block" from a [`Hypercore`](hypercore::Hypercore) deserialized into the form used in
+/// Hyperbee
 pub struct BlockEntry<M: CoreMem> {
     /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
     nodes: Vec<SharedNode<M>>,
@@ -96,7 +100,8 @@ struct Children<M: CoreMem> {
     children: RwLock<Vec<Child<M>>>,
 }
 
-/// A node in the tree
+// TODO make not pub
+/// A node of the B-Tree within the [`Hyperbee`]
 #[derive(Debug)]
 pub struct Node<M: CoreMem> {
     pub keys: Vec<KeyValue>,
@@ -104,6 +109,10 @@ pub struct Node<M: CoreMem> {
     blocks: Shared<Blocks<M>>,
 }
 
+/// An append only B-Tree built on [`Hypercore`](hypercore::Hypercore). It provides a key-value
+/// store API, with methods for [inserting](Hyperbee::put), [getting](Hyperbee::get), and
+/// [deleting](Hyperbee::del) key-value pair. As well as creating [sorted
+/// iterators](Hyperbee::traverse), and ["sub" B-Trees](Hyperbee::sub) for grouping related data.
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {

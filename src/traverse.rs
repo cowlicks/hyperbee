@@ -1,3 +1,5 @@
+//! Implementation of the [`Stream`] trait for [`Hyperbee`](crate::Hyperbee). Which allows
+//! iterating over data in key-order, between a range, or in reverse asynchronously.
 use std::{
     fmt::Debug,
     future::Future,
@@ -447,6 +449,7 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
 
 static LEADER: &str = "\t";
 
+/// Print the keys of the provided node and it's descendents as a tree
 pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeError> {
     let starting_height = node.read().await.height().await?;
     let mut out = "".to_string();
