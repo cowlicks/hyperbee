@@ -5,7 +5,7 @@ use std::{
     process::{Command, Output},
 };
 use tempfile::TempDir;
-pub static REL_PATH_TO_NODE_MODULES: &str = "./tests/js/node_modules";
+pub static REL_PATH_TO_NODE_MODULES: &str = "./gen_test_data/node_modules";
 
 pub fn git_root() -> Result<String, Box<dyn std::error::Error>> {
     let x = Command::new("sh")
