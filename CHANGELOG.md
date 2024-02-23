@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] - ReleaseDate
 
 ### Added
 
@@ -17,3 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Move `tracing-subscriber`from regular dependencies to dev-dependencies
 
 ### Removed
+
+<!-- next-url -->
+[Unreleased]: https://github.com/cowlicks/hyperbee/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/cowlicks/hyperbee/releases/tag/v0.2.0
