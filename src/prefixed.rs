@@ -38,7 +38,7 @@ pub struct Prefixed<M: CoreMem> {
 // We use this to DRY the code for getting a prefixed key.
 // The prefixed key is a slice, so we can't build it within a func and return it
 // (because we cant return a reference to a value made within a function)
-macro_rules! key_with_prefx {
+macro_rules! with_key_prefix {
     ($self:ident, $key:expr) => {
         &[&$self.prefix, &$self.conf.seperator, $key].concat()
     };
@@ -56,7 +56,7 @@ impl<M: CoreMem> Prefixed<M> {
     /// # Errors
     /// When `Hyperbee.get_root` fails
     pub async fn get(&self, key: &[u8]) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
-        let prefixed_key: &[u8] = key_with_prefx!(self, key);
+        let prefixed_key: &[u8] = with_key_prefix!(self, key);
         self.tree.read().await.get(prefixed_key).await
     }
 
@@ -69,7 +69,7 @@ impl<M: CoreMem> Prefixed<M> {
         key: &[u8],
         value: Option<&[u8]>,
     ) -> Result<(Option<u64>, u64), HyperbeeError> {
-        let prefixed_key: &[u8] = key_with_prefx!(self, key);
+        let prefixed_key: &[u8] = with_key_prefix!(self, key);
         self.tree.read().await.put(prefixed_key, value).await
     }
 
@@ -83,7 +83,7 @@ impl<M: CoreMem> Prefixed<M> {
         value: Option<&[u8]>,
         cas: impl FnOnce(Option<&KeyValueData>, &KeyValueData) -> bool,
     ) -> Result<(Option<u64>, Option<u64>), HyperbeeError> {
-        let prefixed_key: &[u8] = key_with_prefx!(self, key);
+        let prefixed_key: &[u8] = with_key_prefix!(self, key);
         self.tree
             .read()
             .await
@@ -94,7 +94,7 @@ impl<M: CoreMem> Prefixed<M> {
     /// Delete the given key from the tree
     /// Returns the `seq` from the key if it was deleted.
     pub async fn del(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
-        let prefixed_key: &[u8] = key_with_prefx!(self, key);
+        let prefixed_key: &[u8] = with_key_prefix!(self, key);
         self.tree.read().await.del(prefixed_key).await
     }
 
@@ -108,7 +108,7 @@ impl<M: CoreMem> Prefixed<M> {
         key: &[u8],
         cas: impl FnOnce(&KeyValueData) -> bool,
     ) -> Result<Option<(bool, u64)>, HyperbeeError> {
-        let prefixed_key: &[u8] = key_with_prefx!(self, key);
+        let prefixed_key: &[u8] = with_key_prefix!(self, key);
         self.tree
             .read()
             .await
@@ -127,7 +127,7 @@ impl<M: CoreMem> Prefixed<M> {
         let (min_value, min_inclusive) = match &conf.min_value {
             Infinite(_) => (Finite(self.prefix.clone()), true),
             Finite(key) => (
-                Finite(key_with_prefx!(self, key.as_slice()).to_vec()),
+                Finite(with_key_prefix!(self, key.as_slice()).to_vec()),
                 conf.min_inclusive,
             ),
         };
@@ -136,7 +136,7 @@ impl<M: CoreMem> Prefixed<M> {
             // inclusive = false because we don't want to include end_of_prefix if it is a key
             Infinite(_) => (Finite(end_of_prefix.clone()), false),
             Finite(key) => (
-                Finite(key_with_prefx!(self, key.as_slice()).to_vec()),
+                Finite(with_key_prefix!(self, key.as_slice()).to_vec()),
                 conf.max_inclusive,
             ),
         };
