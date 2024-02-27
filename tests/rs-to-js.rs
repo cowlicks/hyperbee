@@ -106,7 +106,7 @@ async fn sub_database() -> Result<(), Box<dyn std::error::Error>> {
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
     let pref = b"pref";
-    let sub = hb.sub(pref);
+    let sub = hb.sub(pref, Default::default());
 
     let _ = write_100!(&sub);
     let traverse_config = TraverseConfig::default();
@@ -116,9 +116,9 @@ async fn sub_database() -> Result<(), Box<dyn std::error::Error>> {
         &storage_dir,
         "
     const out = [];
-    const sub = hb.sub('pref', {sep: Buffer.alloc(0)});
+    const sub = hb.sub('pref', {sep: Buffer.alloc(1)});
     for await (const x of sub.createReadStream()) {
-        out.push('pref' + x.value.toString())
+        out.push('pref' + Buffer.alloc(1) + x.value.toString())
     }
     write(JSON.stringify(out));
     ",

@@ -1,3 +1,5 @@
+use derive_builder::Builder;
+
 use crate::{
     error::HyperbeeError,
     traverse::{
@@ -7,19 +9,46 @@ use crate::{
     CoreMem, KeyValueData, Shared, Tree,
 };
 
+pub static DEFAULT_PREFIXED_SEPERATOR: &[u8; 1] = b"\0";
+#[derive(Builder, Debug, Clone)]
+#[builder(derive(Debug))]
+pub struct PrefixedConfig {
+    #[builder(default = "DEFAULT_PREFIXED_SEPERATOR.to_vec()")]
+    /// The seperator between the prefix and the key. The default is the NULL byte `b"\0"` which is
+    /// the same as the JavaScript implementation
+    seperator: Vec<u8>,
+}
+impl Default for PrefixedConfig {
+    fn default() -> Self {
+        Self {
+            seperator: DEFAULT_PREFIXED_SEPERATOR.to_vec(),
+        }
+    }
+}
+
 /// A "sub" [`Hyperbee`](crate::Hyperbee), which can be used for grouping data. When inserted keyss are automatically prefixed
 /// with [`Prefixed::prefix`].
 pub struct Prefixed<M: CoreMem> {
     /// All keys inserted with [`Prefixed::put`] are prefixed with this value
     pub prefix: Vec<u8>,
     tree: Shared<Tree<M>>,
+    conf: PrefixedConfig,
 }
 
+// We use this to DRY the code for getting a prefixed key.
+// The prefixed key is a slice, so we can't build it within a func and return it
+// (because we cant return a reference to a value made within a function)
+macro_rules! with_key_prefix {
+    ($self:ident, $key:expr) => {
+        &[&$self.prefix, &$self.conf.seperator, $key].concat()
+    };
+}
 impl<M: CoreMem> Prefixed<M> {
-    pub fn new(prefix: &[u8], tree: Shared<Tree<M>>) -> Self {
+    pub fn new(prefix: &[u8], tree: Shared<Tree<M>>, conf: PrefixedConfig) -> Self {
         Self {
             prefix: prefix.to_vec(),
             tree,
+            conf,
         }
     }
 
@@ -27,7 +56,7 @@ impl<M: CoreMem> Prefixed<M> {
     /// # Errors
     /// When `Hyperbee.get_root` fails
     pub async fn get(&self, key: &[u8]) -> Result<Option<(u64, Option<Vec<u8>>)>, HyperbeeError> {
-        let prefixed_key: &[u8] = &[&self.prefix, key].concat();
+        let prefixed_key: &[u8] = with_key_prefix!(self, key);
         self.tree.read().await.get(prefixed_key).await
     }
 
@@ -40,7 +69,7 @@ impl<M: CoreMem> Prefixed<M> {
         key: &[u8],
         value: Option<&[u8]>,
     ) -> Result<(Option<u64>, u64), HyperbeeError> {
-        let prefixed_key: &[u8] = &[&self.prefix, key].concat();
+        let prefixed_key: &[u8] = with_key_prefix!(self, key);
         self.tree.read().await.put(prefixed_key, value).await
     }
 
@@ -54,7 +83,7 @@ impl<M: CoreMem> Prefixed<M> {
         value: Option<&[u8]>,
         cas: impl FnOnce(Option<&KeyValueData>, &KeyValueData) -> bool,
     ) -> Result<(Option<u64>, Option<u64>), HyperbeeError> {
-        let prefixed_key: &[u8] = &[&self.prefix, key].concat();
+        let prefixed_key: &[u8] = with_key_prefix!(self, key);
         self.tree
             .read()
             .await
@@ -65,7 +94,7 @@ impl<M: CoreMem> Prefixed<M> {
     /// Delete the given key from the tree
     /// Returns the `seq` from the key if it was deleted.
     pub async fn del(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
-        let prefixed_key: &[u8] = &[&self.prefix, key].concat();
+        let prefixed_key: &[u8] = with_key_prefix!(self, key);
         self.tree.read().await.del(prefixed_key).await
     }
 
@@ -79,7 +108,7 @@ impl<M: CoreMem> Prefixed<M> {
         key: &[u8],
         cas: impl FnOnce(&KeyValueData) -> bool,
     ) -> Result<Option<(bool, u64)>, HyperbeeError> {
-        let prefixed_key: &[u8] = &[&self.prefix, key].concat();
+        let prefixed_key: &[u8] = with_key_prefix!(self, key);
         self.tree
             .read()
             .await
@@ -98,7 +127,7 @@ impl<M: CoreMem> Prefixed<M> {
         let (min_value, min_inclusive) = match &conf.min_value {
             Infinite(_) => (Finite(self.prefix.clone()), true),
             Finite(key) => (
-                Finite([self.prefix.clone(), key.clone()].concat().to_vec()),
+                Finite(with_key_prefix!(self, key.as_slice()).to_vec()),
                 conf.min_inclusive,
             ),
         };
@@ -107,7 +136,7 @@ impl<M: CoreMem> Prefixed<M> {
             // inclusive = false because we don't want to include end_of_prefix if it is a key
             Infinite(_) => (Finite(end_of_prefix.clone()), false),
             Finite(key) => (
-                Finite([self.prefix.clone(), key.clone()].concat().to_vec()),
+                Finite(with_key_prefix!(self, key.as_slice()).to_vec()),
                 conf.max_inclusive,
             ),
         };
@@ -141,11 +170,22 @@ fn increment_bytes(pref: &[u8]) -> Vec<u8> {
 }
 #[cfg(test)]
 mod test {
-    use super::{increment_bytes, Finite};
+    use super::{
+        increment_bytes, Finite, PrefixedConfig, PrefixedConfigBuilder, DEFAULT_PREFIXED_SEPERATOR,
+    };
     use crate::{
         traverse::{Traverse, TraverseConfig, TraverseConfigBuilder, TreeItem},
         CoreMem, Hyperbee,
     };
+
+    #[test]
+    fn prefixed_conf() -> Result<(), Box<dyn std::error::Error>> {
+        let p = PrefixedConfigBuilder::default().build()?;
+        assert_eq!(p.seperator, b"\0");
+        let p = PrefixedConfig::default();
+        assert_eq!(p.seperator, b"\0");
+        Ok(())
+    }
 
     #[tokio::test]
     async fn test_increment_bytes() -> Result<(), Box<dyn std::error::Error>> {
@@ -170,7 +210,7 @@ mod test {
         let prefix = b"my_prefix";
         let key = b"hello";
 
-        let prefixed_hb = hb.sub(prefix);
+        let prefixed_hb = hb.sub(prefix, Default::default());
 
         hb.put(key, Some(b"no prefix")).await?;
 
@@ -188,7 +228,12 @@ mod test {
         assert_eq!(res, b"with prefix");
         // regular no prefix
         // with prefix
-        let manually_prefixed_key = [prefix.to_vec(), key.to_vec()].concat();
+        let manually_prefixed_key = [
+            prefix.to_vec(),
+            DEFAULT_PREFIXED_SEPERATOR.to_vec(),
+            key.to_vec(),
+        ]
+        .concat();
 
         // with prefix from regular
         let Some((_, Some(res))) = hb.get(&manually_prefixed_key).await? else {
@@ -218,7 +263,7 @@ mod test {
 
         let prefix = b"p:";
 
-        let prefixed_hb = hb.sub(prefix);
+        let prefixed_hb = hb.sub(prefix, Default::default());
 
         hb.put(b"a", None).await?;
         hb.put(b"b", None).await?;
@@ -236,7 +281,14 @@ mod test {
 
         let mut expected: Vec<Vec<u8>> = vec![b"a", b"b", b"c", b"e", b"f"]
             .into_iter()
-            .map(|x| [prefix.to_vec(), x.to_vec()].concat())
+            .map(|x| {
+                [
+                    prefix.to_vec(),
+                    DEFAULT_PREFIXED_SEPERATOR.to_vec(),
+                    x.to_vec(),
+                ]
+                .concat()
+            })
             .collect();
 
         async fn collect<'a, M: CoreMem + 'a>(x: Traverse<'a, M>) -> Vec<Vec<u8>> {

@@ -25,6 +25,7 @@ use std::{
 
 use derive_builder::Builder;
 use hypercore::AppendOutcome;
+use prefixed::PrefixedConfig;
 use prost::{bytes::Buf, DecodeError, Message};
 use random_access_storage::RandomAccess;
 use tokio::sync::RwLock;
@@ -205,8 +206,8 @@ impl<M: CoreMem> Hyperbee<M> {
     }
 
     /// Create a new tree with all it's operation's prefixed by the provided `prefix`.
-    pub fn sub(&self, prefix: &[u8]) -> Prefixed<M> {
-        Prefixed::new(prefix, self.tree.clone())
+    pub fn sub(&self, prefix: &[u8], config: PrefixedConfig) -> Prefixed<M> {
+        Prefixed::new(prefix, self.tree.clone(), config)
     }
 
     /// Traverse the tree based on the given [`TraverseConfig`]
