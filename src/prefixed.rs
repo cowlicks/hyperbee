@@ -14,6 +14,8 @@ pub static DEFAULT_PREFIXED_SEPERATOR: &[u8; 1] = b"\0";
 #[builder(derive(Debug))]
 pub struct PrefixedConfig {
     #[builder(default = "DEFAULT_PREFIXED_SEPERATOR.to_vec()")]
+    /// The seperator between the prefix and the key. The default is the NULL byte `b"\0"` which is
+    /// the same as the JavaScript implementation
     seperator: Vec<u8>,
 }
 impl Default for PrefixedConfig {
