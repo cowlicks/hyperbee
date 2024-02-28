@@ -72,10 +72,9 @@ pub struct KeyValueData {
     pub value: Option<Vec<u8>>,
 }
 
-// TODO make not pub
 #[derive(Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
-pub struct Child<M: CoreMem> {
+struct Child<M: CoreMem> {
     /// Index of the [`BlockEntry`]within the [`hypercore::Hypercore`] that contains the [`Node`]
     pub seq: u64,
     /// Index of the `Node` within the [`BlockEntry`] referenced by [`Child::seq`]
@@ -84,11 +83,10 @@ pub struct Child<M: CoreMem> {
     cached_node: Option<SharedNode<M>>,
 }
 
-//TODO make not pub
 #[derive(Clone, Debug)]
 /// A "block" from a [`Hypercore`](hypercore::Hypercore) deserialized into the form used in
 /// Hyperbee
-pub struct BlockEntry<M: CoreMem> {
+struct BlockEntry<M: CoreMem> {
     /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
     nodes: Vec<SharedNode<M>>,
     /// NodeSchema::new(hypercore.get(seq)).key
