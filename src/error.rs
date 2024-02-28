@@ -5,8 +5,8 @@ use hypercore::HypercoreError;
 use prost::{DecodeError, EncodeError};
 
 use crate::{
-    blocks::BlocksBuilderError, traverse::TraverseConfigBuilderError, tree::TreeBuilderError,
-    HyperbeeBuilderError,
+    blocks::BlocksBuilderError, hb::HyperbeeBuilderError, traverse::TraverseConfigBuilderError,
+    tree::TreeBuilderError,
 };
 
 #[derive(Error, Debug)]

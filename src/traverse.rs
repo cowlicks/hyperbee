@@ -170,6 +170,8 @@ async fn make_child_key_index_iter<M: CoreMem>(
                     // and matched key is the lowest key and node is a leaf.
                     // Then we can't take any keys or children from this node
                     return Ok(Box::new(0..0));
+                    // NB don't let clippy rustfmt rewrite this if/else it is easier to document
+                    // this way
                 } else {
                     key_index - step_by
                 }

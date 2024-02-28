@@ -8,7 +8,7 @@ mod messages {
 mod blocks;
 mod changes;
 mod del;
-pub mod error;
+mod error;
 mod hb;
 mod keys;
 pub mod prefixed;
@@ -29,12 +29,12 @@ use tokio::sync::RwLock;
 use tracing::trace;
 
 use blocks::Blocks;
-use error::HyperbeeError;
 use messages::{yolo_index, YoloIndex};
 
 use tree::Tree;
 
-pub use hb::{Hyperbee, HyperbeeBuilder, HyperbeeBuilderError};
+pub use error::HyperbeeError;
+pub use hb::{Hyperbee, HyperbeeBuilder};
 
 // TODO document
 pub trait CoreMem: RandomAccess + Debug + Send {}
@@ -106,7 +106,7 @@ struct Children<M: CoreMem> {
 /// A node of the B-Tree within the [`Hyperbee`]
 #[derive(Debug)]
 pub struct Node<M: CoreMem> {
-    pub keys: Vec<KeyValue>,
+    keys: Vec<KeyValue>,
     children: Children<M>,
     blocks: Shared<Blocks<M>>,
 }
