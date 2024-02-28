@@ -59,9 +59,13 @@ pub struct KeyValue {
 }
 
 #[derive(Clone, Debug)]
+/// Data related to a key value pair within the [`Hyperbee`].
 pub struct KeyValueData {
+    /// The index of the [`BlockEntry`] within the [`Hypercore`] where this data is stored.
     pub seq: u64,
+    /// The key. The data by which the [`Hyperbee`] is ordered.
     pub key: Vec<u8>,
+    /// The value.
     pub value: Option<Vec<u8>>,
 }
 
