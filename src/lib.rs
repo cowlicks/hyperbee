@@ -58,6 +58,7 @@ pub struct KeyValue {
     seq: u64,
 }
 
+#[derive(Clone, Debug)]
 pub struct KeyValueData {
     pub seq: u64,
     pub key: Vec<u8>,
