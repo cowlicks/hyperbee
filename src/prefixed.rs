@@ -1,10 +1,11 @@
 use derive_builder::Builder;
+use futures_lite::{Stream, StreamExt};
 
 use crate::{
     error::HyperbeeError,
     traverse::{
         LimitValue::{Finite, Infinite},
-        Traverse, TraverseConfig,
+        TraverseConfig, TreeItem,
     },
     CoreMem, KeyValueData, Shared, Tree,
 };
@@ -121,7 +122,10 @@ impl<M: CoreMem> Prefixed<M> {
     pub async fn traverse<'a>(
         &self,
         conf: &TraverseConfig,
-    ) -> Result<Traverse<'a, M>, HyperbeeError> {
+    ) -> Result<impl Stream<Item = TreeItem<M>> + 'a, HyperbeeError>
+    where
+        M: 'a,
+    {
         let end_of_prefix = increment_bytes(&self.prefix);
 
         let (min_value, min_inclusive) = match &conf.min_value {
@@ -140,6 +144,7 @@ impl<M: CoreMem> Prefixed<M> {
                 conf.max_inclusive,
             ),
         };
+
         let bounded_conf = TraverseConfig {
             min_value,
             min_inclusive,
@@ -147,7 +152,18 @@ impl<M: CoreMem> Prefixed<M> {
             max_inclusive,
             reversed: conf.reversed,
         };
-        self.tree.read().await.traverse(bounded_conf).await
+
+        let stream = self.tree.read().await.traverse(bounded_conf).await?;
+        let len_drain = self.prefix.len() + self.conf.seperator.len();
+        // strip `self.prefix + self.conf.seperator` from the beggining of the key
+        Ok(stream.map(move |res| {
+            let len_drain = len_drain;
+            let stripped_kv = res.0.map(|mut x| {
+                x.key.drain(..len_drain);
+                x
+            });
+            (stripped_kv, res.1)
+        }))
     }
 }
 
@@ -174,7 +190,7 @@ mod test {
         increment_bytes, Finite, PrefixedConfig, PrefixedConfigBuilder, DEFAULT_PREFIXED_SEPERATOR,
     };
     use crate::{
-        traverse::{Traverse, TraverseConfig, TraverseConfigBuilder, TreeItem},
+        traverse::{TraverseConfig, TraverseConfigBuilder, TreeItem},
         CoreMem, Hyperbee,
     };
 
@@ -256,6 +272,7 @@ mod test {
         Ok(())
     }
 
+    use futures_lite::Stream;
     use tokio_stream::StreamExt;
     #[tokio::test]
     async fn prefixed_traverse_basic() -> Result<(), Box<dyn std::error::Error>> {
@@ -281,17 +298,10 @@ mod test {
 
         let mut expected: Vec<Vec<u8>> = vec![b"a", b"b", b"c", b"e", b"f"]
             .into_iter()
-            .map(|x| {
-                [
-                    prefix.to_vec(),
-                    DEFAULT_PREFIXED_SEPERATOR.to_vec(),
-                    x.to_vec(),
-                ]
-                .concat()
-            })
+            .map(|x| x.to_vec())
             .collect();
 
-        async fn collect<'a, M: CoreMem + 'a>(x: Traverse<'a, M>) -> Vec<Vec<u8>> {
+        async fn collect<'a, M: CoreMem + 'a>(x: impl Stream<Item = TreeItem<M>>) -> Vec<Vec<u8>> {
             x.collect::<Vec<TreeItem<M>>>()
                 .await
                 .into_iter()

@@ -2,15 +2,15 @@ mod js;
 
 use std::process::Output;
 
-use futures_lite::StreamExt;
+use futures_lite::{Stream, StreamExt};
 use hyperbee::{
-    traverse::{Traverse, TraverseConfig, TreeItem},
+    traverse::{TraverseConfig, TreeItem},
     CoreMem, Hyperbee,
 };
 use js::run_js;
 
 async fn collect<'a, M: CoreMem + 'a>(
-    stream: Traverse<'a, M>,
+    stream: impl Stream<Item = TreeItem<M>>,
 ) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
     let stream_res = stream.collect::<Vec<TreeItem<M>>>().await;
     Ok(stream_res.into_iter().map(|x| x.0.unwrap().key).collect())
@@ -116,9 +116,9 @@ async fn sub_database() -> Result<(), Box<dyn std::error::Error>> {
         &storage_dir,
         "
     const out = [];
-    const sub = hb.sub('pref', {sep: Buffer.alloc(1)});
+    const sub = hb.sub('pref');
     for await (const x of sub.createReadStream()) {
-        out.push('pref' + Buffer.alloc(1) + x.value.toString())
+        out.push(x.value.toString())
     }
     write(JSON.stringify(out));
     ",
