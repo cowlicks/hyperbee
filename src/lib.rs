@@ -8,7 +8,7 @@ mod messages {
 mod blocks;
 mod changes;
 mod del;
-mod error;
+pub mod error;
 mod hb;
 mod keys;
 pub mod prefixed;
@@ -34,10 +34,7 @@ use messages::{yolo_index, YoloIndex};
 
 use tree::Tree;
 
-pub use hb::{Hyperbee, HyperbeeBuilder};
-
-// exposed so error module can use it
-pub(crate) use hb::HyperbeeBuilderError;
+pub use hb::{Hyperbee, HyperbeeBuilder, HyperbeeBuilderError};
 
 // TODO document
 pub trait CoreMem: RandomAccess + Debug + Send {}

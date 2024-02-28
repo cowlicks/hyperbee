@@ -25,6 +25,7 @@ pub enum LimitValue {
     Finite(Vec<u8>),
     Infinite(InfiniteKeys),
 }
+use InfiniteKeys::*;
 use LimitValue::*;
 
 impl From<usize> for LimitValue {
@@ -54,89 +55,73 @@ impl PartialOrd<[u8]> for LimitValue {
     }
 }
 
-// we wrap this in a module because TraverseConfigBuilderError adopts the same visibility of of
-// TraverseConfig. But we want to ues our HyperbeeError instead of the builder error, so we don't
-// want the builder error to be private.
-mod conf {
-    use derive_builder::Builder;
+use derive_builder::Builder;
 
-    use super::{InfiniteKeys, LimitValue};
-    use InfiniteKeys::*;
-    use LimitValue::*;
-
-    fn validate_traverse_config_builder(builder: &TraverseConfigBuilder) -> Result<(), String> {
-        match (&builder.min_value, &builder.max_value) {
-            (Some(min), Some(max)) => match (min, max) {
-                (_, Infinite(Negative)) => {
-                    return Err("Maximum value is negative infinity".to_string())
+fn validate_traverse_config_builder(builder: &TraverseConfigBuilder) -> Result<(), String> {
+    match (&builder.min_value, &builder.max_value) {
+        (Some(min), Some(max)) => match (min, max) {
+            (_, Infinite(Negative)) => return Err("Maximum value is negative infinity".to_string()),
+            (Infinite(Positive), _) => return Err("Minimum value is positive infinity".to_string()),
+            (Finite(min), Finite(max)) => {
+                if max < min {
+                    return Err(format!(
+                        "Minimum value [{min:?}] is greater than max [{max:?}]"
+                    ));
                 }
-                (Infinite(Positive), _) => {
-                    return Err("Minimum value is positive infinity".to_string())
-                }
-                (Finite(min), Finite(max)) => {
-                    if max < min {
+                if min == max {
+                    #[allow(clippy::match_like_matches_macro)]
+                    if match (builder.min_inclusive, builder.max_inclusive) {
+                        (Some(false), _) => true,
+                        (_, Some(false)) => true,
+                        _ => false,
+                    } {
                         return Err(format!(
-                            "Minimum value [{min:?}] is greater than max [{max:?}]"
-                        ));
-                    }
-                    if min == max {
-                        #[allow(clippy::match_like_matches_macro)]
-                        if match (builder.min_inclusive, builder.max_inclusive) {
-                            (Some(false), _) => true,
-                            (_, Some(false)) => true,
-                            _ => false,
-                        } {
-                            return Err(format!(
                         "Minimum and maximum are equal [{min:?}] but the bounds are not both both inclusive min_inclusive = [{:?}] max_inclusive = [{:?}]",
                         builder.min_inclusive,
                         builder.max_inclusive
                     ));
-                        }
-                        return Ok(());
                     }
+                    return Ok(());
                 }
-                (min, max) => {
-                    return Err(format!(
-                        "Min limit [{min:?}] is greater than max limit [{max:?}]!"
-                    ))
-                }
-            },
-            (_, _) => return Ok(()),
-        }
-        Ok(())
+            }
+            (min, max) => {
+                return Err(format!(
+                    "Min limit [{min:?}] is greater than max limit [{max:?}]!"
+                ))
+            }
+        },
+        (_, _) => return Ok(()),
     }
-
-    #[derive(Builder, Debug, Clone)]
-    #[builder(derive(Debug), build_fn(validate = "validate_traverse_config_builder"))]
-    /// Configuration for [`Traverse`]
-    pub struct TraverseConfig {
-        #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
-        /// lower bound for traversal
-        pub min_value: LimitValue,
-        #[builder(default = "true")]
-        /// whether `min_value` is inclusive
-        pub min_inclusive: bool,
-        #[builder(default = "LimitValue::Infinite(InfiniteKeys::Positive)")]
-        /// upper bound for traversal
-        pub max_value: LimitValue,
-        #[builder(default = "true")]
-        /// whether `max_value` is inclusive
-        pub max_inclusive: bool,
-        #[builder(default = "false")]
-        /// traverse in reverse
-        pub reversed: bool,
-    }
+    Ok(())
 }
 
-pub(crate) use conf::TraverseConfigBuilderError;
-pub use conf::{TraverseConfig, TraverseConfigBuilder};
+#[derive(Builder, Debug, Clone)]
+#[builder(derive(Debug), build_fn(validate = "validate_traverse_config_builder"))]
+/// Configuration for [`Traverse`]
+pub struct TraverseConfig {
+    #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
+    /// lower bound for traversal
+    pub min_value: LimitValue,
+    #[builder(default = "true")]
+    /// whether `min_value` is inclusive
+    pub min_inclusive: bool,
+    #[builder(default = "LimitValue::Infinite(InfiniteKeys::Positive)")]
+    /// upper bound for traversal
+    pub max_value: LimitValue,
+    #[builder(default = "true")]
+    /// whether `max_value` is inclusive
+    pub max_inclusive: bool,
+    #[builder(default = "false")]
+    /// traverse in reverse
+    pub reversed: bool,
+}
 
 impl Default for TraverseConfig {
     fn default() -> Self {
         Self {
-            min_value: Infinite(InfiniteKeys::Negative),
+            min_value: Infinite(Negative),
             min_inclusive: true,
-            max_value: Infinite(InfiniteKeys::Positive),
+            max_value: Infinite(Positive),
             max_inclusive: true,
             reversed: false,
         }
