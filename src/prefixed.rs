@@ -17,7 +17,7 @@ pub struct PrefixedConfig {
     #[builder(default = "DEFAULT_PREFIXED_SEPERATOR.to_vec()")]
     /// The seperator between the prefix and the key. The default is the NULL byte `b"\0"` which is
     /// the same as the JavaScript implementation
-    seperator: Vec<u8>,
+    pub seperator: Vec<u8>,
 }
 impl Default for PrefixedConfig {
     fn default() -> Self {
@@ -119,6 +119,8 @@ impl<M: CoreMem> Prefixed<M> {
 
     /// Travese prefixed keys. If you provide [`TraverseConfig::min_value`] or
     /// [`TraverseConfig::max_value`] it should not include the prefix.
+    /// Note that the key that is yielded has [`Self::prefix`] + [`PrefixedConfig::seperator`]
+    /// stripped.
     pub async fn traverse<'a>(
         &self,
         conf: &TraverseConfig,
