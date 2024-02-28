@@ -10,7 +10,7 @@ mod changes;
 mod del;
 mod error;
 mod keys;
-mod prefixed;
+pub mod prefixed;
 mod put;
 mod test;
 pub mod traverse;
@@ -25,7 +25,7 @@ use std::{
 
 use derive_builder::Builder;
 use hypercore::AppendOutcome;
-use prefixed::PrefixedConfig;
+use prefixed::{Prefixed, PrefixedConfig};
 use prost::{bytes::Buf, DecodeError, Message};
 use random_access_storage::RandomAccess;
 use tokio::sync::RwLock;
@@ -36,8 +36,6 @@ use error::HyperbeeError;
 use messages::{header::Metadata, yolo_index, YoloIndex};
 use traverse::{Traverse, TraverseConfig};
 use tree::Tree;
-
-pub use prefixed::Prefixed;
 
 pub trait CoreMem: RandomAccess + Debug + Send {}
 impl<T: RandomAccess + Debug + Send> CoreMem for T {}
