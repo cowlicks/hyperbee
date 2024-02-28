@@ -1,3 +1,5 @@
+//! Implementation of [`Prefixed`] a "sub" [`Hyperbee`](crate::Hyperbee) used for grouping data.
+
 use derive_builder::Builder;
 use futures_lite::{Stream, StreamExt};
 
@@ -16,7 +18,8 @@ pub static DEFAULT_PREFIXED_SEPERATOR: &[u8; 1] = b"\0";
 pub struct PrefixedConfig {
     #[builder(default = "DEFAULT_PREFIXED_SEPERATOR.to_vec()")]
     /// The seperator between the prefix and the key. The default is the NULL byte `b"\0"` which is
-    /// the same as the JavaScript implementation
+    /// the same as the [JavaScript
+    /// implementation](https://docs.pears.com/building-blocks/hyperbee#const-sub-db.sub-sub-prefix-options).
     pub seperator: Vec<u8>,
 }
 impl Default for PrefixedConfig {
@@ -27,8 +30,8 @@ impl Default for PrefixedConfig {
     }
 }
 
-/// A "sub" [`Hyperbee`](crate::Hyperbee), which can be used for grouping data. When inserted keyss are automatically prefixed
-/// with [`Prefixed::prefix`].
+/// A "sub" [`Hyperbee`](crate::Hyperbee), which can be used for grouping data. [`get`](Self::get), [`put`](Self::put), [`del`](Self::del), [`traverse`](Self::traverse) operations are automatically prefixed
+/// with [`Prefixed::prefix`] + [`PrefixedConfig::seperator`] where appropriate.
 pub struct Prefixed<M: CoreMem> {
     /// All keys inserted with [`Prefixed::put`] are prefixed with this value
     pub prefix: Vec<u8>,
@@ -120,7 +123,7 @@ impl<M: CoreMem> Prefixed<M> {
     /// Travese prefixed keys. If you provide [`TraverseConfig::min_value`] or
     /// [`TraverseConfig::max_value`] it should not include the prefix.
     /// Note that the key that is yielded has [`Self::prefix`] + [`PrefixedConfig::seperator`]
-    /// stripped.
+    /// stripped (which is the same behavior as JavaScript [Hyperbee's](https://docs.pears.com/building-blocks/hyperbee) method [`.sub`](https://docs.pears.com/building-blocks/hyperbee#const-sub-db.sub-sub-prefix-options)
     pub async fn traverse<'a>(
         &self,
         conf: &TraverseConfig,
