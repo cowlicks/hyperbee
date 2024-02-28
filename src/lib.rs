@@ -377,7 +377,6 @@ impl<M: CoreMem> Children<M> {
 ///         the index within this `node`'s keys where the `key` wolud be inserted
 /// if `matched` is Some:
 ///     the index within this `node`'s keys of the `key`
-// TODO rename me because it is not just child index
 async fn get_index_of_key<M: CoreMem, T>(
     node: SharedNode<M>,
     key: &T,
