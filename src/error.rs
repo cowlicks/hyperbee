@@ -9,6 +9,7 @@ use crate::{
     tree::TreeBuilderError,
 };
 
+/// Error type used by all [`Result`]s in this library.
 #[derive(Error, Debug)]
 pub enum HyperbeeError {
     #[error("There was an error in the underlying Hypercore")]

@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - `BlockEntry`, `KeyValue`, `Node` and `Child` are now private
+- You can now no longer manually construct `Traverse` or `Prefixed` structs
 
 ## [0.2.2] - 2024-02-23
 
