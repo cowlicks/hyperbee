@@ -49,7 +49,6 @@ fn min_keys(max_keys: usize) -> usize {
     max_keys >> 1
 }
 
-// TODO make not pub
 #[derive(Clone, Debug)]
 /// Reference used within a [`Node`] of the [Hypercore](hypercore::Hypercore) block where a
 /// key-value  pair is stored.
@@ -102,7 +101,6 @@ struct Children<M: CoreMem> {
     children: RwLock<Vec<Child<M>>>,
 }
 
-// TODO make not pub
 /// A node of the B-Tree within the [`Hyperbee`]
 #[derive(Debug)]
 struct Node<M: CoreMem> {
