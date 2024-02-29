@@ -7,6 +7,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use derive_builder::Builder;
 use futures_lite::{future::FutureExt, StreamExt};
 use tokio_stream::Stream;
 
@@ -20,6 +21,7 @@ type KeyDataResult = Result<KeyValueData, HyperbeeError>;
 /// Value yielded from the [`Stream`] created by [`Traverse`].
 pub type TreeItem<M> = (KeyDataResult, SharedNode<M>);
 
+// TODO rename BoundaryValue?
 #[derive(Clone, Debug)]
 pub enum LimitValue {
     Finite(Vec<u8>),
@@ -54,8 +56,6 @@ impl PartialOrd<[u8]> for LimitValue {
         }
     }
 }
-
-use derive_builder::Builder;
 
 fn validate_traverse_config_builder(builder: &TraverseConfigBuilder) -> Result<(), String> {
     match (&builder.min_value, &builder.max_value) {
@@ -243,7 +243,7 @@ impl TraverseConfig {
 /// Struct used for iterating over hyperbee with a Stream.
 /// Each iteration yields the key it's value, and the "seq" for the value (the index of the value
 /// in the hypercore).
-pub struct Traverse<'a, M: CoreMem> {
+pub(crate) struct Traverse<'a, M: CoreMem> {
     /// Configuration for the traversal
     config: TraverseConfig,
     /// The current node
