@@ -49,7 +49,7 @@ macro_rules! with_key_prefix {
     };
 }
 impl<M: CoreMem> Prefixed<M> {
-    pub fn new(prefix: &[u8], tree: Shared<Tree<M>>, conf: PrefixedConfig) -> Self {
+    pub(crate) fn new(prefix: &[u8], tree: Shared<Tree<M>>, conf: PrefixedConfig) -> Self {
         Self {
             prefix: prefix.to_vec(),
             tree,
