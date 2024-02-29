@@ -1,6 +1,7 @@
 use std::{path::Path, sync::Arc};
 
 use derive_builder::Builder;
+use futures_lite::Stream;
 use hypercore::AppendOutcome;
 use tokio::sync::RwLock;
 
@@ -8,7 +9,7 @@ use crate::{
     error::HyperbeeError,
     messages::header::Metadata,
     prefixed::{Prefixed, PrefixedConfig},
-    traverse::{Traverse, TraverseConfig},
+    traverse::{TraverseConfig, TreeItem},
     tree, KeyValueData, Node,
 };
 
@@ -118,7 +119,10 @@ impl<M: CoreMem> Hyperbee<M> {
     pub async fn traverse<'a>(
         &self,
         conf: TraverseConfig,
-    ) -> Result<Traverse<'a, M>, HyperbeeError> {
+    ) -> Result<impl Stream<Item = TreeItem<M>> + 'a, HyperbeeError>
+    where
+        M: 'a,
+    {
         self.tree.read().await.traverse(conf).await
     }
 }

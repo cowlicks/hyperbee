@@ -1,4 +1,5 @@
 use derive_builder::Builder;
+use futures_lite::Stream;
 use hypercore::{AppendOutcome, HypercoreBuilder, Storage};
 use prost::Message;
 
@@ -7,7 +8,7 @@ use crate::{
     error::HyperbeeError,
     messages::{header::Metadata, Header},
     nearest_node,
-    traverse::{self, Traverse, TraverseConfig},
+    traverse::{self, Traverse, TraverseConfig, TreeItem},
     CoreMem, Node, Shared, PROTOCOL,
 };
 use std::{
@@ -120,7 +121,10 @@ impl<M: CoreMem> Tree<M> {
     pub async fn traverse<'a>(
         &self,
         conf: TraverseConfig,
-    ) -> Result<Traverse<'a, M>, HyperbeeError> {
+    ) -> Result<impl Stream<Item = TreeItem<M>> + 'a, HyperbeeError>
+    where
+        M: 'a,
+    {
         let root = self
             .get_root(false)
             .await?
