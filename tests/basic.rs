@@ -39,8 +39,7 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
     let mut result = vec![];
     let stream = hb.traverse(TraverseConfig::default()).await?;
     tokio::pin!(stream);
-    while let Some(x) = stream.next().await {
-        let (key_data, _node) = x;
+    while let Some(key_data) = stream.next().await {
         result.push(key_data?);
     }
     let result: Vec<String> = result

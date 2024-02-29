@@ -17,7 +17,7 @@ use crate::{
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
-type KeyDataResult = Result<KeyValueData, HyperbeeError>;
+pub type KeyDataResult = Result<KeyValueData, HyperbeeError>;
 /// Value yielded from the [`Stream`] created by [`Traverse`].
 pub type TreeItem<M> = (KeyDataResult, SharedNode<M>);
 
@@ -470,7 +470,6 @@ pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeEr
 #[cfg(test)]
 mod test {
     use once_cell::sync::Lazy;
-    use random_access_memory::RandomAccessMemory;
 
     use super::*;
 
@@ -481,7 +480,7 @@ mod test {
                 let stream = hb.traverse($traverse_conf).await?;
                 tokio::pin!(stream);
                 let mut res = vec![];
-                while let Some((Ok(key_data), _node)) = stream.next().await {
+                while let Some(Ok(key_data)) = stream.next().await {
                     res.push(key_data.key);
                 }
                 Ok::<(Vec<Vec<u8>>, Vec<Vec<u8>>), HyperbeeError>((keys, res))
@@ -545,10 +544,10 @@ mod test {
             .build()?;
         let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
-            .collect::<Vec<TreeItem<RandomAccessMemory>>>()
+            .collect::<Vec<KeyDataResult>>()
             .await
             .into_iter()
-            .map(|x| x.0.unwrap().key)
+            .map(|x| x.unwrap().key)
             .collect();
         keys.reverse();
         assert_eq!(res, keys[5..]);
@@ -564,10 +563,10 @@ mod test {
             .build()?;
         let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
-            .collect::<Vec<TreeItem<RandomAccessMemory>>>()
+            .collect::<Vec<KeyDataResult>>()
             .await
             .into_iter()
-            .map(|x| x.0.unwrap().key)
+            .map(|x| x.unwrap().key)
             .collect();
         assert_eq!(res, keys[4..]);
         Ok(())
@@ -582,10 +581,10 @@ mod test {
             .build()?;
         let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
-            .collect::<Vec<TreeItem<RandomAccessMemory>>>()
+            .collect::<Vec<KeyDataResult>>()
             .await
             .into_iter()
-            .map(|x| x.0.unwrap().key)
+            .map(|x| x.unwrap().key)
             .collect();
         assert_eq!(res, keys[5..]);
         Ok(())

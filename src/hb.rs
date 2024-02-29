@@ -9,7 +9,7 @@ use crate::{
     error::HyperbeeError,
     messages::header::Metadata,
     prefixed::{Prefixed, PrefixedConfig},
-    traverse::{TraverseConfig, TreeItem},
+    traverse::{KeyDataResult, TraverseConfig},
     tree, KeyValueData, Node,
 };
 
@@ -119,7 +119,7 @@ impl<M: CoreMem> Hyperbee<M> {
     pub async fn traverse<'a>(
         &self,
         conf: TraverseConfig,
-    ) -> Result<impl Stream<Item = TreeItem<M>> + 'a, HyperbeeError>
+    ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError>
     where
         M: 'a,
     {

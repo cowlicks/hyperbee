@@ -4,16 +4,16 @@ use std::process::Output;
 
 use futures_lite::{Stream, StreamExt};
 use hyperbee::{
-    traverse::{TraverseConfig, TreeItem},
-    CoreMem, Hyperbee,
+    traverse::{KeyDataResult, TraverseConfig},
+    Hyperbee,
 };
 use js::run_js;
 
-async fn collect<'a, M: CoreMem + 'a>(
-    stream: impl Stream<Item = TreeItem<M>>,
+async fn collect(
+    stream: impl Stream<Item = KeyDataResult>,
 ) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
-    let stream_res = stream.collect::<Vec<TreeItem<M>>>().await;
-    Ok(stream_res.into_iter().map(|x| x.0.unwrap().key).collect())
+    let stream_res = stream.collect::<Vec<KeyDataResult>>().await;
+    Ok(stream_res.into_iter().map(|x| x.unwrap().key).collect())
 }
 
 macro_rules! write_100 {
