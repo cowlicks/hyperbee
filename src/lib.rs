@@ -53,7 +53,7 @@ fn min_keys(max_keys: usize) -> usize {
 #[derive(Clone, Debug)]
 /// Reference used within a [`Node`] of the [Hypercore](hypercore::Hypercore) block where a
 /// key-value  pair is stored.
-pub struct KeyValue {
+struct KeyValue {
     /// Index of key value pair within the [`hypercore::Hypercore`].
     seq: u64,
 }
