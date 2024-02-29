@@ -1,6 +1,5 @@
-//! # ⚠️  WARNING 🚧 API unstable ⚒️  and still in development 👷
 //! Rust version of [hyperbee](https://github.com/holepunchto/hyperbee)
-//! A B-tree built on top of Hypercore.
+//! A [B-tree](https://en.wikipedia.org/wiki/B-tree) built on top of [Hypercore](https://docs.pears.com/building-blocks/hypercore).
 
 mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
