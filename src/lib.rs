@@ -61,7 +61,7 @@ struct KeyValue {
 #[derive(Clone, Debug)]
 /// Data related to a key value pair within the [`Hyperbee`].
 pub struct KeyValueData {
-    /// The index of the [`BlockEntry`] within the [`Hypercore`](hypercore::Hypercore) where this data is stored.
+    /// The index of the block within the [`Hypercore`](hypercore::Hypercore) where this data is stored.
     pub seq: u64,
     /// The key. The data by which the [`Hyperbee`] is ordered.
     pub key: Vec<u8>,
@@ -105,7 +105,7 @@ struct Children<M: CoreMem> {
 // TODO make not pub
 /// A node of the B-Tree within the [`Hyperbee`]
 #[derive(Debug)]
-pub struct Node<M: CoreMem> {
+struct Node<M: CoreMem> {
     keys: Vec<KeyValue>,
     children: Children<M>,
     blocks: Shared<Blocks<M>>,

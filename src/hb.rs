@@ -10,7 +10,7 @@ use crate::{
     messages::header::Metadata,
     prefixed::{Prefixed, PrefixedConfig},
     traverse::{KeyDataResult, TraverseConfig},
-    tree, KeyValueData, Node,
+    tree, KeyValueData,
 };
 
 use super::{tree::Tree, CoreMem, Shared};
@@ -33,14 +33,6 @@ impl<M: CoreMem> Hyperbee<M> {
     pub async fn version(&self) -> u64 {
         self.tree.read().await.version().await
     }
-    /// Gets the root of the tree.
-    /// When `ensure_header == true` write the hyperbee header onto the hypercore if it does not exist.
-    pub async fn get_root(
-        &self,
-        ensure_header: bool,
-    ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
-        self.tree.read().await.get_root(ensure_header).await
-    }
 
     /// Create the header for the Hyperbee. This must be done before writing anything else to the
     /// tree.
@@ -50,6 +42,12 @@ impl<M: CoreMem> Hyperbee<M> {
     ) -> Result<AppendOutcome, HyperbeeError> {
         self.tree.read().await.create_header(metadata).await
     }
+
+    /// The number of levels in the tree
+    pub async fn height(&self) -> Result<usize, HyperbeeError> {
+        self.tree.read().await.height().await
+    }
+
     /// Returs a string representing the structure of the tree showing the keys in each node
     pub async fn print(&self) -> Result<String, HyperbeeError> {
         self.tree.read().await.print().await

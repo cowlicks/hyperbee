@@ -36,7 +36,7 @@ impl<M: CoreMem> Tree<M> {
     }
     /// Gets the root of the tree.
     /// When `ensure_header == true` write the hyperbee header onto the hypercore if it does not exist.
-    pub async fn get_root(
+    pub(crate) async fn get_root(
         &self,
         ensure_header: bool,
     ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
@@ -55,6 +55,16 @@ impl<M: CoreMem> Tree<M> {
             .await
             .get_tree_node(0)?;
         Ok(Some(root))
+    }
+
+    pub async fn height(&self) -> Result<usize, HyperbeeError> {
+        let root = self
+            .get_root(false)
+            .await?
+            .expect("root should already be written");
+
+        let root = root.read().await;
+        root.height().await
     }
 
     /// Get the value corresponding to the provided `key` from the Hyperbee

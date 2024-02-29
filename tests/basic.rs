@@ -57,12 +57,8 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn height() -> Result<(), Box<dyn std::error::Error>> {
     let hb = Hyperbee::from_storage_dir(HYPERBEE_STORAGE_DIR_MORE_HEIGHT).await?;
-    let root = hb
-        .get_root(false)
-        .await?
-        .expect("Root should be written already");
-    let result = root.read().await.height().await?;
-    assert_eq!(result, 5);
+    let height = hb.height().await?;
+    assert_eq!(height, 5);
     Ok(())
 }
 

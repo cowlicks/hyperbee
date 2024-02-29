@@ -17,9 +17,10 @@ use crate::{
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
+/// Value yielded from the [`Stream`] created by traverse methods
 pub type KeyDataResult = Result<KeyValueData, HyperbeeError>;
 /// Value yielded from the [`Stream`] created by [`Traverse`].
-pub type TreeItem<M> = (KeyDataResult, SharedNode<M>);
+type TreeItem<M> = (KeyDataResult, SharedNode<M>);
 
 // TODO rename BoundaryValue?
 #[derive(Clone, Debug)]
@@ -97,7 +98,7 @@ fn validate_traverse_config_builder(builder: &TraverseConfigBuilder) -> Result<(
 
 #[derive(Builder, Debug, Clone)]
 #[builder(derive(Debug), build_fn(validate = "validate_traverse_config_builder"))]
-/// Configuration for [`Traverse`]
+/// Configuration for traverse methods
 pub struct TraverseConfig {
     #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
     /// lower bound for traversal
@@ -451,7 +452,7 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
 static LEADER: &str = "\t";
 
 /// Print the keys of the provided node and it's descendents as a tree
-pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeError> {
+pub(crate) async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeError> {
     let starting_height = node.read().await.height().await?;
     let mut out = "".to_string();
     let stream = Traverse::new(node, TraverseConfig::default());
