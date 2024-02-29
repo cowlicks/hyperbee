@@ -34,7 +34,8 @@ use messages::{yolo_index, YoloIndex};
 use tree::Tree;
 
 pub use error::HyperbeeError;
-pub use hb::{Hyperbee, HyperbeeBuilder};
+pub use hb::{Hyperbee, HyperbeeBuilder, HyperbeeBuilderError};
+pub use messages::header::Metadata;
 
 // TODO document
 pub trait CoreMem: RandomAccess + Debug + Send {}
