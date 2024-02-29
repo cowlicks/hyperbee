@@ -6,8 +6,9 @@ use futures_lite::{Stream, StreamExt};
 use crate::{
     error::HyperbeeError,
     traverse::{
+        KeyDataResult,
         LimitValue::{Finite, Infinite},
-        TraverseConfig, TreeItem,
+        TraverseConfig,
     },
     CoreMem, KeyValueData, Shared, Tree,
 };
@@ -48,7 +49,7 @@ macro_rules! with_key_prefix {
     };
 }
 impl<M: CoreMem> Prefixed<M> {
-    pub fn new(prefix: &[u8], tree: Shared<Tree<M>>, conf: PrefixedConfig) -> Self {
+    pub(crate) fn new(prefix: &[u8], tree: Shared<Tree<M>>, conf: PrefixedConfig) -> Self {
         Self {
             prefix: prefix.to_vec(),
             tree,
@@ -127,7 +128,7 @@ impl<M: CoreMem> Prefixed<M> {
     pub async fn traverse<'a>(
         &self,
         conf: &TraverseConfig,
-    ) -> Result<impl Stream<Item = TreeItem<M>> + 'a, HyperbeeError>
+    ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError>
     where
         M: 'a,
     {
@@ -163,11 +164,11 @@ impl<M: CoreMem> Prefixed<M> {
         // strip `self.prefix + self.conf.seperator` from the beggining of the key
         Ok(stream.map(move |res| {
             let len_drain = len_drain;
-            let stripped_kv = res.0.map(|mut x| {
+            let stripped_kv = res.map(|mut x| {
                 x.key.drain(..len_drain);
                 x
             });
-            (stripped_kv, res.1)
+            stripped_kv
         }))
     }
 }
@@ -195,8 +196,8 @@ mod test {
         increment_bytes, Finite, PrefixedConfig, PrefixedConfigBuilder, DEFAULT_PREFIXED_SEPERATOR,
     };
     use crate::{
-        traverse::{TraverseConfig, TraverseConfigBuilder, TreeItem},
-        CoreMem, Hyperbee,
+        traverse::{KeyDataResult, TraverseConfig, TraverseConfigBuilder},
+        Hyperbee,
     };
 
     #[test]
@@ -306,11 +307,11 @@ mod test {
             .map(|x| x.to_vec())
             .collect();
 
-        async fn collect<'a, M: CoreMem + 'a>(x: impl Stream<Item = TreeItem<M>>) -> Vec<Vec<u8>> {
-            x.collect::<Vec<TreeItem<M>>>()
+        async fn collect(x: impl Stream<Item = KeyDataResult>) -> Vec<Vec<u8>> {
+            x.collect::<Vec<KeyDataResult>>()
                 .await
                 .into_iter()
-                .map(|x| x.0.unwrap().key)
+                .map(|x| x.unwrap().key)
                 .collect()
         }
 

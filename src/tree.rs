@@ -1,4 +1,5 @@
 use derive_builder::Builder;
+use futures_lite::{Stream, StreamExt};
 use hypercore::{AppendOutcome, HypercoreBuilder, Storage};
 use prost::Message;
 
@@ -7,7 +8,7 @@ use crate::{
     error::HyperbeeError,
     messages::{header::Metadata, Header},
     nearest_node,
-    traverse::{self, Traverse, TraverseConfig},
+    traverse::{self, KeyDataResult, Traverse, TraverseConfig},
     CoreMem, Node, Shared, PROTOCOL,
 };
 use std::{
@@ -35,7 +36,7 @@ impl<M: CoreMem> Tree<M> {
     }
     /// Gets the root of the tree.
     /// When `ensure_header == true` write the hyperbee header onto the hypercore if it does not exist.
-    pub async fn get_root(
+    pub(crate) async fn get_root(
         &self,
         ensure_header: bool,
     ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
@@ -54,6 +55,16 @@ impl<M: CoreMem> Tree<M> {
             .await
             .get_tree_node(0)?;
         Ok(Some(root))
+    }
+
+    pub async fn height(&self) -> Result<usize, HyperbeeError> {
+        let root = self
+            .get_root(false)
+            .await?
+            .expect("root should already be written");
+
+        let root = root.read().await;
+        root.height().await
     }
 
     /// Get the value corresponding to the provided `key` from the Hyperbee
@@ -120,12 +131,16 @@ impl<M: CoreMem> Tree<M> {
     pub async fn traverse<'a>(
         &self,
         conf: TraverseConfig,
-    ) -> Result<Traverse<'a, M>, HyperbeeError> {
+    ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError>
+    where
+        M: 'a,
+    {
         let root = self
             .get_root(false)
             .await?
             .ok_or(HyperbeeError::NoRootError)?;
-        Ok(Traverse::new(root, conf))
+        let stream = Traverse::new(root, conf);
+        Ok(stream.map(move |kv_and_node| kv_and_node.0))
     }
 }
 

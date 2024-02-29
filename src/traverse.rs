@@ -17,14 +17,18 @@ use crate::{
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
-type KeyDataResult = Result<KeyValueData, HyperbeeError>;
-pub type TreeItem<M> = (KeyDataResult, SharedNode<M>);
+/// Value yielded from the [`Stream`] created by traverse methods
+pub type KeyDataResult = Result<KeyValueData, HyperbeeError>;
+/// Value yielded from the [`Stream`] created by [`Traverse`].
+type TreeItem<M> = (KeyDataResult, SharedNode<M>);
 
+// TODO rename BoundaryValue?
 #[derive(Clone, Debug)]
 pub enum LimitValue {
     Finite(Vec<u8>),
     Infinite(InfiniteKeys),
 }
+use InfiniteKeys::*;
 use LimitValue::*;
 
 impl From<usize> for LimitValue {
@@ -54,36 +58,11 @@ impl PartialOrd<[u8]> for LimitValue {
     }
 }
 
-#[derive(Builder, Debug, Clone)]
-#[builder(derive(Debug), build_fn(validate = "validate_traverse_config_builder"))]
-/// Configuration for [`Traverse`]
-pub struct TraverseConfig {
-    #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
-    /// lower bound for traversal
-    pub min_value: LimitValue,
-    #[builder(default = "true")]
-    /// whether `min_value` is inclusive
-    pub min_inclusive: bool,
-    #[builder(default = "LimitValue::Infinite(InfiniteKeys::Positive)")]
-    /// upper bound for traversal
-    pub max_value: LimitValue,
-    #[builder(default = "true")]
-    /// whether `max_value` is inclusive
-    pub max_inclusive: bool,
-    #[builder(default = "false")]
-    /// traverse in reverse
-    pub reversed: bool,
-}
-
 fn validate_traverse_config_builder(builder: &TraverseConfigBuilder) -> Result<(), String> {
     match (&builder.min_value, &builder.max_value) {
         (Some(min), Some(max)) => match (min, max) {
-            (_, Infinite(InfiniteKeys::Negative)) => {
-                return Err("Maximum value is negative infinity".to_string())
-            }
-            (Infinite(InfiniteKeys::Positive), _) => {
-                return Err("Minimum value is positive infinity".to_string())
-            }
+            (_, Infinite(Negative)) => return Err("Maximum value is negative infinity".to_string()),
+            (Infinite(Positive), _) => return Err("Minimum value is positive infinity".to_string()),
             (Finite(min), Finite(max)) => {
                 if max < min {
                     return Err(format!(
@@ -117,12 +96,33 @@ fn validate_traverse_config_builder(builder: &TraverseConfigBuilder) -> Result<(
     Ok(())
 }
 
+#[derive(Builder, Debug, Clone)]
+#[builder(derive(Debug), build_fn(validate = "validate_traverse_config_builder"))]
+/// Configuration for traverse methods
+pub struct TraverseConfig {
+    #[builder(default = "LimitValue::Infinite(InfiniteKeys::Negative)")]
+    /// lower bound for traversal
+    pub min_value: LimitValue,
+    #[builder(default = "true")]
+    /// whether `min_value` is inclusive
+    pub min_inclusive: bool,
+    #[builder(default = "LimitValue::Infinite(InfiniteKeys::Positive)")]
+    /// upper bound for traversal
+    pub max_value: LimitValue,
+    #[builder(default = "true")]
+    /// whether `max_value` is inclusive
+    pub max_inclusive: bool,
+    #[builder(default = "false")]
+    /// traverse in reverse
+    pub reversed: bool,
+}
+
 impl Default for TraverseConfig {
     fn default() -> Self {
         Self {
-            min_value: Infinite(InfiniteKeys::Negative),
+            min_value: Infinite(Negative),
             min_inclusive: true,
-            max_value: Infinite(InfiniteKeys::Positive),
+            max_value: Infinite(Positive),
             max_inclusive: true,
             reversed: false,
         }
@@ -171,6 +171,8 @@ async fn make_child_key_index_iter<M: CoreMem>(
                     // and matched key is the lowest key and node is a leaf.
                     // Then we can't take any keys or children from this node
                     return Ok(Box::new(0..0));
+                    // NB don't let clippy rustfmt rewrite this if/else it is easier to document
+                    // this way
                 } else {
                     key_index - step_by
                 }
@@ -242,7 +244,7 @@ impl TraverseConfig {
 /// Struct used for iterating over hyperbee with a Stream.
 /// Each iteration yields the key it's value, and the "seq" for the value (the index of the value
 /// in the hypercore).
-pub struct Traverse<'a, M: CoreMem> {
+pub(crate) struct Traverse<'a, M: CoreMem> {
     /// Configuration for the traversal
     config: TraverseConfig,
     /// The current node
@@ -450,7 +452,7 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
 static LEADER: &str = "\t";
 
 /// Print the keys of the provided node and it's descendents as a tree
-pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeError> {
+pub(crate) async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeError> {
     let starting_height = node.read().await.height().await?;
     let mut out = "".to_string();
     let stream = Traverse::new(node, TraverseConfig::default());
@@ -469,7 +471,6 @@ pub async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeEr
 #[cfg(test)]
 mod test {
     use once_cell::sync::Lazy;
-    use random_access_memory::RandomAccessMemory;
 
     use super::*;
 
@@ -480,7 +481,7 @@ mod test {
                 let stream = hb.traverse($traverse_conf).await?;
                 tokio::pin!(stream);
                 let mut res = vec![];
-                while let Some((Ok(key_data), _node)) = stream.next().await {
+                while let Some(Ok(key_data)) = stream.next().await {
                     res.push(key_data.key);
                 }
                 Ok::<(Vec<Vec<u8>>, Vec<Vec<u8>>), HyperbeeError>((keys, res))
@@ -544,10 +545,10 @@ mod test {
             .build()?;
         let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
-            .collect::<Vec<TreeItem<RandomAccessMemory>>>()
+            .collect::<Vec<KeyDataResult>>()
             .await
             .into_iter()
-            .map(|x| x.0.unwrap().key)
+            .map(|x| x.unwrap().key)
             .collect();
         keys.reverse();
         assert_eq!(res, keys[5..]);
@@ -563,10 +564,10 @@ mod test {
             .build()?;
         let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
-            .collect::<Vec<TreeItem<RandomAccessMemory>>>()
+            .collect::<Vec<KeyDataResult>>()
             .await
             .into_iter()
-            .map(|x| x.0.unwrap().key)
+            .map(|x| x.unwrap().key)
             .collect();
         assert_eq!(res, keys[4..]);
         Ok(())
@@ -581,10 +582,10 @@ mod test {
             .build()?;
         let stream = hb.traverse(conf).await?;
         let res: Vec<Vec<u8>> = stream
-            .collect::<Vec<TreeItem<RandomAccessMemory>>>()
+            .collect::<Vec<KeyDataResult>>()
             .await
             .into_iter()
-            .map(|x| x.0.unwrap().key)
+            .map(|x| x.unwrap().key)
             .collect();
         assert_eq!(res, keys[5..]);
         Ok(())

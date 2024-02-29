@@ -5,10 +5,11 @@ use hypercore::HypercoreError;
 use prost::{DecodeError, EncodeError};
 
 use crate::{
-    blocks::BlocksBuilderError, traverse::TraverseConfigBuilderError, tree::TreeBuilderError,
-    HyperbeeBuilderError,
+    blocks::BlocksBuilderError, hb::HyperbeeBuilderError, traverse::TraverseConfigBuilderError,
+    tree::TreeBuilderError,
 };
 
+/// Error type used by all [`Result`]s in this library.
 #[derive(Error, Debug)]
 pub enum HyperbeeError {
     #[error("There was an error in the underlying Hypercore")]

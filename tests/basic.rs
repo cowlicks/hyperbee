@@ -39,8 +39,7 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
     let mut result = vec![];
     let stream = hb.traverse(TraverseConfig::default()).await?;
     tokio::pin!(stream);
-    while let Some(x) = stream.next().await {
-        let (key_data, _node) = x;
+    while let Some(key_data) = stream.next().await {
         result.push(key_data?);
     }
     let result: Vec<String> = result
@@ -58,12 +57,8 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn height() -> Result<(), Box<dyn std::error::Error>> {
     let hb = Hyperbee::from_storage_dir(HYPERBEE_STORAGE_DIR_MORE_HEIGHT).await?;
-    let root = hb
-        .get_root(false)
-        .await?
-        .expect("Root should be written already");
-    let result = root.read().await.height().await?;
-    assert_eq!(result, 5);
+    let height = hb.height().await?;
+    assert_eq!(height, 5);
     Ok(())
 }
 
