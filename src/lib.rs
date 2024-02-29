@@ -71,7 +71,7 @@ pub struct KeyValueData {
 #[derive(Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
 struct Child<M: CoreMem> {
-    /// Index of the [`BlockEntry`]within the [`hypercore::Hypercore`] that contains the [`Node`]
+    /// Index of the [`BlockEntry`] within the [`hypercore::Hypercore`] that contains the [`Node`]
     pub seq: u64,
     /// Index of the `Node` within the [`BlockEntry`] referenced by [`Child::seq`]
     pub offset: u64,
