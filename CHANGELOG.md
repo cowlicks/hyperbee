@@ -11,13 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Make `HyperbeeBuilderError` public
-- Made `prefixed` module public
+- Make `prefixed` module, `HyperbeeBuilderError`, and `messages::header::Metadata` public
 
 ### Changed
 
-- Make `Hyprebee::traverse` and `Prefixed::traverse` return `KeyDataResult`.
-- Make `Hyperbee::traverse` return `impl Stream`.
+- Make `Hyprebee::traverse` and `Prefixed::traverse` return `impl Stream<Item = KeyDataResult>`.
 - Make `Prefixed::traverse` strip prefix and separator from yielded keys. The method now returns `impl Stream` instead of `Traverse`.
 - Now the `.sub` method, and `Prefixed` struct require configuration with `PrefixedConfig`, which has a `seperator` field. This separates the key and the prefix.
 `separor` defaults to the NULL byte, which is the same as the JavaScript implementation.
