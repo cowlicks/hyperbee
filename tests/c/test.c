@@ -5,11 +5,12 @@
  * Usually we test with the simulated standalone detector.
  */
 
+#include <string.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <stdio.h>
 
-typedef void (*HbGetResultCallback)(int64_t error_code, char* error_message, char* buff, size_t length);
+typedef void (*HbGetResultCallback)(int64_t error_code, char* error_message, unsigned long long seq, char* buff, size_t length);
 
 extern void* init_runtime();
 extern void* close_runtime(void* runtime);
@@ -30,7 +31,27 @@ extern void* deallocate_rust_buffer(
 
 int callback_not_called = 1;
 
-void callback(int64_t error_code, char* error_message, char* key_buff, size_t key_length) {
+char* print_arr(char* out, char* arr_buff, size_t len) {
+
+    for (int i = 0; i < len; i++) {
+        char next[sizeof(char)];
+        sprintf(next, "%c", arr_buff[i]);
+        strcat(out, next);
+    }
+    return out;
+}
+
+void callback(
+        int64_t error_code,
+        char* error_message,
+        unsigned long long seq,
+        char* key_buff,
+        size_t key_length
+    ) {
+    printf("Hyperbee.get result:\n\tseq %d\n\tand array: ");
+    char arr_str[255];
+    print_arr(arr_str, key_buff, key_length);
+    printf("%s\n", arr_str);
     deallocate_rust_string(error_message);
     deallocate_rust_buffer(key_buff, key_length);
     callback_not_called = 0;
@@ -59,7 +80,6 @@ int test() {
     char key_buf[1] = { '0' };
     size_t key_length = sizeof( key_buf );
     hb_get(runtime, hyperbee, key_buf, key_length, callback);
-    printf("After request C\n");
     msleep(1000);
     int count = 0;
     while (callback_not_called){
@@ -76,7 +96,6 @@ int test() {
     close_hyperbee(hyperbee);
     printf("Closing runtime from C\n");
     close_runtime(runtime);
-    printf("Closed everything from C\n");
     printf("Exiting C\n");
     return 0;
 }
