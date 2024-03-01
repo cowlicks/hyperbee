@@ -11,7 +11,7 @@ SRC := $(ROOT)/src
 C_SOURCES := $(wildcard *.c);
 RS_SOURCES := $(wildcard $(SRC)/*.rs)
 
-all: target/hyperbee
+test: target/hyperbee
 	target/hyperbee
 
 target:
@@ -31,3 +31,5 @@ $(ROOT)/target/debug/libhyperbee.a: $(RS_SOURCES) ../../Cargo.toml
 
 clean:
 	rm -rf target
+
+.PHONY := test clean
