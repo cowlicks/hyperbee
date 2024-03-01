@@ -6,7 +6,7 @@ else
     LDFLAGS := -Wl,--gc-sections -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc -lssl -lcrypto
 endif
 
-ROOT:= ../..
+ROOT:= $(shell git rev-parse --show-toplevel)
 SRC := $(ROOT)/src
 C_SOURCES := $(wildcard *.c);
 RS_SOURCES := $(wildcard $(SRC)/*.rs)
@@ -26,8 +26,8 @@ target/test.o: test.c | target
 	$(CC) -o $@ -c $<
 
 # Build Rust FFI library
-$(ROOT)/target/debug/libhyperbee.a: $(RS_SOURCES) ../../Cargo.toml
-	cd ../../ && cargo build
+$(ROOT)/target/debug/libhyperbee.a: $(RS_SOURCES) $(ROOT)/Cargo.toml
+	cd $(ROOT) && cargo build
 
 clean:
 	rm -rf target
