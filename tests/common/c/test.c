@@ -48,7 +48,6 @@ void callback(
         char* key_buff,
         size_t key_length
     ) {
-    printf("Hyperbee.get result:\n\tseq %d\n\tand array: ");
     char arr_str[255];
     print_arr(arr_str, key_buff, key_length);
     printf("%s\n", arr_str);
@@ -63,13 +62,11 @@ int msleep(unsigned int tms) {
 }
 
 int test() {
-    printf("Running C main\n");
     void* runtime = init_runtime();
     if (runtime == NULL) {
         printf("Failed to initialize runtime\n");
         return 1;
     }
-    printf("Runtime ready in C\n");
     void* hyperbee = hyperbee_from_storage_directory(runtime, "/home/blake/git/hyperbee/test_data/basic/");
     if (hyperbee == NULL) {
         printf("Failed to initialize hyperbee\n");
@@ -92,11 +89,8 @@ int test() {
         }
     }
 
-    printf("Closing hyperbee from C\n");
     close_hyperbee(hyperbee);
-    printf("Closing runtime from C\n");
     close_runtime(runtime);
-    printf("Exiting C\n");
     return 0;
 }
 
