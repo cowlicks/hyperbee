@@ -87,7 +87,7 @@ pub extern "C" fn close_hyperbee(hb: HbDiskPointer) {
     ));
 }
 
-pub fn c_vec_from_vec<T>(mut vec: Vec<T>) -> (*mut T, size_t) {
+pub fn c_vec_from_vec<T: std::fmt::Debug>(mut vec: Vec<T>) -> (*mut T, size_t) {
     vec.shrink_to_fit();
     assert!(vec.len() == vec.capacity());
     let ptr = vec.as_mut_ptr();
@@ -140,8 +140,8 @@ pub extern "C" fn hb_get(
 
     rt.spawn(async move {
         match hb.get(&rkey).await {
-            Ok(Some((seq, Some(_value)))) => {
-                let (vec, size) = c_vec_from_vec(vec![] as Vec<u8>);
+            Ok(Some((seq, Some(value)))) => {
+                let (vec, size) = c_vec_from_vec(value);
                 let no_error_msg = CString::new("").unwrap().into_raw();
                 unsafe {
                     callback(0, no_error_msg, seq, vec, size);
