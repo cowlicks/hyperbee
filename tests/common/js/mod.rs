@@ -1,3 +1,4 @@
+use super::git_root;
 use std::{
     fs::File,
     io::Write,
@@ -6,14 +7,6 @@ use std::{
 };
 use tempfile::TempDir;
 pub static REL_PATH_TO_NODE_MODULES: &str = "./gen_test_data/node_modules";
-
-pub fn git_root() -> Result<String, Box<dyn std::error::Error>> {
-    let x = Command::new("sh")
-        .arg("-c")
-        .arg("git rev-parse --show-toplevel")
-        .output()?;
-    Ok(String::from_utf8(x.stdout)?.trim().to_string())
-}
 
 pub fn path_to_node_modules() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let gr = git_root()?;
