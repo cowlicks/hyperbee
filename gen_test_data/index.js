@@ -8,8 +8,8 @@ import Hyperbee from 'hyperbee';
 
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const NODE_TEST_DATA_DIR_NAME = 'test_data'
-const RS_TEST_DATA_DIR_NAME = 'test_data'
+const NODE_TEST_DATA_DIR_NAME = 'data'
+const RS_TEST_DATA_DIR_NAME = 'data'
 const PATH_TO_NODE_TEST_DATA = join(__dirname, NODE_TEST_DATA_DIR_NAME);
 const PATH_TO_RS_TEST_DATA = join(__dirname, '..', RS_TEST_DATA_DIR_NAME);
 

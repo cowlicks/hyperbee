@@ -1,7 +1,7 @@
 use hyperbee::{traverse::TraverseConfig, Hyperbee};
-static HYPERBEE_STORAGE_DIR: &str = "./test_data/basic";
-static HYPERBEE_STORAGE_DIR_MORE_HEIGHT: &str = "./test_data/more_height";
-static HYPERBEE_STORAGE_DIR_SMALL: &str = "./test_data/alphabet";
+static HYPERBEE_STORAGE_DIR: &str = "./data/basic";
+static HYPERBEE_STORAGE_DIR_MORE_HEIGHT: &str = "./data/more_height";
+static HYPERBEE_STORAGE_DIR_SMALL: &str = "./data/alphabet";
 
 #[tokio::test]
 async fn basic() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,4 +1,4 @@
-static HYPERBEE_STORAGE_DIR: &str = "./test_data/with_replaced_values";
+static HYPERBEE_STORAGE_DIR: &str = "./data/with_replaced_values";
 
 #[tokio::test]
 async fn with_replaced_values() -> Result<(), Box<dyn std::error::Error>> {

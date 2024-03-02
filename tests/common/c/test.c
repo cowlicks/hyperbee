@@ -67,7 +67,7 @@ int test() {
         printf("Failed to initialize runtime\n");
         return 1;
     }
-    void* hyperbee = hyperbee_from_storage_directory(runtime, "/home/blake/git/hyperbee/test_data/basic/");
+    void* hyperbee = hyperbee_from_storage_directory(runtime, "/home/blake/git/hyperbee/data/basic/");
     if (hyperbee == NULL) {
         printf("Failed to initialize hyperbee\n");
         return 1;
