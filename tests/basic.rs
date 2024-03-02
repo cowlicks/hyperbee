@@ -1,13 +1,20 @@
+mod common;
+use common::{get_data_dir, join_paths};
+
 use hyperbee::{traverse::TraverseConfig, Hyperbee};
-static HYPERBEE_STORAGE_DIR: &str = "./data/basic";
-static HYPERBEE_STORAGE_DIR_MORE_HEIGHT: &str = "./data/more_height";
-static HYPERBEE_STORAGE_DIR_SMALL: &str = "./data/alphabet";
+
+use crate::common::js::require_js_data;
+static BASIC_TEST_DATA_STORAGE: &str = "basic";
+static MORE_HEIGHT_TEST_DATA_STORAGE: &str = "more_height";
+static SMALL_TEST_DATA_STORAGE: &str = "alphabet";
 
 #[tokio::test]
-async fn basic() -> Result<(), Box<dyn std::error::Error>> {
+async fn basic_integration() -> Result<(), Box<dyn std::error::Error>> {
+    require_js_data()?;
     let start = 0;
     let stop = 25;
-    let hb = Hyperbee::from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
+    let storage_dir = join_paths!(get_data_dir()?, BASIC_TEST_DATA_STORAGE);
+    let hb = Hyperbee::from_storage_dir(storage_dir).await?;
     for i in start..stop {
         let key = i.to_string();
         let expected = (stop - i).to_string();
@@ -22,7 +29,9 @@ async fn basic() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn no_key() -> Result<(), Box<dyn std::error::Error>> {
-    let hb = Hyperbee::from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
+    require_js_data()?;
+    let storage_dir = join_paths!(get_data_dir()?, BASIC_TEST_DATA_STORAGE);
+    let hb = Hyperbee::from_storage_dir(storage_dir).await?;
     let result = hb.get(&"foobar".to_string().into_bytes()).await?;
     assert_eq!(result, Option::None);
     Ok(())
@@ -31,9 +40,11 @@ async fn no_key() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn stream() -> Result<(), Box<dyn std::error::Error>> {
     use tokio_stream::StreamExt;
+    require_js_data()?;
     let start = 0;
     let stop = 25;
-    let hb = Hyperbee::from_storage_dir(HYPERBEE_STORAGE_DIR).await?;
+    let storage_dir = join_paths!(get_data_dir()?, BASIC_TEST_DATA_STORAGE);
+    let hb = Hyperbee::from_storage_dir(storage_dir).await?;
     let mut expected: Vec<Vec<u8>> = (start..stop).map(|i| i.to_string().into()).collect();
     expected.sort();
     let mut result = vec![];
@@ -56,7 +67,9 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn height() -> Result<(), Box<dyn std::error::Error>> {
-    let hb = Hyperbee::from_storage_dir(HYPERBEE_STORAGE_DIR_MORE_HEIGHT).await?;
+    require_js_data()?;
+    let storage_dir = join_paths!(get_data_dir()?, MORE_HEIGHT_TEST_DATA_STORAGE);
+    let hb = Hyperbee::from_storage_dir(storage_dir).await?;
     let height = hb.height().await?;
     assert_eq!(height, 5);
     Ok(())
@@ -64,7 +77,9 @@ async fn height() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn print() -> Result<(), Box<dyn std::error::Error>> {
-    let hb = Hyperbee::from_storage_dir(HYPERBEE_STORAGE_DIR_SMALL).await?;
+    require_js_data()?;
+    let storage_dir = join_paths!(get_data_dir()?, SMALL_TEST_DATA_STORAGE);
+    let hb = Hyperbee::from_storage_dir(storage_dir).await?;
     let result = hb.print().await?;
     println!("{result}");
     assert_eq!(
