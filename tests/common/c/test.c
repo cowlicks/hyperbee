@@ -5,11 +5,53 @@
  * Usually we test with the simulated standalone detector.
  */
 
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <stdio.h>
 
+const char * REL_PATH_TO_BASIC_DATA = "tests/common/js/data/basic";
+
+/* utils */
+int msleep(unsigned int tms) {
+  return usleep(tms * 1000);
+}
+
+char* print_arr(char* out, char* arr_buff, size_t len) {
+    for (int i = 0; i < len; i++) {
+        char next[sizeof(char)];
+        sprintf(next, "%c", arr_buff[i]);
+        strcat(out, next);
+    }
+    return out;
+}
+
+// run command and write output to `output`
+int run_command(char* command, char* output, size_t max_size) {
+    FILE *pf;
+
+    // Setup our pipe for reading and execute our command.
+    pf = popen(command,"r");
+
+    if(!pf){
+      fprintf(stderr, "Could not open pipe for output.\n");
+      return 1;
+    }
+
+    // Grab data from process execution
+    fgets(output, max_size , pf);
+
+    if (pclose(pf) != 0) {
+        fprintf(stderr," Error: Failed to close command stream \n");
+        return 1;
+    }
+
+    return 0;
+}
+/* end utils */
+
+/* ffi declerations */
 typedef void (*HbGetResultCallback)(int64_t error_code, char* error_message, unsigned long long seq, char* buff, size_t length);
 
 extern void* init_runtime();
@@ -31,16 +73,6 @@ extern void* deallocate_rust_buffer(
 
 int callback_not_called = 1;
 
-char* print_arr(char* out, char* arr_buff, size_t len) {
-
-    for (int i = 0; i < len; i++) {
-        char next[sizeof(char)];
-        sprintf(next, "%c", arr_buff[i]);
-        strcat(out, next);
-    }
-    return out;
-}
-
 void callback(
         int64_t error_code,
         char* error_message,
@@ -55,29 +87,33 @@ void callback(
     deallocate_rust_buffer(key_buff, key_length);
     callback_not_called = 0;
 }
+/* end ffi declerations */
 
-
-int msleep(unsigned int tms) {
-  return usleep(tms * 1000);
-}
 
 int test() {
+    char git_root[512];
+    char storage_dir[512];
+
     void* runtime = init_runtime();
     if (runtime == NULL) {
         printf("Failed to initialize runtime\n");
         return 1;
     }
-    void* hyperbee = hyperbee_from_storage_directory(runtime, "/home/blake/git/hyperbee/data/basic/");
+
+    run_command("git rev-parse --show-toplevel", git_root, sizeof(git_root));
+    // trim trailing whitespace https://stackoverflow.com/a/71442959/1609380
+    strtok(git_root, "\r\t\n ");
+    sprintf(storage_dir, "%s/%s", git_root, REL_PATH_TO_BASIC_DATA);
+
+    void* hyperbee = hyperbee_from_storage_directory(runtime, storage_dir);
     if (hyperbee == NULL) {
         printf("Failed to initialize hyperbee\n");
         return 1;
     }
 
-    sleep(1);
     char key_buf[1] = { '0' };
     size_t key_length = sizeof( key_buf );
     hb_get(runtime, hyperbee, key_buf, key_length, callback);
-    msleep(1000);
     int count = 0;
     while (callback_not_called){
         count += 1;
@@ -95,5 +131,5 @@ int test() {
 }
 
 int main() {
-    return test();
+   return test();
 }
