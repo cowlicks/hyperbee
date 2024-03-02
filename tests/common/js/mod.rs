@@ -1,22 +1,32 @@
-use super::git_root;
+use super::{git_root, join_paths};
 use std::{
     fs::File,
     io::Write,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Command, Output},
 };
 use tempfile::TempDir;
-pub static REL_PATH_TO_NODE_MODULES: &str = "./gen_test_data/node_modules";
+pub static REL_PATH_TO_NODE_MODULES: &str = "./tests/common/js/node_modules";
+pub static REL_PATH_TO_JS_DIR: &str = "./tests/common/JS";
+
+pub fn run_make_with(make_arg: &str) -> Result<Output, Box<dyn std::error::Error>> {
+    let git_root = git_root()?;
+    let cmd = format!("cd {git_root} && cd {REL_PATH_TO_JS_DIR} && make {make_arg}");
+    Ok(Command::new("sh").arg("-c").arg(cmd).output()?)
+}
+
+pub fn require_js_data() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = run_make_with("")?;
+    Ok(())
+}
 
 pub fn path_to_node_modules() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let gr = git_root()?;
-    let gr = Path::new(&gr);
-    Ok(gr.join(REL_PATH_TO_NODE_MODULES))
+    let p = join_paths!(git_root()?, &REL_PATH_TO_NODE_MODULES);
+    Ok(p.into())
 }
 
 pub fn run_js(storage_dir: &TempDir, script: &str) -> Result<Output, Box<dyn std::error::Error>> {
     let js_dir = tempfile::tempdir()?;
-    //std::io::File::create(js_script)?;
     let js_code = format!(
         "
 const Hypercore = require('hypercore');
