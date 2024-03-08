@@ -16,7 +16,7 @@ categories = [
 
 [lib]
 name = "hyperbee"
-crate-type = ["lib", "cdylib", "staticlib"]
+crate-type = ["lib", "cdylib"]
 
 [features]
 default = ["clib"]
