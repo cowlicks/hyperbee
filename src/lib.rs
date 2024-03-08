@@ -435,3 +435,5 @@ impl BlockEntry {
             .clone())
     }
 }
+
+uniffi::include_scaffolding!("hyperbee");
