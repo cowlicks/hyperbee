@@ -1,13 +1,13 @@
-mod js;
+mod common;
 
 use std::process::Output;
 
+use common::js::run_js;
 use futures_lite::{Stream, StreamExt};
 use hyperbee::{
     traverse::{KeyDataResult, TraverseConfig},
     Hyperbee,
 };
-use js::run_js;
 
 async fn collect(
     stream: impl Stream<Item = KeyDataResult>,

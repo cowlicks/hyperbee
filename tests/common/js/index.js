@@ -8,30 +8,22 @@ import Hyperbee from 'hyperbee';
 
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const NODE_TEST_DATA_DIR_NAME = 'test_data'
-const RS_TEST_DATA_DIR_NAME = 'test_data'
-const PATH_TO_NODE_TEST_DATA = join(__dirname, NODE_TEST_DATA_DIR_NAME);
-const PATH_TO_RS_TEST_DATA = join(__dirname, '..', RS_TEST_DATA_DIR_NAME);
+const DATA_DIR_NAME = 'data'
+const PATH_TO_DATA_DIR = join(__dirname, DATA_DIR_NAME);
 
 const rmTestData = async (dataName) => {
-  await rm(join(PATH_TO_RS_TEST_DATA, dataName), {recursive: true, force: true})
-  await rm(join(PATH_TO_NODE_TEST_DATA, dataName), {recursive: true, force: true})
-}
-
-const copyTestData = async (dataName) => {
-  await cp(join(PATH_TO_NODE_TEST_DATA, dataName), join(PATH_TO_RS_TEST_DATA, dataName), {recursive: true})
-
+  await rm(join(PATH_TO_DATA_DIR, dataName), {recursive: true, force: true})
 }
 
 async function basic() {
   const start = 0
   const stop = 25
   const DATA_DIR_NAME = 'basic';
-  const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
+  const storage_dir = join(PATH_TO_DATA_DIR, DATA_DIR_NAME);
 
 
   await rmTestData(DATA_DIR_NAME);
-  const core = new Hypercore(PATH_TO_DATA_DIR)
+  const core = new Hypercore(storage_dir)
   const db = new Hyperbee(core)
   await db.ready()
 
@@ -48,18 +40,17 @@ async function basic() {
       console.error(`Could not get ${key} instead go ${res.value.toString()}`)
     }
   }
-  await copyTestData(DATA_DIR_NAME);
 }
 
 async function with_replaced_values() {
   const start = 0
   const stop = 25
   const DATA_DIR_NAME = 'with_replaced_values';
-  const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
+  const storage_dir = join(PATH_TO_DATA_DIR, DATA_DIR_NAME);
 
 
   await rmTestData(DATA_DIR_NAME);
-  const core = new Hypercore(PATH_TO_DATA_DIR)
+  const core = new Hypercore(storage_dir)
   const db = new Hyperbee(core)
   await db.ready()
 
@@ -73,18 +64,17 @@ async function with_replaced_values() {
     await db.put(x, String(i*2));
   }
 
-  await copyTestData(DATA_DIR_NAME);
 }
 
 async function more_height() {
   const start = 0
   const stop = 5**5;
   const DATA_DIR_NAME = 'more_height';
-  const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
+  const storage_dir = join(PATH_TO_DATA_DIR, DATA_DIR_NAME);
 
 
   await rmTestData(DATA_DIR_NAME);
-  const core = new Hypercore(PATH_TO_DATA_DIR)
+  const core = new Hypercore(storage_dir)
   const db = new Hyperbee(core)
   await db.ready()
 
@@ -101,7 +91,6 @@ async function more_height() {
       console.error(`Could not get ${key} instead go ${res.value.toString()}`)
     }
   }
-  await copyTestData(DATA_DIR_NAME);
 }
 
 async function alphabet() {
@@ -109,11 +98,11 @@ async function alphabet() {
   const start = 0
   const stop = letters.length;
   const DATA_DIR_NAME = 'alphabet';
-  const PATH_TO_DATA_DIR = join(PATH_TO_NODE_TEST_DATA, DATA_DIR_NAME);
+  const storage_dir = join(PATH_TO_DATA_DIR, DATA_DIR_NAME);
 
 
   await rmTestData(DATA_DIR_NAME);
-  const core = new Hypercore(PATH_TO_DATA_DIR)
+  const core = new Hypercore(storage_dir)
   const db = new Hyperbee(core)
   await db.ready()
 
@@ -122,7 +111,6 @@ async function alphabet() {
     const value = key;
     await db.put(key, value);
   }
-  await copyTestData(DATA_DIR_NAME);
 }
 
 
