@@ -1,3 +1,0 @@
-namespace hyperbee {
-    u32 foo(u32 a, u32 b);
-};

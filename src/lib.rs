@@ -436,4 +436,4 @@ impl BlockEntry {
     }
 }
 
-uniffi::include_scaffolding!("hyperbee");
+uniffi::setup_scaffolding!();
