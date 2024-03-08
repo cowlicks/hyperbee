@@ -12,7 +12,7 @@ C_SOURCES := $(wildcard *.c);
 RS_SOURCES := $(wildcard $(SRC)/*.rs)
 
 # Buid the executable linking object file to Rust FFI library
-target/hyperbee: target/test.o $(ROOT)/target/debug/libhyperbee.a
+target/hyperbee: target/test.o $(ROOT)/target/debug/libhyperbee.so
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 target:
