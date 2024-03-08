@@ -112,9 +112,7 @@ pub extern "C" fn hyperbee_from_storage_directory(
         Some(x) => x,
     };
 
-    // TODO println!("Trying to connect to instrument at {}", url);
     let hb = rt.block_on(async { Hyperbee::from_storage_dir(storage_directory).await });
-    // TODO println!("Connected");
     match hb {
         Ok(r) => to_c(r),
         Err(_) => ptr::null_mut(),
