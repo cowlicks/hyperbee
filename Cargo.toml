@@ -19,7 +19,7 @@ name = "hyperbee"
 crate-type = ["lib", "cdylib"]
 
 [features]
-default = ["clib"]
+default = []
 clib = ["tokio/rt-multi-thread", "dep:libc"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
