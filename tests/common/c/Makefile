@@ -23,8 +23,8 @@ target/test.o: test.c | target
 	$(CC) -o $@ -c $<
 
 # Build Rust FFI library
-$(ROOT)/target/debug/libhyperbee.a: $(RS_SOURCES) $(ROOT)/Cargo.toml
-	cd $(ROOT) && cargo build
+$(ROOT)/target/debug/libhyperbee.so: $(RS_SOURCES) $(ROOT)/Cargo.toml
+	cd $(ROOT) && cargo build -F clib
 
 test: target/hyperbee
 	target/hyperbee
