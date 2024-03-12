@@ -17,6 +17,9 @@ mod test;
 pub mod traverse;
 mod tree;
 
+#[cfg(feature = "clib")]
+mod external;
+
 use std::{
     fmt::Debug,
     ops::{Range, RangeBounds},
