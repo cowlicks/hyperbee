@@ -8,6 +8,7 @@ mod blocks;
 mod changes;
 mod del;
 mod error;
+pub mod ffi;
 mod hb;
 mod keys;
 pub mod prefixed;
@@ -55,7 +56,7 @@ struct KeyValue {
     seq: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, uniffi::Record)]
 /// Data related to a key value pair within the [`Hyperbee`].
 pub struct KeyValueData {
     /// The index of the block within the [`Hypercore`](hypercore::Hypercore) where this data is stored.
