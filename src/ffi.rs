@@ -1,10 +1,8 @@
-use random_access_disk::RandomAccessDisk;
-
 use crate::{Hyperbee, HyperbeeError};
 
 #[derive(uniffi::Object)]
 // TODO should this be pub?
-pub struct DiskBee(Hyperbee<RandomAccessDisk>);
+pub struct DiskBee(Hyperbee);
 
 #[derive(uniffi::Record)]
 pub struct Gotten {
