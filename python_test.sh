@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -e
 rm -rf out/*
-cargo build
+# NB currently need to build with clib (which is the regular ffi stuff) because the clib and uniffi share the same libhyperbee.so file
+cargo build -F clib
 cargo run --bin uniffi-bindgen generate --library target/debug/libhyperbee.so --language python --out-dir out
 cp target/debug/libhyperbee.so out/.
 touch out/__init__.py
