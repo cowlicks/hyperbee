@@ -23,10 +23,10 @@ use tokio::sync::{Mutex, RwLock};
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Tree<M: CoreMem> {
-    pub blocks: Shared<Blocks<M>>,
+    pub blocks: Shared<Blocks>,
 }
 
-impl<M: CoreMem> Tree<M> {
+impl<M: CoreMem> Tree {
     /// The number of blocks in the hypercore.
     /// The first block is always the header block so:
     /// `version` would be the `seq` of the next block
@@ -39,7 +39,7 @@ impl<M: CoreMem> Tree<M> {
     pub(crate) async fn get_root(
         &self,
         ensure_header: bool,
-    ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
+    ) -> Result<Option<Shared<Node>>, HyperbeeError> {
         let blocks = self.blocks.read().await;
         let version = self.version().await;
         if version <= 1 {
@@ -182,7 +182,7 @@ impl Tree<random_access_memory::RandomAccessMemory> {
     }
 }
 
-impl<M: CoreMem> Clone for Tree<M> {
+impl<M: CoreMem> Clone for Tree {
     fn clone(&self) -> Self {
         Self {
             blocks: self.blocks.clone(),

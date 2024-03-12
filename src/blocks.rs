@@ -18,11 +18,11 @@ use crate::{
 pub struct Blocks<M: CoreMem> {
     #[builder(default)]
     // TODO make the cache smarter. Allow setting max size and strategy
-    cache: Shared<BTreeMap<u64, Shared<BlockEntry<M>>>>,
-    core: Arc<Mutex<Hypercore<M>>>,
+    cache: Shared<BTreeMap<u64, Shared<BlockEntry>>>,
+    core: Arc<Mutex<Hypercore>>,
 }
 
-impl<M: CoreMem> Blocks<M> {
+impl<M: CoreMem> Blocks {
     /// Get a BlockEntry for the given `seq`
     /// # Errors
     /// when the provided `seq` is not in the Hypercore
@@ -32,7 +32,7 @@ impl<M: CoreMem> Blocks<M> {
         &self,
         seq: &u64,
         blocks: Shared<Self>,
-    ) -> Result<Shared<BlockEntry<M>>, HyperbeeError> {
+    ) -> Result<Shared<BlockEntry>, HyperbeeError> {
         if let Some(block) = self.get_from_cache(seq).await {
             trace!("from cache");
             Ok(block)
@@ -47,7 +47,7 @@ impl<M: CoreMem> Blocks<M> {
             Ok(block_entry)
         }
     }
-    async fn get_from_cache(&self, seq: &u64) -> Option<Shared<BlockEntry<M>>> {
+    async fn get_from_cache(&self, seq: &u64) -> Option<Shared<BlockEntry>> {
         self.cache.read().await.get(seq).cloned()
     }
 
@@ -55,7 +55,7 @@ impl<M: CoreMem> Blocks<M> {
         &self,
         seq: &u64,
         blocks: Shared<Self>,
-    ) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
+    ) -> Result<Option<BlockEntry>, HyperbeeError> {
         match self.core.lock().await.get(*seq).await? {
             Some(core_block) => {
                 let node = NodeSchema::decode(&core_block[..])?;
@@ -76,7 +76,7 @@ impl<M: CoreMem> Blocks<M> {
     #[tracing::instrument(skip(self, changes))]
     /// Commit [`Changes`](crate::changes::Changes) to the Hypercore
     // TODO create a BlockEntry from changes and add it to self.cache
-    pub async fn add_changes(&self, changes: Changes<M>) -> Result<AppendOutcome, HyperbeeError> {
+    pub async fn add_changes(&self, changes: Changes) -> Result<AppendOutcome, HyperbeeError> {
         let Changes {
             key,
             value,

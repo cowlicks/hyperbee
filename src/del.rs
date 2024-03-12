@@ -28,7 +28,7 @@ impl Side {
     /// but with bounds checking
     async fn get_donor_index<M: CoreMem>(
         &self,
-        father: SharedNode<M>,
+        father: SharedNode,
         deficient_index: usize,
     ) -> Option<usize> {
         match *self {
@@ -59,7 +59,7 @@ impl Side {
         }
     }
 
-    async fn get_donor_key<M: CoreMem>(&self, donor: SharedNode<M>) -> KeyValue {
+    async fn get_donor_key<M: CoreMem>(&self, donor: SharedNode) -> KeyValue {
         match self {
             Right => donor.write().await.keys.remove(0),
             Left => donor
@@ -71,7 +71,7 @@ impl Side {
         }
     }
 
-    async fn get_donor_child<M: CoreMem>(&self, donor: SharedNode<M>) -> Option<Child<M>> {
+    async fn get_donor_child<M: CoreMem>(&self, donor: SharedNode) -> Option<Child> {
         if donor.read().await.is_leaf().await {
             return None;
         }
@@ -91,7 +91,7 @@ impl Side {
 
     async fn swap_donor_key_in_father<M: CoreMem>(
         &self,
-        father: SharedNode<M>,
+        father: SharedNode,
         deficient_index: usize,
         key: KeyValue,
     ) -> KeyValue {
@@ -108,9 +108,9 @@ impl Side {
 
     async fn insert_donations_into_deficient_child<M: CoreMem>(
         &self,
-        deficient_child: SharedNode<M>,
+        deficient_child: SharedNode,
         key: KeyValue,
-        child: Option<Child<M>>,
+        child: Option<Child>,
     ) {
         match self {
             Right => {
@@ -144,7 +144,7 @@ impl Side {
 
     async fn can_rotate<M: CoreMem>(
         &self,
-        father: SharedNode<M>,
+        father: SharedNode,
         deficient_index: usize,
         order: usize,
     ) -> Result<Option<usize>, HyperbeeError> {
@@ -171,11 +171,11 @@ impl Side {
 
     async fn rotate<M: CoreMem>(
         &self,
-        father: SharedNode<M>,
+        father: SharedNode,
         deficient_index: usize,
         donor_index: usize,
-        changes: &mut Changes<M>,
-    ) -> Result<SharedNode<M>, HyperbeeError> {
+        changes: &mut Changes,
+    ) -> Result<SharedNode, HyperbeeError> {
         let donor = father.read().await.get_child(donor_index).await?;
         // pull donated parts out of donor
         let donated_key = self.get_donor_key(donor.clone()).await;
@@ -208,11 +208,11 @@ impl Side {
 
     async fn maybe_rotate<M: CoreMem>(
         &self,
-        father: SharedNode<M>,
+        father: SharedNode,
         deficient_index: usize,
         order: usize,
-        changes: &mut Changes<M>,
-    ) -> Result<Option<SharedNode<M>>, HyperbeeError> {
+        changes: &mut Changes,
+    ) -> Result<Option<SharedNode>, HyperbeeError> {
         let Some(donor_index) = self
             .can_rotate(father.clone(), deficient_index, order)
             .await?
@@ -228,10 +228,10 @@ impl Side {
     #[tracing::instrument(skip(self, father, changes))]
     async fn maybe_merge<M: CoreMem>(
         &self,
-        father: SharedNode<M>,
+        father: SharedNode,
         deficient_index: usize,
-        changes: &mut Changes<M>,
-    ) -> Result<Option<SharedNode<M>>, HyperbeeError> {
+        changes: &mut Changes,
+    ) -> Result<Option<SharedNode>, HyperbeeError> {
         let Some(donor_index) = self.get_donor_index(father.clone(), deficient_index).await else {
             return Ok(None);
         };
@@ -295,11 +295,11 @@ impl Side {
 #[tracing::instrument(skip(father, changes))]
 /// The orering of the kinds of repairs here is choosen to match the Hyperbee-js implementation
 async fn repair_one<M: CoreMem>(
-    father: SharedNode<M>,
+    father: SharedNode,
     deficient_index: usize,
     order: usize,
-    changes: &mut Changes<M>,
-) -> Result<SharedNode<M>, HyperbeeError> {
+    changes: &mut Changes,
+) -> Result<SharedNode, HyperbeeError> {
     if let Some(res) = Right
         .maybe_rotate(father.clone(), deficient_index, order, changes)
         .await?
@@ -329,10 +329,10 @@ async fn repair_one<M: CoreMem>(
 /// must be given a path who's last element has a deficient child...
 #[tracing::instrument(skip(path, changes))]
 async fn repair<M: CoreMem>(
-    path: &mut NodePath<M>,
+    path: &mut NodePath,
     order: usize,
-    changes: &mut Changes<M>,
-) -> Result<Child<M>, HyperbeeError> {
+    changes: &mut Changes,
+) -> Result<Child, HyperbeeError> {
     let father_ref = loop {
         // next item, should be checked that it needs repair before
         let (father, deficient_index) =
@@ -374,7 +374,7 @@ fn cas_always_true(_kv: &KeyValueData) -> bool {
     true
 }
 
-impl<M: CoreMem> Tree<M> {
+impl<M: CoreMem> Tree {
     pub async fn del_compare_and_swap(
         &self,
         key: &[u8],
@@ -401,7 +401,7 @@ impl<M: CoreMem> Tree<M> {
         }
         // NB: jS hyperbee stores the "key" the deleted "key" in the created BlockEntry. So we are
         // doing that too
-        let mut changes: Changes<M> = Changes::new(self.version().await, key, None);
+        let mut changes: Changes = Changes::new(self.version().await, key, None);
 
         let (cur_node, cur_index) = path
             .pop()

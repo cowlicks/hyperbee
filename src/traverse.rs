@@ -20,7 +20,7 @@ type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 /// Value yielded from the [`Stream`] created by traverse methods
 pub type KeyDataResult = Result<KeyValueData, HyperbeeError>;
 /// Value yielded from the [`Stream`] created by [`Traverse`].
-type TreeItem<M> = (KeyDataResult, SharedNode<M>);
+type TreeItem = (KeyDataResult, SharedNode);
 
 // TODO rename BoundaryValue?
 #[derive(Clone, Debug)]
@@ -142,7 +142,7 @@ impl Default for TraverseConfig {
 #[allow(clippy::collapsible_else_if)]
 async fn make_child_key_index_iter<M: CoreMem>(
     conf: TraverseConfig,
-    node: SharedNode<M>,
+    node: SharedNode,
     n_keys: usize,
     n_children: usize,
 ) -> Result<Box<dyn DoubleEndedIterator<Item = usize>>, HyperbeeError> {
@@ -248,7 +248,7 @@ pub(crate) struct Traverse<'a, M: CoreMem> {
     /// Configuration for the traversal
     config: TraverseConfig,
     /// The current node
-    root: SharedNode<M>,
+    root: SharedNode,
     /// Option holding (number_of_keys, number_of_children) for this node
     n_keys_and_children_fut: Option<PinnedFut<'a, (usize, usize)>>,
     n_keys_and_children: Option<(usize, usize)>,
@@ -273,7 +273,7 @@ pub(crate) struct Traverse<'a, M: CoreMem> {
 impl<M: CoreMem> Traverse<'_, M> {
     /// Create [`Traverse`] struct and to traverse the provided `node` based on the provided
     /// [`TraverseConfig`]
-    pub fn new(note: SharedNode<M>, config: TraverseConfig) -> Self {
+    pub fn new(note: SharedNode, config: TraverseConfig) -> Self {
         Traverse {
             config,
             root: note,
@@ -289,20 +289,20 @@ impl<M: CoreMem> Traverse<'_, M> {
 }
 
 /// Return the tuple (number_of_keys, number_of_children) for the given node
-async fn get_n_keys_and_children<M: CoreMem>(node: SharedNode<M>) -> (usize, usize) {
+async fn get_n_keys_and_children<M: CoreMem>(node: SharedNode) -> (usize, usize) {
     (
         node.read().await.keys.len(),
         node.read().await.n_children().await,
     )
 }
 
-async fn get_key_and_value<M: CoreMem>(node: SharedNode<M>, index: usize) -> KeyDataResult {
+async fn get_key_and_value<M: CoreMem>(node: SharedNode, index: usize) -> KeyDataResult {
     node.read().await.get_key_value(index).await
 }
 
 #[tracing::instrument]
 async fn get_child_stream<'a, M: CoreMem>(
-    node: SharedNode<M>,
+    node: SharedNode,
     index: usize,
     config: TraverseConfig, // TODO should be reference
 ) -> Result<Traverse<'a, M>, HyperbeeError> {
@@ -311,7 +311,7 @@ async fn get_child_stream<'a, M: CoreMem>(
 }
 
 impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
-    type Item = TreeItem<M>;
+    type Item = TreeItem;
     #[tracing::instrument(skip(self, cx))]
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // await next key & value. yield if ready
@@ -452,7 +452,7 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
 static LEADER: &str = "\t";
 
 /// Print the keys of the provided node and it's descendents as a tree
-pub(crate) async fn print<M: CoreMem>(node: SharedNode<M>) -> Result<String, HyperbeeError> {
+pub(crate) async fn print<M: CoreMem>(node: SharedNode) -> Result<String, HyperbeeError> {
     let starting_height = node.read().await.height().await?;
     let mut out = "".to_string();
     let stream = Traverse::new(node, TraverseConfig::default());

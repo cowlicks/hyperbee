@@ -22,10 +22,10 @@ use super::{tree::Tree, CoreMem, Shared};
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee<M: CoreMem> {
-    tree: Shared<Tree<M>>,
+    tree: Shared<Tree>,
 }
 
-impl<M: CoreMem> Hyperbee<M> {
+impl<M: CoreMem> Hyperbee {
     /// The number of blocks in the hypercore.
     /// The first block is always the header block so:
     /// `version` would be the `seq` of the next block
@@ -109,7 +109,7 @@ impl<M: CoreMem> Hyperbee<M> {
     }
 
     /// Create a new tree with all it's operation's prefixed by the provided `prefix`.
-    pub fn sub(&self, prefix: &[u8], config: PrefixedConfig) -> Prefixed<M> {
+    pub fn sub(&self, prefix: &[u8], config: PrefixedConfig) -> Prefixed {
         Prefixed::new(prefix, self.tree.clone(), config)
     }
 

@@ -36,7 +36,7 @@ impl Default for PrefixedConfig {
 pub struct Prefixed<M: CoreMem> {
     /// All keys inserted with [`Prefixed::put`] are prefixed with this value
     pub prefix: Vec<u8>,
-    tree: Shared<Tree<M>>,
+    tree: Shared<Tree>,
     conf: PrefixedConfig,
 }
 
@@ -48,8 +48,8 @@ macro_rules! with_key_prefix {
         &[&$self.prefix, &$self.conf.seperator, $key].concat()
     };
 }
-impl<M: CoreMem> Prefixed<M> {
-    pub(crate) fn new(prefix: &[u8], tree: Shared<Tree<M>>, conf: PrefixedConfig) -> Self {
+impl<M: CoreMem> Prefixed {
+    pub(crate) fn new(prefix: &[u8], tree: Shared<Tree>, conf: PrefixedConfig) -> Self {
         Self {
             prefix: prefix.to_vec(),
             tree,

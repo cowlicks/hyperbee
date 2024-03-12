@@ -12,10 +12,10 @@ use crate::{
 /// root.
 #[tracing::instrument(skip(changes, path))]
 pub async fn propagate_changes_up_tree<M: CoreMem>(
-    mut changes: Changes<M>,
-    mut path: NodePath<M>,
-    new_child: Child<M>,
-) -> Changes<M> {
+    mut changes: Changes,
+    mut path: NodePath,
+    new_child: Child,
+) -> Changes {
     let mut cur_child = new_child;
     loop {
         // this should add children to node
@@ -29,11 +29,11 @@ pub async fn propagate_changes_up_tree<M: CoreMem>(
     }
 }
 
-impl<M: CoreMem> Node<M> {
+impl<M: CoreMem> Node {
     /// Split an overfilled node into two nodes and a a key.
     /// Returning: `(left_lower_node, middle_key, right_higher_node)`
     #[tracing::instrument(skip(self))]
-    async fn split(&mut self) -> (SharedNode<M>, KeyValue, SharedNode<M>) {
+    async fn split(&mut self) -> (SharedNode, KeyValue, SharedNode) {
         let key_median_index = self.keys.len() >> 1;
         let children_median_index = self.children.len().await >> 1;
         trace!(
@@ -64,7 +64,7 @@ impl<M: CoreMem> Node<M> {
 fn cas_always_true(_prev: Option<&KeyValueData>, _next: &KeyValueData) -> bool {
     true
 }
-impl<M: CoreMem> Tree<M> {
+impl<M: CoreMem> Tree {
     #[tracing::instrument(level = "trace", skip(self, cas), ret)]
     pub async fn put_compare_and_swap(
         &self,
@@ -76,9 +76,9 @@ impl<M: CoreMem> Tree<M> {
         let maybe_root = self.get_root(true).await?;
 
         let seq = self.version().await;
-        let mut changes: Changes<M> = Changes::new(seq, key, value);
+        let mut changes: Changes = Changes::new(seq, key, value);
         let mut cur_key = KeyValue::new(seq);
-        let mut children: Vec<Child<M>> = vec![];
+        let mut children: Vec<Child> = vec![];
 
         let new_key_data = KeyValueData {
             seq,
