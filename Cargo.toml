@@ -25,7 +25,6 @@ path = "uniffi-bindgen.rs"
 
 [features]
 default = []
-clib = ["tokio/rt-multi-thread", "dep:libc"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -34,7 +33,6 @@ async-trait = "0.1.77"
 derive_builder = "0.12.0"
 futures-lite = "2.1.0"
 hypercore = "0.12.1"
-libc = { version = "0.2.153", optional = true }
 prost = "0.12.1"
 random-access-disk = "3.0.0"
 random-access-memory = "3.0.0"
