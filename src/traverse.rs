@@ -140,7 +140,7 @@ impl Default for TraverseConfig {
 /// We don't care about the other bounding value here because that is handled within the Traverse
 /// logic.
 #[allow(clippy::collapsible_else_if)]
-async fn make_child_key_index_iter<M: CoreMem>(
+async fn make_child_key_index_iter(
     conf: TraverseConfig,
     node: SharedNode,
     n_keys: usize,
@@ -270,7 +270,7 @@ pub(crate) struct Traverse<'a, M: CoreMem> {
     child_stream: Option<Pin<Box<Traverse<'a, M>>>>,
 }
 
-impl<M: CoreMem> Traverse<'_, M> {
+impl Traverse<'_, M> {
     /// Create [`Traverse`] struct and to traverse the provided `node` based on the provided
     /// [`TraverseConfig`]
     pub fn new(note: SharedNode, config: TraverseConfig) -> Self {
@@ -289,14 +289,14 @@ impl<M: CoreMem> Traverse<'_, M> {
 }
 
 /// Return the tuple (number_of_keys, number_of_children) for the given node
-async fn get_n_keys_and_children<M: CoreMem>(node: SharedNode) -> (usize, usize) {
+async fn get_n_keys_and_children(node: SharedNode) -> (usize, usize) {
     (
         node.read().await.keys.len(),
         node.read().await.n_children().await,
     )
 }
 
-async fn get_key_and_value<M: CoreMem>(node: SharedNode, index: usize) -> KeyDataResult {
+async fn get_key_and_value(node: SharedNode, index: usize) -> KeyDataResult {
     node.read().await.get_key_value(index).await
 }
 
@@ -452,7 +452,7 @@ impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
 static LEADER: &str = "\t";
 
 /// Print the keys of the provided node and it's descendents as a tree
-pub(crate) async fn print<M: CoreMem>(node: SharedNode) -> Result<String, HyperbeeError> {
+pub(crate) async fn print(node: SharedNode) -> Result<String, HyperbeeError> {
     let starting_height = node.read().await.height().await?;
     let mut out = "".to_string();
     let stream = Traverse::new(node, TraverseConfig::default());

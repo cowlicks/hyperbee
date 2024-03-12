@@ -43,7 +43,7 @@ fn interleave<T: Clone>(a: &[T], b: &[T]) -> Vec<T> {
 }
 
 #[async_recursion::async_recursion(?Send)]
-pub async fn check_node<M: CoreMem>(node: SharedNode) {
+pub async fn check_node(node: SharedNode) {
     let (n_keys, n_children) = {
         let r_node = node.read().await;
         (r_node.keys.len(), r_node.n_children().await)
@@ -107,7 +107,7 @@ pub async fn check_node<M: CoreMem>(node: SharedNode) {
 /// * # keys + 1 == # children unless this is a leaf node
 /// * key's keys are between the nodes
 /// * all children respect these invariants
-pub async fn check_tree<M: CoreMem>(hb: Tree) -> Result<Tree, Box<dyn std::error::Error>> {
+pub async fn check_tree(hb: Tree) -> Result<Tree, Box<dyn std::error::Error>> {
     let root = hb
         .get_root(false)
         .await?

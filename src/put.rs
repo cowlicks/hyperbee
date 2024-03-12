@@ -11,7 +11,7 @@ use crate::{
 /// After making changes to a tree, this function updates parent references all the way to the
 /// root.
 #[tracing::instrument(skip(changes, path))]
-pub async fn propagate_changes_up_tree<M: CoreMem>(
+pub async fn propagate_changes_up_tree(
     mut changes: Changes,
     mut path: NodePath,
     new_child: Child,
@@ -29,7 +29,7 @@ pub async fn propagate_changes_up_tree<M: CoreMem>(
     }
 }
 
-impl<M: CoreMem> Node {
+impl Node {
     /// Split an overfilled node into two nodes and a a key.
     /// Returning: `(left_lower_node, middle_key, right_higher_node)`
     #[tracing::instrument(skip(self))]
@@ -64,7 +64,7 @@ impl<M: CoreMem> Node {
 fn cas_always_true(_prev: Option<&KeyValueData>, _next: &KeyValueData) -> bool {
     true
 }
-impl<M: CoreMem> Tree {
+impl Tree {
     #[tracing::instrument(level = "trace", skip(self, cas), ret)]
     pub async fn put_compare_and_swap(
         &self,

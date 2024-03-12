@@ -21,11 +21,11 @@ use super::{tree::Tree, CoreMem, Shared};
 /// iterators](Hyperbee::traverse), and ["sub" B-Trees](Hyperbee::sub) for grouping related data.
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
-pub struct Hyperbee<M: CoreMem> {
+pub struct Hyperbee {
     tree: Shared<Tree>,
 }
 
-impl<M: CoreMem> Hyperbee {
+impl Hyperbee {
     /// The number of blocks in the hypercore.
     /// The first block is always the header block so:
     /// `version` would be the `seq` of the next block

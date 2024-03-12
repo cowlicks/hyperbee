@@ -15,14 +15,14 @@ use crate::{
 #[derive(Builder, Debug)]
 #[builder(pattern = "owned", derive(Debug))]
 /// Interface to the underlying Hypercore
-pub struct Blocks<M: CoreMem> {
+pub struct Blocks {
     #[builder(default)]
     // TODO make the cache smarter. Allow setting max size and strategy
     cache: Shared<BTreeMap<u64, Shared<BlockEntry>>>,
     core: Arc<Mutex<Hypercore>>,
 }
 
-impl<M: CoreMem> Blocks {
+impl Blocks {
     /// Get a BlockEntry for the given `seq`
     /// # Errors
     /// when the provided `seq` is not in the Hypercore

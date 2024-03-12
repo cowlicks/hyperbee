@@ -22,11 +22,11 @@ use tokio::sync::{Mutex, RwLock};
 /// library](https://docs.holepunch.to/building-blocks/hyperbee)
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
-pub struct Tree<M: CoreMem> {
+pub struct Tree {
     pub blocks: Shared<Blocks>,
 }
 
-impl<M: CoreMem> Tree {
+impl Tree {
     /// The number of blocks in the hypercore.
     /// The first block is always the header block so:
     /// `version` would be the `seq` of the next block
@@ -182,7 +182,7 @@ impl Tree<random_access_memory::RandomAccessMemory> {
     }
 }
 
-impl<M: CoreMem> Clone for Tree {
+impl Clone for Tree {
     fn clone(&self) -> Self {
         Self {
             blocks: self.blocks.clone(),

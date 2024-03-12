@@ -3,7 +3,7 @@ use crate::{Child, CoreMem, SharedNode};
 #[derive(Debug, Default)]
 /// Structure to store in-progress changes to the [`Hyperbee`]
 /// NB: because of how hyperbee-js works, we need to distinguish between root/non-root nodes.
-pub(crate) struct Changes<M: CoreMem> {
+pub(crate) struct Changes {
     seq: u64,
     pub key: Vec<u8>,
     pub value: Option<Vec<u8>>,
@@ -11,7 +11,7 @@ pub(crate) struct Changes<M: CoreMem> {
     pub root: Option<SharedNode>,
 }
 
-impl<M: CoreMem> Changes {
+impl Changes {
     pub fn new(seq: u64, key: &[u8], value: Option<&[u8]>) -> Self {
         Self {
             seq,

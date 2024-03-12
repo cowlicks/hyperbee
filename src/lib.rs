@@ -73,7 +73,7 @@ pub struct KeyValueData {
 
 #[derive(Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
-struct Child<M: CoreMem> {
+struct Child {
     /// Index of the [`BlockEntry`] within the [`hypercore::Hypercore`] that contains the [`Node`]
     pub seq: u64,
     /// Index of the `Node` within the [`BlockEntry`] referenced by [`Child::seq`]
@@ -85,7 +85,7 @@ struct Child<M: CoreMem> {
 #[derive(Clone, Debug)]
 /// A "block" from a [`Hypercore`](hypercore::Hypercore) deserialized into the form used in
 /// Hyperbee
-struct BlockEntry<M: CoreMem> {
+struct BlockEntry {
     /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
     nodes: Vec<SharedNode>,
     /// NodeSchema::new(hypercore.get(seq)).key
@@ -99,14 +99,14 @@ type SharedNode<T> = Shared<Node<T>>;
 type NodePath<T> = Vec<(SharedNode<T>, usize)>;
 
 #[derive(Debug)]
-struct Children<M: CoreMem> {
+struct Children {
     blocks: Shared<Blocks>,
     children: RwLock<Vec<Child>>,
 }
 
 /// A node of the B-Tree within the [`Hyperbee`]
 #[derive(Debug)]
-struct Node<M: CoreMem> {
+struct Node {
     keys: Vec<KeyValue>,
     children: Children,
     blocks: Shared<Blocks>,
@@ -118,7 +118,7 @@ impl KeyValue {
     }
 }
 
-impl<M: CoreMem> Child {
+impl Child {
     fn new(seq: u64, offset: u64, node: Option<SharedNode>) -> Self {
         Child {
             seq,
@@ -128,7 +128,7 @@ impl<M: CoreMem> Child {
     }
 }
 
-impl<M: CoreMem> Clone for Child {
+impl Clone for Child {
     fn clone(&self) -> Self {
         Self::new(self.seq, self.offset, self.cached_node.clone())
     }
@@ -157,7 +157,7 @@ fn make_node_vec<B: Buf, M: CoreMem>(
         .collect())
 }
 
-impl<M: CoreMem> Children {
+impl Children {
     fn new(blocks: Shared<Blocks>, children: Vec<Child>) -> Self {
         Self {
             blocks,
@@ -333,7 +333,7 @@ where
     }
 }
 
-impl<M: CoreMem> Node {
+impl Node {
     fn new(keys: Vec<KeyValue>, children: Vec<Child>, blocks: Shared<Blocks>) -> Self {
         Node {
             keys,
@@ -421,7 +421,7 @@ impl<M: CoreMem> Node {
     }
 }
 
-impl<M: CoreMem> BlockEntry {
+impl BlockEntry {
     fn new(entry: messages::Node, blocks: Shared<Blocks>) -> Result<Self, HyperbeeError> {
         Ok(BlockEntry {
             nodes: make_node_vec(&entry.index[..], blocks)?,

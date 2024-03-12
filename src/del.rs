@@ -26,7 +26,7 @@ impl Side {
     /// This is just:
     /// match self { Right => index + 1, Left => index - 1 }
     /// but with bounds checking
-    async fn get_donor_index<M: CoreMem>(
+    async fn get_donor_index(
         &self,
         father: SharedNode,
         deficient_index: usize,
@@ -59,7 +59,7 @@ impl Side {
         }
     }
 
-    async fn get_donor_key<M: CoreMem>(&self, donor: SharedNode) -> KeyValue {
+    async fn get_donor_key(&self, donor: SharedNode) -> KeyValue {
         match self {
             Right => donor.write().await.keys.remove(0),
             Left => donor
@@ -71,7 +71,7 @@ impl Side {
         }
     }
 
-    async fn get_donor_child<M: CoreMem>(&self, donor: SharedNode) -> Option<Child> {
+    async fn get_donor_child(&self, donor: SharedNode) -> Option<Child> {
         if donor.read().await.is_leaf().await {
             return None;
         }
@@ -89,7 +89,7 @@ impl Side {
         })
     }
 
-    async fn swap_donor_key_in_father<M: CoreMem>(
+    async fn swap_donor_key_in_father(
         &self,
         father: SharedNode,
         deficient_index: usize,
@@ -106,7 +106,7 @@ impl Side {
             .expect("one val removed in splice")
     }
 
-    async fn insert_donations_into_deficient_child<M: CoreMem>(
+    async fn insert_donations_into_deficient_child(
         &self,
         deficient_child: SharedNode,
         key: KeyValue,
@@ -142,7 +142,7 @@ impl Side {
         }
     }
 
-    async fn can_rotate<M: CoreMem>(
+    async fn can_rotate(
         &self,
         father: SharedNode,
         deficient_index: usize,
@@ -169,7 +169,7 @@ impl Side {
         }
     }
 
-    async fn rotate<M: CoreMem>(
+    async fn rotate(
         &self,
         father: SharedNode,
         deficient_index: usize,
@@ -206,7 +206,7 @@ impl Side {
         Ok(father)
     }
 
-    async fn maybe_rotate<M: CoreMem>(
+    async fn maybe_rotate(
         &self,
         father: SharedNode,
         deficient_index: usize,
@@ -226,7 +226,7 @@ impl Side {
     }
 
     #[tracing::instrument(skip(self, father, changes))]
-    async fn maybe_merge<M: CoreMem>(
+    async fn maybe_merge(
         &self,
         father: SharedNode,
         deficient_index: usize,
@@ -294,7 +294,7 @@ impl Side {
 
 #[tracing::instrument(skip(father, changes))]
 /// The orering of the kinds of repairs here is choosen to match the Hyperbee-js implementation
-async fn repair_one<M: CoreMem>(
+async fn repair_one(
     father: SharedNode,
     deficient_index: usize,
     order: usize,
@@ -328,7 +328,7 @@ async fn repair_one<M: CoreMem>(
 }
 /// must be given a path who's last element has a deficient child...
 #[tracing::instrument(skip(path, changes))]
-async fn repair<M: CoreMem>(
+async fn repair(
     path: &mut NodePath,
     order: usize,
     changes: &mut Changes,
@@ -374,7 +374,7 @@ fn cas_always_true(_kv: &KeyValueData) -> bool {
     true
 }
 
-impl<M: CoreMem> Tree {
+impl Tree {
     pub async fn del_compare_and_swap(
         &self,
         key: &[u8],

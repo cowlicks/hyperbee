@@ -33,7 +33,7 @@ impl Default for PrefixedConfig {
 
 /// A "sub" [`Hyperbee`](crate::Hyperbee), which can be used for grouping data. [`get`](Self::get), [`put`](Self::put), [`del`](Self::del), [`traverse`](Self::traverse) operations are automatically prefixed
 /// with [`Prefixed::prefix`] + [`PrefixedConfig::seperator`] where appropriate.
-pub struct Prefixed<M: CoreMem> {
+pub struct Prefixed {
     /// All keys inserted with [`Prefixed::put`] are prefixed with this value
     pub prefix: Vec<u8>,
     tree: Shared<Tree>,
@@ -48,7 +48,7 @@ macro_rules! with_key_prefix {
         &[&$self.prefix, &$self.conf.seperator, $key].concat()
     };
 }
-impl<M: CoreMem> Prefixed {
+impl Prefixed {
     pub(crate) fn new(prefix: &[u8], tree: Shared<Tree>, conf: PrefixedConfig) -> Self {
         Self {
             prefix: prefix.to_vec(),
