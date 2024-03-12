@@ -26,7 +26,6 @@ use std::{
 };
 
 use prost::{bytes::Buf, DecodeError, Message};
-use random_access_storage::RandomAccess;
 use tokio::sync::RwLock;
 use tracing::trace;
 
@@ -38,10 +37,6 @@ use tree::Tree;
 pub use error::HyperbeeError;
 pub use hb::{Hyperbee, HyperbeeBuilder, HyperbeeBuilderError};
 pub use messages::header::Metadata;
-
-// TODO document
-pub trait CoreMem: RandomAccess + Debug + Send {}
-impl<T: RandomAccess + Debug + Send> CoreMem for T {}
 
 /// Same value as JS hyperbee https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L663
 static PROTOCOL: &str = "hyperbee";
@@ -95,8 +90,8 @@ struct BlockEntry {
 }
 
 type Shared<T> = Arc<RwLock<T>>;
-type SharedNode<T> = Shared<Node<T>>;
-type NodePath<T> = Vec<(SharedNode<T>, usize)>;
+type SharedNode = Shared<Node>;
+type NodePath = Vec<(SharedNode, usize)>;
 
 #[derive(Debug)]
 struct Children {
@@ -135,10 +130,7 @@ impl Clone for Child {
 }
 
 /// Deserialize bytes from a Hypercore block into [`Node`]s.
-fn make_node_vec<B: Buf, M: CoreMem>(
-    buf: B,
-    blocks: Shared<Blocks>,
-) -> Result<Vec<SharedNode>, DecodeError> {
+fn make_node_vec<B: Buf>(buf: B, blocks: Shared<Blocks>) -> Result<Vec<SharedNode>, DecodeError> {
     Ok(YoloIndex::decode(buf)?
         .levels
         .iter()
@@ -242,7 +234,7 @@ impl Children {
 ///         the index within this `node`'s keys where the `key` wolud be inserted
 /// if `matched` is Some:
 ///     the index within this `node`'s keys of the `key`
-async fn get_index_of_key<M: CoreMem, T>(
+async fn get_index_of_key<T>(
     node: SharedNode,
     key: &T,
 ) -> Result<(Option<u64>, usize), HyperbeeError>
@@ -307,7 +299,7 @@ where
 /// `key` would be ineserted. Or for `matched = true` the index of the matched key in the nodes's
 /// keys.
 #[tracing::instrument(skip(node))]
-async fn nearest_node<M: CoreMem, T>(
+async fn nearest_node<T>(
     node: SharedNode,
     key: &T,
 ) -> Result<(Option<u64>, NodePath), HyperbeeError>

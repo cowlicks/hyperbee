@@ -1,6 +1,6 @@
 use crate::{
     changes::Changes, keys::InfiniteKeys, min_keys, nearest_node, put::propagate_changes_up_tree,
-    Child, CoreMem, HyperbeeError, KeyValue, KeyValueData, NodePath, SharedNode, Tree, MAX_KEYS,
+    Child, HyperbeeError, KeyValue, KeyValueData, NodePath, SharedNode, Tree, MAX_KEYS,
 };
 
 use Side::{Left, Right};
@@ -26,11 +26,7 @@ impl Side {
     /// This is just:
     /// match self { Right => index + 1, Left => index - 1 }
     /// but with bounds checking
-    async fn get_donor_index(
-        &self,
-        father: SharedNode,
-        deficient_index: usize,
-    ) -> Option<usize> {
+    async fn get_donor_index(&self, father: SharedNode, deficient_index: usize) -> Option<usize> {
         match *self {
             Left => {
                 if deficient_index == 0 {

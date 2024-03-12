@@ -11,9 +11,7 @@ use derive_builder::Builder;
 use futures_lite::{future::FutureExt, StreamExt};
 use tokio_stream::Stream;
 
-use crate::{
-    get_index_of_key, keys::InfiniteKeys, CoreMem, HyperbeeError, KeyValueData, SharedNode,
-};
+use crate::{get_index_of_key, keys::InfiniteKeys, HyperbeeError, KeyValueData, SharedNode};
 
 type PinnedFut<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
@@ -244,7 +242,7 @@ impl TraverseConfig {
 /// Struct used for iterating over hyperbee with a Stream.
 /// Each iteration yields the key it's value, and the "seq" for the value (the index of the value
 /// in the hypercore).
-pub(crate) struct Traverse<'a, M: CoreMem> {
+pub(crate) struct Traverse<'a> {
     /// Configuration for the traversal
     config: TraverseConfig,
     /// The current node
@@ -265,12 +263,12 @@ pub(crate) struct Traverse<'a, M: CoreMem> {
     /// Future holding the next key
     next_key: Option<PinnedFut<'a, KeyDataResult>>,
     /// Future holding the next child
-    next_child: Option<PinnedFut<'a, Result<Traverse<'a, M>, HyperbeeError>>>,
+    next_child: Option<PinnedFut<'a, Result<Traverse<'a>, HyperbeeError>>>,
     /// Another instance of [`Traverse`] from a child node.
-    child_stream: Option<Pin<Box<Traverse<'a, M>>>>,
+    child_stream: Option<Pin<Box<Traverse<'a>>>>,
 }
 
-impl Traverse<'_, M> {
+impl Traverse<'_> {
     /// Create [`Traverse`] struct and to traverse the provided `node` based on the provided
     /// [`TraverseConfig`]
     pub fn new(note: SharedNode, config: TraverseConfig) -> Self {
@@ -301,16 +299,16 @@ async fn get_key_and_value(node: SharedNode, index: usize) -> KeyDataResult {
 }
 
 #[tracing::instrument]
-async fn get_child_stream<'a, M: CoreMem>(
+async fn get_child_stream<'a>(
     node: SharedNode,
     index: usize,
     config: TraverseConfig, // TODO should be reference
-) -> Result<Traverse<'a, M>, HyperbeeError> {
+) -> Result<Traverse<'a>, HyperbeeError> {
     let child = node.read().await.get_child(index).await?;
     Ok(Traverse::new(child, config))
 }
 
-impl<'a, M: CoreMem + 'a> Stream for Traverse<'a, M> {
+impl<'a> Stream for Traverse<'a> {
     type Item = TreeItem;
     #[tracing::instrument(skip(self, cx))]
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

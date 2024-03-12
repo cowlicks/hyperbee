@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use tokio::sync::OnceCell;
 
-use crate::{min_keys, CoreMem, SharedNode, Tree, MAX_KEYS};
+use crate::{min_keys, SharedNode, Tree, MAX_KEYS};
 
 #[allow(dead_code)]
 static INIT_LOG: OnceCell<()> = OnceCell::const_new();
@@ -147,7 +147,6 @@ macro_rules! hb_put {
     ( $contents:expr ) => {
         async move {
             use crate::{HyperbeeError, Tree};
-            use random_access_memory::RandomAccessMemory;
             let hb = Tree::from_ram().await?;
             let mut keys = vec![];
             for i in $contents {
@@ -156,7 +155,7 @@ macro_rules! hb_put {
                 let val: Option<&[u8]> = Some(&key);
                 hb.put(&&key, val).await?;
             }
-            Ok::<(Tree<RandomAccessMemory>, Vec<Vec<u8>>), HyperbeeError>((hb, keys))
+            Ok::<(Tree, Vec<Vec<u8>>), HyperbeeError>((hb, keys))
         }
     };
 }

@@ -1,4 +1,4 @@
-use crate::{Child, CoreMem, SharedNode};
+use crate::{Child, SharedNode};
 
 #[derive(Debug, Default)]
 /// Structure to store in-progress changes to the [`Hyperbee`]

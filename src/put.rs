@@ -4,8 +4,8 @@ use tokio::sync::RwLock;
 use tracing::trace;
 
 use crate::{
-    changes::Changes, nearest_node, Child, CoreMem, HyperbeeError, KeyValue, KeyValueData, Node,
-    NodePath, SharedNode, Tree, MAX_KEYS,
+    changes::Changes, nearest_node, Child, HyperbeeError, KeyValue, KeyValueData, Node, NodePath,
+    SharedNode, Tree, MAX_KEYS,
 };
 
 /// After making changes to a tree, this function updates parent references all the way to the

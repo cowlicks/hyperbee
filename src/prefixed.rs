@@ -10,7 +10,7 @@ use crate::{
         LimitValue::{Finite, Infinite},
         TraverseConfig,
     },
-    CoreMem, KeyValueData, Shared, Tree,
+    KeyValueData, Shared, Tree,
 };
 
 pub static DEFAULT_PREFIXED_SEPERATOR: &[u8; 1] = b"\0";
@@ -128,10 +128,7 @@ impl Prefixed {
     pub async fn traverse<'a>(
         &self,
         conf: &TraverseConfig,
-    ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError>
-    where
-        M: 'a,
-    {
+    ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError> {
         let end_of_prefix = increment_bytes(&self.prefix);
 
         let (min_value, min_inclusive) = match &conf.min_value {
