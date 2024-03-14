@@ -1,45 +1,51 @@
 use crate::{Hyperbee, HyperbeeError};
 
-#[derive(uniffi::Object)]
-// TODO should this be pub?
-pub struct DiskBee(Hyperbee);
-
-#[derive(uniffi::Record)]
+#[derive(Debug, uniffi::Record)]
 pub struct Gotten {
-    seq: u64,
-    value: Option<Vec<u8>>,
+    pub seq: u64,
+    pub value: Option<Vec<u8>>,
 }
 
-#[derive(uniffi::Record)]
+impl Gotten {
+    fn new(seq: u64, value: Option<Vec<u8>>) -> Self {
+        Self { seq, value }
+    }
+}
+
+#[derive(Debug, uniffi::Record)]
 pub struct Putten {
-    old_seq: Option<u64>,
-    new_seq: u64,
+    pub old_seq: Option<u64>,
+    pub new_seq: u64,
+}
+
+impl Putten {
+    fn new(old_seq: Option<u64>, new_seq: u64) -> Self {
+        Self { old_seq, new_seq }
+    }
 }
 
 #[uniffi::export]
-pub async fn hb_from_disk(path_to_storage_dir: &str) -> DiskBee {
-    let hb = Hyperbee::from_storage_dir(path_to_storage_dir)
-        .await
-        .unwrap();
-    DiskBee(hb)
-}
-
-#[uniffi::export]
-impl DiskBee {
-    pub async fn get(&self, key: &[u8]) -> Result<Option<Gotten>, HyperbeeError> {
+impl Hyperbee {
+    // TODO https://github.com/mozilla/uniffi-rs/issues/2031#issuecomment-1998464424
+    // use git version to rename these
+    async fn ffi_get(&self, key: &[u8]) -> Result<Option<Gotten>, HyperbeeError> {
         Ok(self
-            .0
             .get(key)
             .await?
-            .map(|(seq, value)| Gotten { seq, value }))
+            .map(|(seq, value)| Gotten::new(seq, value)))
     }
 
-    pub async fn put(&self, key: &[u8], value: Option<Vec<u8>>) -> Result<Putten, HyperbeeError> {
-        let (old_seq, new_seq) = self.0.put(key, value.as_deref()).await?;
-        Ok(Putten { old_seq, new_seq })
+    async fn ffi_put(&self, key: &[u8], value: Option<Vec<u8>>) -> Result<Putten, HyperbeeError> {
+        let (old_seq, new_seq) = self.put(key, value.as_deref()).await?;
+        Ok(Putten::new(old_seq, new_seq))
     }
 
-    pub async fn del(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
-        self.0.del(key).await
+    pub async fn ffi_del(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
+        self.del(key).await
     }
+}
+
+#[uniffi::export]
+async fn hyperbee_from_ram() -> Result<Hyperbee, HyperbeeError> {
+    Hyperbee::from_ram().await
 }
