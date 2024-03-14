@@ -11,6 +11,7 @@ pub mod js;
 pub mod python;
 
 pub static PATH_TO_DATA_DIR: &str = "tests/common/js/data";
+pub static PATH_TO_C_LIB: &str = "target/debug/libhyperbee.so";
 
 macro_rules! join_paths {
     ( $path:expr$(,)?) => {
@@ -35,6 +36,10 @@ pub fn git_root() -> Result<String, Box<dyn std::error::Error>> {
         .arg("git rev-parse --show-toplevel")
         .output()?;
     Ok(String::from_utf8(x.stdout)?.trim().to_string())
+}
+
+pub fn path_to_c_lib() -> Result<String, Box<dyn std::error::Error>> {
+    Ok(join_paths!(git_root()?, PATH_TO_C_LIB))
 }
 
 pub fn get_data_dir() -> Result<String, Box<dyn std::error::Error>> {
@@ -84,14 +89,11 @@ pub fn run_code(
     }
     let script_path_str = script_path.display().to_string();
     let command_str = build_command(&working_dir_path, &script_path_str);
-    println!("{command_str}");
-    let out = Command::new("sh").arg("-c").arg(command_str).output()?;
-    dbg!(&out);
-    Ok(out)
+    Ok(Command::new("sh").arg("-c").arg(command_str).output()?)
 }
 
 pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output, Box<dyn std::error::Error>> {
-    let git_root = git_root()?;
-    let cmd = format!("cd {git_root} && cd {dir} && make {arg}");
+    let path = join_paths!(git_root()?, dir);
+    let cmd = format!("cd {path} && make {arg}");
     Ok(Command::new("sh").arg("-c").arg(cmd).output()?)
 }

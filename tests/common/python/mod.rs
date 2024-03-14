@@ -2,7 +2,7 @@ use std::{path::PathBuf, process::Output};
 
 use tempfile::tempdir;
 
-use super::{git_root, join_paths, run_code, run_make_from_with};
+use super::{git_root, join_paths, path_to_c_lib, run_code, run_make_from_with};
 
 static REL_PATH_TO_HERE: &str = "./tests/common/python";
 static PRE_SCRIPT: &str = "
@@ -34,11 +34,10 @@ pub fn run_python(script: &str) -> Result<Output, Box<dyn std::error::Error>> {
         POST_SCRIPT,
         "script.py",
         build_command,
-        vec![target_path],
+        vec![target_path, path_to_c_lib()?],
     )
 }
 
-pub fn require_python() -> Result<(), Box<dyn std::error::Error>> {
-    let _ = run_make_from_with(REL_PATH_TO_HERE, "")?;
-    Ok(())
+pub fn require_python() -> Result<Output, Box<dyn std::error::Error>> {
+    run_make_from_with(REL_PATH_TO_HERE, "")
 }
