@@ -89,3 +89,9 @@ pub fn run_code(
     dbg!(&out);
     Ok(out)
 }
+
+pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output, Box<dyn std::error::Error>> {
+    let git_root = git_root()?;
+    let cmd = format!("cd {git_root} && cd {dir} && make {arg}");
+    Ok(Command::new("sh").arg("-c").arg(cmd).output()?)
+}

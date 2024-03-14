@@ -1,20 +1,11 @@
-use super::{git_root, join_paths, run_code};
-use std::{
-    path::PathBuf,
-    process::{Command, Output},
-};
+use super::{git_root, join_paths, run_code, run_make_from_with};
+use std::{path::PathBuf, process::Output};
 use tempfile::TempDir;
 pub static REL_PATH_TO_NODE_MODULES: &str = "./tests/common/js/node_modules";
 pub static REL_PATH_TO_JS_DIR: &str = "./tests/common/JS";
 
-pub fn run_make_with(make_arg: &str) -> Result<Output, Box<dyn std::error::Error>> {
-    let git_root = git_root()?;
-    let cmd = format!("cd {git_root} && cd {REL_PATH_TO_JS_DIR} && make {make_arg}");
-    Ok(Command::new("sh").arg("-c").arg(cmd).output()?)
-}
-
 pub fn require_js_data() -> Result<(), Box<dyn std::error::Error>> {
-    let _ = run_make_with("")?;
+    let _ = run_make_from_with(REL_PATH_TO_JS_DIR, "")?;
     Ok(())
 }
 

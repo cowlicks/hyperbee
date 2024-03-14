@@ -2,7 +2,7 @@ mod common;
 
 use std::process::Output;
 
-use common::js::run_js_2;
+use common::js::run_js;
 use futures_lite::{Stream, StreamExt};
 use hyperbee::{
     traverse::{KeyDataResult, TraverseConfig},
@@ -46,7 +46,7 @@ async fn hello_world() -> Result<(), Box<dyn std::error::Error>> {
     hb.put(key, Some(b"world")).await?;
     let res = hb.get(b"hello").await?;
     assert_eq!(res, Some((1u64, Some(value.to_vec()))));
-    let output = run_js_2(
+    let output = run_js(
         &storage_dir,
         "
 const r = await hb.get('hello');
@@ -61,7 +61,7 @@ async fn zero_to_one_hundred() -> Result<(), Box<dyn std::error::Error>> {
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
     let keys = write_100!(&hb);
-    let output = run_js_2(
+    let output = run_js(
         &storage_dir,
         "
     const out = [];
@@ -82,11 +82,13 @@ async fn zero_to_one_hundred() -> Result<(), Box<dyn std::error::Error>> {
 async fn stream_in_same_order() -> Result<(), Box<dyn std::error::Error>> {
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
+
+    // setup test
     let _ = write_100!(&hb);
 
     let rust_res: Vec<Vec<u8>> = collect(hb.traverse(Default::default()).await?).await?;
 
-    let output = run_js_2(
+    let output = run_js(
         &storage_dir,
         "
     const out = [];
@@ -105,6 +107,8 @@ async fn stream_in_same_order() -> Result<(), Box<dyn std::error::Error>> {
 async fn sub_database() -> Result<(), Box<dyn std::error::Error>> {
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
+
+    // setup test
     let pref = b"pref";
     let sub = hb.sub(pref, Default::default());
 
@@ -112,7 +116,7 @@ async fn sub_database() -> Result<(), Box<dyn std::error::Error>> {
     let traverse_config = TraverseConfig::default();
     let rust_res: Vec<Vec<u8>> = collect(sub.traverse(&traverse_config).await?).await?;
 
-    let output = run_js_2(
+    let output = run_js(
         &storage_dir,
         "
     const out = [];

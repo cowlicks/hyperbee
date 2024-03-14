@@ -2,9 +2,9 @@ use std::{path::PathBuf, process::Output};
 
 use tempfile::tempdir;
 
-use super::{git_root, join_paths, run_code};
+use super::{git_root, join_paths, run_code, run_make_from_with};
 
-static REL_PATH_TO_PYTHON_TARGET: &str = "./tests/common/python/target";
+static REL_PATH_TO_HERE: &str = "./tests/common/python";
 static PRE_SCRIPT: &str = "
 import asyncio
 from target.hyperbee import *
@@ -20,7 +20,7 @@ fn build_command(working_dir: &str, script_path: &str) -> String {
 }
 
 pub fn path_to_python_target() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let p = join_paths!(git_root()?, &REL_PATH_TO_PYTHON_TARGET);
+    let p = join_paths!(&git_root()?, &REL_PATH_TO_HERE, "target");
     Ok(p.into())
 }
 
@@ -36,4 +36,9 @@ pub fn run_python(script: &str) -> Result<Output, Box<dyn std::error::Error>> {
         build_command,
         vec![target_path],
     )
+}
+
+pub fn require_python() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = run_make_from_with(REL_PATH_TO_HERE, "")?;
+    Ok(())
 }

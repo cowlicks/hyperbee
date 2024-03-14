@@ -1,8 +1,9 @@
 mod common;
-use common::python::run_python;
+use common::python::{require_python, run_python};
 
 #[tokio::test]
 async fn python() -> Result<(), Box<dyn std::error::Error>> {
+    require_python()?;
     let out = run_python(
         "
 async def main():
