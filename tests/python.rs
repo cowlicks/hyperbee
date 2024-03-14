@@ -3,11 +3,21 @@ use common::python::{require_python, run_python};
 
 #[tokio::test]
 async fn python() -> Result<(), Box<dyn std::error::Error>> {
-    require_python()?;
+    let x = require_python()?;
+    dbg!(&x);
     let out = run_python(
         "
 async def main():
-    print('yo')
+    hb = await hyperbee_from_ram()
+    x = await hb.ffi_put(b'hello', b'world')
+    assert(x.old_seq, None)
+    assert(x.new_seq, 1)
+
+    x = await hb.ffi_get(b'hello')
+    assert(x.value == b'world')
+
+    x = await hb.ffi_del(b'hello')
+    assert(x, 1)
 ",
     )?;
     dbg!(&out);
