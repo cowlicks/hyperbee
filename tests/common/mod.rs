@@ -54,7 +54,8 @@ pub fn run_code(
     script: &str,
     post_script: &str,
     script_file_name: &str,
-    build_command: impl FnOnce(&str) -> String,
+    build_command: impl FnOnce(&str, &str) -> String,
+    copy_dirs: Vec<String>,
 ) -> Result<Output, Box<dyn std::error::Error>> {
     let storage_dir_name = format!("{}", storage_dir.path().display());
     let pre_script = build_pre_script(&storage_dir_name);
@@ -72,8 +73,17 @@ pub fn run_code(
     let script_file = File::create(&script_path)?;
     write!(&script_file, "{}", &code)?;
 
+    let working_dir_path = working_dir.path().display().to_string();
+    // copy dirs into working dir
+    for dir in copy_dirs {
+        let _ = Command::new("cp")
+            .arg("-r")
+            .arg(dir)
+            .arg(&working_dir_path)
+            .output()?;
+    }
     let script_path_str = script_path.display().to_string();
-    let command_str = build_command(&script_path_str);
+    let command_str = build_command(&working_dir_path, &script_path_str);
     println!("{command_str}");
     let out = Command::new("sh").arg("-c").arg(command_str).output()?;
     dbg!(&out);

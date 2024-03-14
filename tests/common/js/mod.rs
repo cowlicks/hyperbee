@@ -1,7 +1,5 @@
 use super::{git_root, join_paths, run_code};
 use std::{
-    fs::File,
-    io::Write,
     path::PathBuf,
     process::{Command, Output},
 };
@@ -31,7 +29,7 @@ static POST_SCRIPT: &str = "
 
 static SCRIPT_FILE_NAME: &str = "script.js";
 
-fn build_command(script_path: &str) -> String {
+fn build_command(_working_dir: &str, script_path: &str) -> String {
     format!(
         "NODE_PATH={} node {}",
         path_to_node_modules().unwrap().display(),
@@ -53,7 +51,7 @@ const hb = new Hyperbee(core);
     )
 }
 
-pub fn run_js_2(storage_dir: &TempDir, script: &str) -> Result<Output, Box<dyn std::error::Error>> {
+pub fn run_js(storage_dir: &TempDir, script: &str) -> Result<Output, Box<dyn std::error::Error>> {
     run_code(
         storage_dir,
         build_pre_script,
@@ -61,37 +59,6 @@ pub fn run_js_2(storage_dir: &TempDir, script: &str) -> Result<Output, Box<dyn s
         POST_SCRIPT,
         SCRIPT_FILE_NAME,
         build_command,
+        vec![],
     )
-}
-
-pub fn run_js(storage_dir: &TempDir, script: &str) -> Result<Output, Box<dyn std::error::Error>> {
-    let js_dir = tempfile::tempdir()?;
-    let js_code = format!(
-        "
-const Hypercore = require('hypercore');
-const Hyperbee = require('hyperbee');
-const storageDir = \'{}\';
-const core = new Hypercore(storageDir, {{writable: false}});
-const hb = new Hyperbee(core);
-(async() => {{
-    const write = (x) => process.stdout.write(x);
-    await hb.ready();
-    {};
-}})()
-",
-        storage_dir.path().display(),
-        script,
-    );
-    let js_file_path = js_dir.path().join("script.js");
-    let js_file = File::create(&js_file_path)?;
-    write!(&js_file, "{}", &js_code)?;
-
-    Ok(Command::new("sh")
-        .arg("-c")
-        .arg(format!(
-            "NODE_PATH={} node {}",
-            path_to_node_modules()?.display(),
-            js_file_path.display()
-        ))
-        .output()?)
 }
