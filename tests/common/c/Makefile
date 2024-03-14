@@ -9,7 +9,7 @@ endif
 include ../vars.mk
 
 # Buid the executable linking object file to Rust FFI library
-target/hyperbee: target/test.o $(ROOT)/target/debug/libhyperbee.so
+target/hyperbee: target/test.o $(C_LIB_PATH)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 target:
@@ -19,10 +19,6 @@ target:
 target/test.o: test.c | target
 	$(CC) -o $@ -c $<
 
-# Build Rust FFI library
-$(C_LIB_PATH): $(RS_SOURCES) $(ROOT)/Cargo.toml
-	cd $(ROOT) && cargo build -F clib
-
 test: target/hyperbee
 	target/hyperbee
 
@@ -30,3 +26,5 @@ clean:
 	rm -rf target
 
 .PHONY := test clean
+
+include ../Makefile
