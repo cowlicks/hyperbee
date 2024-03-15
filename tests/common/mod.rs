@@ -6,6 +6,9 @@ use std::{
     io::Write,
     process::{Command, Output},
 };
+
+use tempfile::TempDir;
+
 pub mod c;
 pub mod js;
 pub mod python;
@@ -28,7 +31,6 @@ macro_rules! join_paths {
 }
 
 pub(crate) use join_paths;
-use tempfile::TempDir;
 
 pub fn git_root() -> Result<String, Box<dyn std::error::Error>> {
     let x = Command::new("sh")
@@ -97,3 +99,28 @@ pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output, Box<dyn std::e
     let cmd = format!("cd {path} && make {arg}");
     Ok(Command::new("sh").arg("-c").arg(cmd).output()?)
 }
+
+pub fn parse_json_result(output: &Output) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
+    let stdout = String::from_utf8(output.stdout.clone())?;
+    let res: Vec<String> = serde_json::from_str(&stdout)?;
+    Ok(res.into_iter().map(|x| x.into()).collect())
+}
+
+#[allow(unused_macros)]
+macro_rules! write_100 {
+    ($hb:expr) => {{
+        let hb = $hb;
+        let keys: Vec<Vec<u8>> = (0..100)
+            .map(|x| x.clone().to_string().as_bytes().to_vec())
+            .collect();
+
+        for k in keys.iter() {
+            let val: Option<&[u8]> = Some(k);
+            hb.put(k, val).await?;
+        }
+        keys
+    }};
+}
+
+#[allow(unused_imports)]
+pub(crate) use write_100;
