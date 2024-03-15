@@ -9,7 +9,7 @@ use crate::{
     messages::{header::Metadata, Header},
     nearest_node,
     traverse::{self, KeyDataResult, Traverse, TraverseConfig},
-    CoreMem, Node, Shared, PROTOCOL,
+    Node, Shared, PROTOCOL,
 };
 use std::{
     path::{Path, PathBuf},
@@ -22,11 +22,11 @@ use tokio::sync::{Mutex, RwLock};
 /// library](https://docs.holepunch.to/building-blocks/hyperbee)
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
-pub struct Tree<M: CoreMem> {
-    pub blocks: Shared<Blocks<M>>,
+pub struct Tree {
+    pub blocks: Shared<Blocks>,
 }
 
-impl<M: CoreMem> Tree<M> {
+impl Tree {
     /// The number of blocks in the hypercore.
     /// The first block is always the header block so:
     /// `version` would be the `seq` of the next block
@@ -39,7 +39,7 @@ impl<M: CoreMem> Tree<M> {
     pub(crate) async fn get_root(
         &self,
         ensure_header: bool,
-    ) -> Result<Option<Shared<Node<M>>>, HyperbeeError> {
+    ) -> Result<Option<Shared<Node>>, HyperbeeError> {
         let blocks = self.blocks.read().await;
         let version = self.version().await;
         if version <= 1 {
@@ -131,10 +131,7 @@ impl<M: CoreMem> Tree<M> {
     pub async fn traverse<'a>(
         &self,
         conf: TraverseConfig,
-    ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError>
-    where
-        M: 'a,
-    {
+    ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError> {
         let root = self
             .get_root(false)
             .await?
@@ -142,9 +139,7 @@ impl<M: CoreMem> Tree<M> {
         let stream = Traverse::new(root, conf);
         Ok(stream.map(move |kv_and_node| kv_and_node.0))
     }
-}
 
-impl Tree<random_access_disk::RandomAccessDisk> {
     /// Helper for creating a Hyperbee
     /// # Panics
     /// when storage path is incorrect
@@ -155,7 +150,7 @@ impl Tree<random_access_disk::RandomAccessDisk> {
     /// when Hyperbee fails to build
     pub async fn from_storage_dir<T: AsRef<Path>>(
         path_to_storage_dir: T,
-    ) -> Result<Tree<random_access_disk::RandomAccessDisk>, HyperbeeError> {
+    ) -> Result<Tree, HyperbeeError> {
         let p: PathBuf = path_to_storage_dir.as_ref().to_owned();
         let storage = Storage::new_disk(&p, false).await?;
         let hc = Arc::new(Mutex::new(HypercoreBuilder::new(storage).build().await?));
@@ -164,12 +159,8 @@ impl Tree<random_access_disk::RandomAccessDisk> {
             .blocks(Arc::new(RwLock::new(blocks)))
             .build()?)
     }
-}
-
-impl Tree<random_access_memory::RandomAccessMemory> {
     /// Helper for creating a Hyperbee in RAM
-    pub async fn from_ram() -> Result<Tree<random_access_memory::RandomAccessMemory>, HyperbeeError>
-    {
+    pub async fn from_ram() -> Result<Tree, HyperbeeError> {
         let hc = Arc::new(Mutex::new(
             HypercoreBuilder::new(Storage::new_memory().await?)
                 .build()
@@ -182,7 +173,7 @@ impl Tree<random_access_memory::RandomAccessMemory> {
     }
 }
 
-impl<M: CoreMem> Clone for Tree<M> {
+impl Clone for Tree {
     fn clone(&self) -> Self {
         Self {
             blocks: self.blocks.clone(),

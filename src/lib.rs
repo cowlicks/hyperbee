@@ -26,7 +26,6 @@ use std::{
 };
 
 use prost::{bytes::Buf, DecodeError, Message};
-use random_access_storage::RandomAccess;
 use tokio::sync::RwLock;
 use tracing::trace;
 
@@ -38,10 +37,6 @@ use tree::Tree;
 pub use error::HyperbeeError;
 pub use hb::{Hyperbee, HyperbeeBuilder, HyperbeeBuilderError};
 pub use messages::header::Metadata;
-
-// TODO document
-pub trait CoreMem: RandomAccess + Debug + Send {}
-impl<T: RandomAccess + Debug + Send> CoreMem for T {}
 
 /// Same value as JS hyperbee https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L663
 static PROTOCOL: &str = "hyperbee";
@@ -73,21 +68,21 @@ pub struct KeyValueData {
 
 #[derive(Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
-struct Child<M: CoreMem> {
+struct Child {
     /// Index of the [`BlockEntry`] within the [`hypercore::Hypercore`] that contains the [`Node`]
     pub seq: u64,
     /// Index of the `Node` within the [`BlockEntry`] referenced by [`Child::seq`]
     pub offset: u64,
     /// Cache of the child node
-    cached_node: Option<SharedNode<M>>,
+    cached_node: Option<SharedNode>,
 }
 
 #[derive(Clone, Debug)]
 /// A "block" from a [`Hypercore`](hypercore::Hypercore) deserialized into the form used in
 /// Hyperbee
-struct BlockEntry<M: CoreMem> {
+struct BlockEntry {
     /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
-    nodes: Vec<SharedNode<M>>,
+    nodes: Vec<SharedNode>,
     /// NodeSchema::new(hypercore.get(seq)).key
     key: Vec<u8>,
     /// NodeSchema::new(hypercore.get(seq)).value
@@ -95,21 +90,21 @@ struct BlockEntry<M: CoreMem> {
 }
 
 type Shared<T> = Arc<RwLock<T>>;
-type SharedNode<T> = Shared<Node<T>>;
-type NodePath<T> = Vec<(SharedNode<T>, usize)>;
+type SharedNode = Shared<Node>;
+type NodePath = Vec<(SharedNode, usize)>;
 
 #[derive(Debug)]
-struct Children<M: CoreMem> {
-    blocks: Shared<Blocks<M>>,
-    children: RwLock<Vec<Child<M>>>,
+struct Children {
+    blocks: Shared<Blocks>,
+    children: RwLock<Vec<Child>>,
 }
 
 /// A node of the B-Tree within the [`Hyperbee`]
 #[derive(Debug)]
-struct Node<M: CoreMem> {
+struct Node {
     keys: Vec<KeyValue>,
-    children: Children<M>,
-    blocks: Shared<Blocks<M>>,
+    children: Children,
+    blocks: Shared<Blocks>,
 }
 
 impl KeyValue {
@@ -118,8 +113,8 @@ impl KeyValue {
     }
 }
 
-impl<M: CoreMem> Child<M> {
-    fn new(seq: u64, offset: u64, node: Option<SharedNode<M>>) -> Self {
+impl Child {
+    fn new(seq: u64, offset: u64, node: Option<SharedNode>) -> Self {
         Child {
             seq,
             offset,
@@ -128,17 +123,14 @@ impl<M: CoreMem> Child<M> {
     }
 }
 
-impl<M: CoreMem> Clone for Child<M> {
+impl Clone for Child {
     fn clone(&self) -> Self {
         Self::new(self.seq, self.offset, self.cached_node.clone())
     }
 }
 
 /// Deserialize bytes from a Hypercore block into [`Node`]s.
-fn make_node_vec<B: Buf, M: CoreMem>(
-    buf: B,
-    blocks: Shared<Blocks<M>>,
-) -> Result<Vec<SharedNode<M>>, DecodeError> {
+fn make_node_vec<B: Buf>(buf: B, blocks: Shared<Blocks>) -> Result<Vec<SharedNode>, DecodeError> {
     Ok(YoloIndex::decode(buf)?
         .levels
         .iter()
@@ -157,8 +149,8 @@ fn make_node_vec<B: Buf, M: CoreMem>(
         .collect())
 }
 
-impl<M: CoreMem> Children<M> {
-    fn new(blocks: Shared<Blocks<M>>, children: Vec<Child<M>>) -> Self {
+impl Children {
+    fn new(blocks: Shared<Blocks>, children: Vec<Child>) -> Self {
         Self {
             blocks,
             children: RwLock::new(children),
@@ -166,7 +158,7 @@ impl<M: CoreMem> Children<M> {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn insert(&self, index: usize, new_children: Vec<Child<M>>) {
+    async fn insert(&self, index: usize, new_children: Vec<Child>) {
         if new_children.is_empty() {
             trace!("no children to insert, do nothing");
             return;
@@ -188,7 +180,7 @@ impl<M: CoreMem> Children<M> {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
+    async fn get_child(&self, index: usize) -> Result<Shared<Node>, HyperbeeError> {
         let (seq, offset) = {
             let child_ref = &self.children.read().await[index];
             if let Some(node) = &child_ref.cached_node {
@@ -211,11 +203,11 @@ impl<M: CoreMem> Children<M> {
         self.children.read().await.len()
     }
 
-    async fn splice<R: RangeBounds<usize>, I: IntoIterator<Item = Child<M>>>(
+    async fn splice<R: RangeBounds<usize>, I: IntoIterator<Item = Child>>(
         &self,
         range: R,
         replace_with: I,
-    ) -> Vec<Child<M>> {
+    ) -> Vec<Child> {
         // Leaf node do nothing. Should we Err instead?
         if self.children.read().await.is_empty() {
             return vec![];
@@ -242,8 +234,8 @@ impl<M: CoreMem> Children<M> {
 ///         the index within this `node`'s keys where the `key` wolud be inserted
 /// if `matched` is Some:
 ///     the index within this `node`'s keys of the `key`
-async fn get_index_of_key<M: CoreMem, T>(
-    node: SharedNode<M>,
+async fn get_index_of_key<T>(
+    node: SharedNode,
     key: &T,
 ) -> Result<(Option<u64>, usize), HyperbeeError>
 where
@@ -307,15 +299,15 @@ where
 /// `key` would be ineserted. Or for `matched = true` the index of the matched key in the nodes's
 /// keys.
 #[tracing::instrument(skip(node))]
-async fn nearest_node<M: CoreMem, T>(
-    node: SharedNode<M>,
+async fn nearest_node<T>(
+    node: SharedNode,
     key: &T,
-) -> Result<(Option<u64>, NodePath<M>), HyperbeeError>
+) -> Result<(Option<u64>, NodePath), HyperbeeError>
 where
     T: PartialOrd<[u8]> + Debug + ?Sized,
 {
     let mut current_node = node;
-    let mut out_path: NodePath<M> = vec![];
+    let mut out_path: NodePath = vec![];
     loop {
         let next_node = {
             let (matched, child_index) = get_index_of_key(current_node.clone(), key).await?;
@@ -333,8 +325,8 @@ where
     }
 }
 
-impl<M: CoreMem> Node<M> {
-    fn new(keys: Vec<KeyValue>, children: Vec<Child<M>>, blocks: Shared<Blocks<M>>) -> Self {
+impl Node {
+    fn new(keys: Vec<KeyValue>, children: Vec<Child>, blocks: Shared<Blocks>) -> Self {
         Node {
             keys,
             children: Children::new(blocks.clone(), children),
@@ -408,21 +400,21 @@ impl<M: CoreMem> Node<M> {
     }
 
     /// Get the child at the provided index
-    async fn get_child(&self, index: usize) -> Result<Shared<Node<M>>, HyperbeeError> {
+    async fn get_child(&self, index: usize) -> Result<Shared<Node>, HyperbeeError> {
         self.children.get_child(index).await
     }
 
     /// Insert a key and it's children into [`self`].
     #[tracing::instrument(skip(self))]
-    async fn insert(&mut self, key_ref: KeyValue, children: Vec<Child<M>>, range: Range<usize>) {
+    async fn insert(&mut self, key_ref: KeyValue, children: Vec<Child>, range: Range<usize>) {
         trace!("inserting [{}] children", children.len());
         self.keys.splice(range.clone(), vec![key_ref]);
         self.children.insert(range.start, children).await;
     }
 }
 
-impl<M: CoreMem> BlockEntry<M> {
-    fn new(entry: messages::Node, blocks: Shared<Blocks<M>>) -> Result<Self, HyperbeeError> {
+impl BlockEntry {
+    fn new(entry: messages::Node, blocks: Shared<Blocks>) -> Result<Self, HyperbeeError> {
         Ok(BlockEntry {
             nodes: make_node_vec(&entry.index[..], blocks)?,
             key: entry.key,
@@ -432,7 +424,7 @@ impl<M: CoreMem> BlockEntry<M> {
 
     /// Get a [`Node`] from this [`BlockEntry`] at the provided `offset`.
     /// offset is the offset of the node within the hypercore block
-    fn get_tree_node(&self, offset: u64) -> Result<SharedNode<M>, HyperbeeError> {
+    fn get_tree_node(&self, offset: u64) -> Result<SharedNode, HyperbeeError> {
         Ok(self
             .nodes
             .get(

@@ -1,17 +1,17 @@
-use crate::{Child, CoreMem, SharedNode};
+use crate::{Child, SharedNode};
 
 #[derive(Debug, Default)]
 /// Structure to store in-progress changes to the [`Hyperbee`]
 /// NB: because of how hyperbee-js works, we need to distinguish between root/non-root nodes.
-pub(crate) struct Changes<M: CoreMem> {
+pub(crate) struct Changes {
     seq: u64,
     pub key: Vec<u8>,
     pub value: Option<Vec<u8>>,
-    pub nodes: Vec<SharedNode<M>>,
-    pub root: Option<SharedNode<M>>,
+    pub nodes: Vec<SharedNode>,
+    pub root: Option<SharedNode>,
 }
 
-impl<M: CoreMem> Changes<M> {
+impl Changes {
     pub fn new(seq: u64, key: &[u8], value: Option<&[u8]>) -> Self {
         Self {
             seq,
@@ -23,7 +23,7 @@ impl<M: CoreMem> Changes<M> {
     }
 
     /// Add a node that's changed. Returns the's stored node's reference
-    pub fn add_node(&mut self, node: SharedNode<M>) -> Child<M> {
+    pub fn add_node(&mut self, node: SharedNode) -> Child {
         self.nodes.push(node.clone());
         let offset: u64 = self
             .nodes
@@ -34,13 +34,13 @@ impl<M: CoreMem> Changes<M> {
     }
 
     /// Should only be used when [`Hyperbee::del`] causes a dangling root
-    pub fn overwrite_root(&mut self, root: SharedNode<M>) -> Child<M> {
+    pub fn overwrite_root(&mut self, root: SharedNode) -> Child {
         self.root = Some(root.clone());
         Child::new(self.seq, 0, Some(root))
     }
 
     /// Add changed root
-    pub fn add_root(&mut self, root: SharedNode<M>) -> Child<M> {
+    pub fn add_root(&mut self, root: SharedNode) -> Child {
         if self.root.is_some() {
             panic!("We should never be replacing a root on a changes");
         }
@@ -48,7 +48,7 @@ impl<M: CoreMem> Changes<M> {
     }
 
     /// adds a changed node and handles when the node should be used as the root
-    pub fn add_changed_node(&mut self, path_len: usize, node: SharedNode<M>) -> Child<M> {
+    pub fn add_changed_node(&mut self, path_len: usize, node: SharedNode) -> Child {
         if path_len == 0 {
             self.add_root(node)
         } else {

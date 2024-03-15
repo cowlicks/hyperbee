@@ -13,7 +13,7 @@ use crate::{
     tree, KeyValueData,
 };
 
-use super::{tree::Tree, CoreMem, Shared};
+use super::{tree::Tree, Shared};
 
 /// An append only B-Tree built on [`Hypercore`](hypercore::Hypercore). It provides a key-value
 /// store API, with methods for [inserting](Hyperbee::put), [getting](Hyperbee::get), and
@@ -21,11 +21,11 @@ use super::{tree::Tree, CoreMem, Shared};
 /// iterators](Hyperbee::traverse), and ["sub" B-Trees](Hyperbee::sub) for grouping related data.
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
-pub struct Hyperbee<M: CoreMem> {
-    tree: Shared<Tree<M>>,
+pub struct Hyperbee {
+    tree: Shared<Tree>,
 }
 
-impl<M: CoreMem> Hyperbee<M> {
+impl Hyperbee {
     /// The number of blocks in the hypercore.
     /// The first block is always the header block so:
     /// `version` would be the `seq` of the next block
@@ -109,7 +109,7 @@ impl<M: CoreMem> Hyperbee<M> {
     }
 
     /// Create a new tree with all it's operation's prefixed by the provided `prefix`.
-    pub fn sub(&self, prefix: &[u8], config: PrefixedConfig) -> Prefixed<M> {
+    pub fn sub(&self, prefix: &[u8], config: PrefixedConfig) -> Prefixed {
         Prefixed::new(prefix, self.tree.clone(), config)
     }
 
@@ -117,15 +117,10 @@ impl<M: CoreMem> Hyperbee<M> {
     pub async fn traverse<'a>(
         &self,
         conf: TraverseConfig,
-    ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError>
-    where
-        M: 'a,
-    {
+    ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError> {
         self.tree.read().await.traverse(conf).await
     }
-}
 
-impl Hyperbee<random_access_disk::RandomAccessDisk> {
     /// Helper for creating a Hyperbee
     /// # Panics
     /// when storage path is incorrect
@@ -136,18 +131,15 @@ impl Hyperbee<random_access_disk::RandomAccessDisk> {
     /// when Hyperbee fails to build
     pub async fn from_storage_dir<T: AsRef<Path>>(
         path_to_storage_dir: T,
-    ) -> Result<Hyperbee<random_access_disk::RandomAccessDisk>, HyperbeeError> {
+    ) -> Result<Hyperbee, HyperbeeError> {
         let tree = tree::Tree::from_storage_dir(path_to_storage_dir).await?;
         Ok(HyperbeeBuilder::default()
             .tree(Arc::new(RwLock::new(tree)))
             .build()?)
     }
-}
 
-impl Hyperbee<random_access_memory::RandomAccessMemory> {
     /// Helper for creating a Hyperbee in RAM
-    pub async fn from_ram(
-    ) -> Result<Hyperbee<random_access_memory::RandomAccessMemory>, HyperbeeError> {
+    pub async fn from_ram() -> Result<Hyperbee, HyperbeeError> {
         let tree = tree::Tree::from_ram().await?;
         Ok(HyperbeeBuilder::default()
             .tree(Arc::new(RwLock::new(tree)))

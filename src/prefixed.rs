@@ -10,7 +10,7 @@ use crate::{
         LimitValue::{Finite, Infinite},
         TraverseConfig,
     },
-    CoreMem, KeyValueData, Shared, Tree,
+    KeyValueData, Shared, Tree,
 };
 
 pub static DEFAULT_PREFIXED_SEPERATOR: &[u8; 1] = b"\0";
@@ -33,10 +33,10 @@ impl Default for PrefixedConfig {
 
 /// A "sub" [`Hyperbee`](crate::Hyperbee), which can be used for grouping data. [`get`](Self::get), [`put`](Self::put), [`del`](Self::del), [`traverse`](Self::traverse) operations are automatically prefixed
 /// with [`Prefixed::prefix`] + [`PrefixedConfig::seperator`] where appropriate.
-pub struct Prefixed<M: CoreMem> {
+pub struct Prefixed {
     /// All keys inserted with [`Prefixed::put`] are prefixed with this value
     pub prefix: Vec<u8>,
-    tree: Shared<Tree<M>>,
+    tree: Shared<Tree>,
     conf: PrefixedConfig,
 }
 
@@ -48,8 +48,8 @@ macro_rules! with_key_prefix {
         &[&$self.prefix, &$self.conf.seperator, $key].concat()
     };
 }
-impl<M: CoreMem> Prefixed<M> {
-    pub(crate) fn new(prefix: &[u8], tree: Shared<Tree<M>>, conf: PrefixedConfig) -> Self {
+impl Prefixed {
+    pub(crate) fn new(prefix: &[u8], tree: Shared<Tree>, conf: PrefixedConfig) -> Self {
         Self {
             prefix: prefix.to_vec(),
             tree,
@@ -128,10 +128,7 @@ impl<M: CoreMem> Prefixed<M> {
     pub async fn traverse<'a>(
         &self,
         conf: &TraverseConfig,
-    ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError>
-    where
-        M: 'a,
-    {
+    ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError> {
         let end_of_prefix = increment_bytes(&self.prefix);
 
         let (min_value, min_inclusive) = match &conf.min_value {

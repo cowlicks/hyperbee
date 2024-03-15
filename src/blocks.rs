@@ -1,28 +1,52 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
+use async_trait::async_trait;
 use derive_builder::Builder;
-use hypercore::{AppendOutcome, Hypercore};
+use hypercore::{AppendOutcome, Hypercore, Info};
 use prost::Message;
+use random_access_storage::RandomAccess;
 use tokio::sync::{Mutex, RwLock};
 use tracing::trace;
 
 use crate::{
     changes::Changes,
     messages::{Node as NodeSchema, YoloIndex},
-    BlockEntry, CoreMem, HyperbeeError, Shared,
+    BlockEntry, HyperbeeError, Shared,
 };
 
 #[derive(Builder, Debug)]
 #[builder(pattern = "owned", derive(Debug))]
 /// Interface to the underlying Hypercore
-pub struct Blocks<M: CoreMem> {
+pub struct Blocks {
     #[builder(default)]
     // TODO make the cache smarter. Allow setting max size and strategy
-    cache: Shared<BTreeMap<u64, Shared<BlockEntry<M>>>>,
-    core: Arc<Mutex<Hypercore<M>>>,
+    cache: Shared<BTreeMap<u64, Shared<BlockEntry>>>,
+    core: Arc<Mutex<dyn HypercoreAcces>>,
 }
 
-impl<M: CoreMem> Blocks<M> {
+#[async_trait]
+pub trait HypercoreAcces: Debug + Send {
+    async fn _get(&mut self, index: u64) -> Result<Option<Vec<u8>>, HyperbeeError>;
+    fn _info(&self) -> Info;
+    async fn _append(&mut self, data: &[u8]) -> Result<AppendOutcome, HyperbeeError>;
+}
+
+#[async_trait]
+impl<M: RandomAccess + Debug + Send> HypercoreAcces for Hypercore<M> {
+    async fn _get(&mut self, index: u64) -> Result<Option<Vec<u8>>, HyperbeeError> {
+        Ok(self.get(index).await?)
+    }
+
+    fn _info(&self) -> Info {
+        self.info()
+    }
+
+    async fn _append(&mut self, data: &[u8]) -> Result<AppendOutcome, HyperbeeError> {
+        Ok(self.append(data).await?)
+    }
+}
+
+impl Blocks {
     /// Get a BlockEntry for the given `seq`
     /// # Errors
     /// when the provided `seq` is not in the Hypercore
@@ -32,7 +56,7 @@ impl<M: CoreMem> Blocks<M> {
         &self,
         seq: &u64,
         blocks: Shared<Self>,
-    ) -> Result<Shared<BlockEntry<M>>, HyperbeeError> {
+    ) -> Result<Shared<BlockEntry>, HyperbeeError> {
         if let Some(block) = self.get_from_cache(seq).await {
             trace!("from cache");
             Ok(block)
@@ -47,7 +71,7 @@ impl<M: CoreMem> Blocks<M> {
             Ok(block_entry)
         }
     }
-    async fn get_from_cache(&self, seq: &u64) -> Option<Shared<BlockEntry<M>>> {
+    async fn get_from_cache(&self, seq: &u64) -> Option<Shared<BlockEntry>> {
         self.cache.read().await.get(seq).cloned()
     }
 
@@ -55,8 +79,8 @@ impl<M: CoreMem> Blocks<M> {
         &self,
         seq: &u64,
         blocks: Shared<Self>,
-    ) -> Result<Option<BlockEntry<M>>, HyperbeeError> {
-        match self.core.lock().await.get(*seq).await? {
+    ) -> Result<Option<BlockEntry>, HyperbeeError> {
+        match self.core.lock().await._get(*seq).await? {
             Some(core_block) => {
                 let node = NodeSchema::decode(&core_block[..])?;
                 Ok(Some(BlockEntry::new(node, blocks)?))
@@ -66,17 +90,17 @@ impl<M: CoreMem> Blocks<M> {
     }
 
     pub async fn info(&self) -> hypercore::Info {
-        self.core.lock().await.info()
+        self.core.lock().await._info()
     }
 
     pub async fn append(&self, value: &[u8]) -> Result<AppendOutcome, HyperbeeError> {
-        Ok(self.core.lock().await.append(value).await?)
+        self.core.lock().await._append(value).await
     }
 
     #[tracing::instrument(skip(self, changes))]
     /// Commit [`Changes`](crate::changes::Changes) to the Hypercore
     // TODO create a BlockEntry from changes and add it to self.cache
-    pub async fn add_changes(&self, changes: Changes<M>) -> Result<AppendOutcome, HyperbeeError> {
+    pub async fn add_changes(&self, changes: Changes) -> Result<AppendOutcome, HyperbeeError> {
         let Changes {
             key,
             value,
