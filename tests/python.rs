@@ -9,14 +9,14 @@ async fn hello_world_get_set_del() -> Result<(), Box<dyn std::error::Error>> {
         "
 async def main():
     hb = await hyperbee_from_ram()
-    x = await hb.ffi_put(b'hello', b'world')
+    x = await hb.put(b'hello', b'world')
     assert(x.old_seq == None)
     assert(x.new_seq == 1)
 
-    x = await hb.ffi_get(b'hello')
+    x = await hb.get(b'hello')
     assert(x.value == b'world')
 
-    x = await hb.ffi_del(b'hello')
+    x = await hb.delete(b'hello')
     assert(x == 1)
 ",
     )?;

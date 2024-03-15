@@ -19,7 +19,7 @@ use super::{tree::Tree, Shared};
 /// store API, with methods for [inserting](Hyperbee::put), [getting](Hyperbee::get), and
 /// [deleting](Hyperbee::del) key-value pair. As well as creating [sorted
 /// iterators](Hyperbee::traverse), and ["sub" B-Trees](Hyperbee::sub) for grouping related data.
-#[derive(Debug, Builder, uniffi::Object)]
+#[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee {
     tree: Shared<Tree>,
