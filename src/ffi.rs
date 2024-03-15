@@ -36,6 +36,10 @@ struct Hyperbee {
 
 #[uniffi::export]
 impl Hyperbee {
+    pub async fn version(&self) -> u64 {
+        self.rust_hyperbee.read().await.version().await
+    }
+
     async fn get(&self, key: &[u8]) -> Result<Option<Gotten>, HyperbeeError> {
         Ok(self
             .rust_hyperbee
@@ -64,6 +68,14 @@ impl Hyperbee {
 #[uniffi::export]
 async fn hyperbee_from_ram() -> Result<Hyperbee, HyperbeeError> {
     let rust_hyperbee = RustHyperbee::from_ram().await?;
+    Ok(Hyperbee {
+        rust_hyperbee: Arc::new(RwLock::new(rust_hyperbee)),
+    })
+}
+
+#[uniffi::export]
+async fn hyperbee_from_storage_dir(path_to_storage_dir: &str) -> Result<Hyperbee, HyperbeeError> {
+    let rust_hyperbee = RustHyperbee::from_storage_dir(path_to_storage_dir).await?;
     Ok(Hyperbee {
         rust_hyperbee: Arc::new(RwLock::new(rust_hyperbee)),
     })
