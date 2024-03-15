@@ -31,6 +31,52 @@ async def main():
 }
 
 #[tokio::test]
+async fn optionals() -> Result<(), Box<dyn std::error::Error>> {
+    let _x = require_python()?;
+    let storage_dir = tempfile::tempdir()?;
+    {
+        let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
+        let _ = hb.put(b"hello", None).await?;
+    }
+    let code = format!(
+        "
+async def main():
+    import json
+    hb = await hyperbee_from_storage_dir('{}')
+    res = await hb.get(b'hello')
+    assert(res.value is None)
+
+    res = await hb.put(b'skipval', None)
+    res = await hb.get(b'skipval')
+    assert(res.value is None)
+",
+        storage_dir.path().display()
+    );
+
+    let output = run_python(&code)?;
+    dbg!(&output);
+    assert_eq!(output.status.code(), Some(0));
+    Ok(())
+}
+#[tokio::test]
+async fn check_version() -> Result<(), Box<dyn std::error::Error>> {
+    let _x = require_python()?;
+    let out = run_python(
+        "
+async def main():
+    hb = await hyperbee_from_ram()
+    x = await hb.version()
+    assert(x == 0)
+    await hb.put(b'foo', None)
+    x = await hb.version()
+    assert(x == 2)
+",
+    )?;
+    assert_eq!(out.status.code(), Some(0));
+    Ok(())
+}
+
+#[tokio::test]
 async fn zero_to_one_hundred() -> Result<(), Box<dyn std::error::Error>> {
     let _x = require_python()?;
     let storage_dir = tempfile::tempdir()?;
