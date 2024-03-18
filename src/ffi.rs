@@ -68,12 +68,29 @@ impl Hyperbee {
     }
 
     // It'd be nice to make this non-async
+    // TODO setting the seperator is not-obvious and should be documented
     async fn sub(&self, prefix: &[u8], config: RustPrefixedConfig) -> Prefixed {
         let rust_prefixed = self.rust_hyperbee.read().await.sub(prefix, config);
         Prefixed {
             rust_prefixed: Arc::new(RwLock::new(rust_prefixed)),
         }
     }
+}
+
+#[uniffi::export]
+async fn hyperbee_from_ram() -> Result<Hyperbee, HyperbeeError> {
+    let rust_hyperbee = RustHyperbee::from_ram().await?;
+    Ok(Hyperbee {
+        rust_hyperbee: Arc::new(RwLock::new(rust_hyperbee)),
+    })
+}
+
+#[uniffi::export]
+async fn hyperbee_from_storage_dir(path_to_storage_dir: &str) -> Result<Hyperbee, HyperbeeError> {
+    let rust_hyperbee = RustHyperbee::from_storage_dir(path_to_storage_dir).await?;
+    Ok(Hyperbee {
+        rust_hyperbee: Arc::new(RwLock::new(rust_hyperbee)),
+    })
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -111,20 +128,4 @@ impl Prefixed {
 #[uniffi::export]
 fn default_sub_config() -> RustPrefixedConfig {
     RustPrefixedConfig::default()
-}
-
-#[uniffi::export]
-async fn hyperbee_from_ram() -> Result<Hyperbee, HyperbeeError> {
-    let rust_hyperbee = RustHyperbee::from_ram().await?;
-    Ok(Hyperbee {
-        rust_hyperbee: Arc::new(RwLock::new(rust_hyperbee)),
-    })
-}
-
-#[uniffi::export]
-async fn hyperbee_from_storage_dir(path_to_storage_dir: &str) -> Result<Hyperbee, HyperbeeError> {
-    let rust_hyperbee = RustHyperbee::from_storage_dir(path_to_storage_dir).await?;
-    Ok(Hyperbee {
-        rust_hyperbee: Arc::new(RwLock::new(rust_hyperbee)),
-    })
 }
