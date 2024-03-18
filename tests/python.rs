@@ -7,6 +7,43 @@ use common::{
 use hyperbee::Hyperbee;
 
 #[tokio::test]
+async fn test_sub_prefix() -> Result<(), Box<dyn std::error::Error>> {
+    let x = match require_python() {
+        Err(e) => {
+            println!("{}", e);
+            return Err(e);
+        }
+        Ok(x) => x,
+    };
+    dbg!(&x);
+    let out = run_python(
+        "
+async def main():
+    prefix = b'myprefix'
+    key = b'keykey'
+    val_no_pref = b'no prefix'
+    val_with_pref = b'yes prefix'
+
+    config = PrefixedConfig(bytes([0]))
+    hb = await hyperbee_from_ram()
+    sub_hb = await hb.sub(prefix, config)
+
+    await hb.put(key, val_no_pref)
+    await sub_hb.put(key, val_with_pref)
+
+    x = await hb.get(key)
+    assert(x.value == val_no_pref)
+
+    x = await sub_hb.get(key)
+    assert(x.value == val_with_pref)
+",
+    )?;
+    dbg!(&out);
+    assert_eq!(out.status.code(), Some(0));
+    Ok(())
+}
+
+#[tokio::test]
 async fn hello_world_get_set_del() -> Result<(), Box<dyn std::error::Error>> {
     let x = require_python()?;
     dbg!(&x);

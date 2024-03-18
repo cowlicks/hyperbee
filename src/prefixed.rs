@@ -14,7 +14,7 @@ use crate::{
 };
 
 pub static DEFAULT_PREFIXED_SEPERATOR: &[u8; 1] = b"\0";
-#[derive(Builder, Debug, Clone)]
+#[derive(Builder, Debug, Clone, uniffi::Record)]
 #[builder(derive(Debug))]
 pub struct PrefixedConfig {
     #[builder(default = "DEFAULT_PREFIXED_SEPERATOR.to_vec()")]
@@ -23,6 +23,7 @@ pub struct PrefixedConfig {
     /// implementation](https://docs.pears.com/building-blocks/hyperbee#const-sub-db.sub-sub-prefix-options).
     pub seperator: Vec<u8>,
 }
+
 impl Default for PrefixedConfig {
     fn default() -> Self {
         Self {

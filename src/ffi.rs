@@ -1,7 +1,10 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::{Hyperbee as RustHyperbee, HyperbeeError, Shared};
+use crate::{
+    prefixed::{Prefixed as RustPrefixed, PrefixedConfig as RustPrefixedConfig},
+    Hyperbee as RustHyperbee, HyperbeeError, Shared,
+};
 
 #[derive(Debug, uniffi::Record)]
 pub struct Gotten {
@@ -62,6 +65,46 @@ impl Hyperbee {
 
     async fn delete(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
         self.rust_hyperbee.read().await.del(key).await
+    }
+
+    // It'd be nice to make this non-async
+    async fn sub(&self, prefix: &[u8], config: RustPrefixedConfig) -> Prefixed {
+        let rust_prefixed = self.rust_hyperbee.read().await.sub(prefix, config);
+        Prefixed {
+            rust_prefixed: Arc::new(RwLock::new(rust_prefixed)),
+        }
+    }
+}
+
+#[derive(Debug, uniffi::Object)]
+struct Prefixed {
+    rust_prefixed: Shared<RustPrefixed>,
+}
+
+#[uniffi::export]
+impl Prefixed {
+    async fn get(&self, key: &[u8]) -> Result<Option<Gotten>, HyperbeeError> {
+        Ok(self
+            .rust_prefixed
+            .read()
+            .await
+            .get(key)
+            .await?
+            .map(|(seq, value)| Gotten::new(seq, value)))
+    }
+
+    async fn put(&self, key: &[u8], value: Option<Vec<u8>>) -> Result<Putten, HyperbeeError> {
+        let (old_seq, new_seq) = self
+            .rust_prefixed
+            .read()
+            .await
+            .put(key, value.as_deref())
+            .await?;
+        Ok(Putten::new(old_seq, new_seq))
+    }
+
+    async fn delete(&self, key: &[u8]) -> Result<Option<u64>, HyperbeeError> {
+        self.rust_prefixed.read().await.del(key).await
     }
 }
 
