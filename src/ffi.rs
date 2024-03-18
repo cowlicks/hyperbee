@@ -109,6 +109,11 @@ impl Prefixed {
 }
 
 #[uniffi::export]
+fn default_sub_config() -> RustPrefixedConfig {
+    RustPrefixedConfig::default()
+}
+
+#[uniffi::export]
 async fn hyperbee_from_ram() -> Result<Hyperbee, HyperbeeError> {
     let rust_hyperbee = RustHyperbee::from_ram().await?;
     Ok(Hyperbee {
