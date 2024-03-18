@@ -19,13 +19,14 @@ name = "hyperbee"
 crate-type = ["lib", "cdylib"]
 
 [[bin]]
-# This can be whatever name makes sense for your project, but the rest of this tutorial assumes uniffi-bindgen.
 name = "uniffi-bindgen"
 path = "uniffi-bindgen.rs"
+required-features = ["ffi"]
 
 [features]
 default = []
 clib = ["tokio/rt-multi-thread", "dep:libc"]
+ffi = ["clib", "dep:uniffi"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -43,11 +44,11 @@ thiserror = "1.0.50"
 tokio = { version = "1.34.0", features = ["macros", "rt", "sync"] }
 tokio-stream = "0.1.14"
 tracing = "0.1.40"
-uniffi = { version = "0.26.1", features = ["cli"] }
+uniffi = { version = "0.26.1", features = ["cli"], optional = true }
 
 [build-dependencies]
 prost-build = "0.12.1"
-uniffi = { version = "0.26.1", features = ["build"] }
+uniffi = { version = "0.26.1", features = ["build"], optional = true}
 
 [dev-dependencies]
 tracing-subscriber = "0.3.18"

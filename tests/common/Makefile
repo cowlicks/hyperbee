@@ -5,4 +5,4 @@ C_LIB_PATH := $(ROOT)/target/debug/libhyperbee.so
 
 # Build Rust FFI library
 $(C_LIB_PATH): $(RS_SOURCES) $(ROOT)/Cargo.toml
-	cd $(ROOT) && cargo build -F clib
+	cd $(ROOT) && cargo build -F ffi

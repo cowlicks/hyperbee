@@ -8,6 +8,7 @@ mod blocks;
 mod changes;
 mod del;
 mod error;
+#[cfg(feature = "ffi")]
 pub mod ffi;
 mod hb;
 mod keys;
@@ -56,7 +57,8 @@ struct KeyValue {
     seq: u64,
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+#[derive(Clone, Debug)]
 /// Data related to a key value pair within the [`Hyperbee`].
 pub struct KeyValueData {
     /// The index of the block within the [`Hypercore`](hypercore::Hypercore) where this data is stored.
@@ -437,4 +439,9 @@ impl BlockEntry {
     }
 }
 
-uniffi::setup_scaffolding!();
+#[cfg(feature = "ffi")]
+mod uniffi_scaffolding {
+    uniffi::setup_scaffolding!();
+}
+#[cfg(feature = "ffi")]
+pub use uniffi_scaffolding::*;

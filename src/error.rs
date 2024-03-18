@@ -10,8 +10,8 @@ use crate::{
 };
 
 /// Error type used by all [`Result`]s in this library.
-#[derive(Error, Debug, uniffi::Error)]
-#[uniffi(flat_error)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Error), uniffi(flat_error))]
+#[derive(Error, Debug)]
 pub enum HyperbeeError {
     #[error("There was an error in the underlying Hypercore")]
     HypercoreError(#[from] HypercoreError),

@@ -14,7 +14,8 @@ use crate::{
 };
 
 pub static DEFAULT_PREFIXED_SEPERATOR: &[u8; 1] = b"\0";
-#[derive(Builder, Debug, Clone, uniffi::Record)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+#[derive(Builder, Debug, Clone)]
 #[builder(derive(Debug))]
 pub struct PrefixedConfig {
     #[builder(default = "DEFAULT_PREFIXED_SEPERATOR.to_vec()")]
