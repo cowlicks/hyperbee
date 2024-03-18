@@ -40,6 +40,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Foreign Language Bindings
+
+We use [UniFFI](https://mozilla.github.io/uniffi-rs/) to generate libraries for other languages. To build the library for python run:
+```bash
+cargo build -F ffi && cargo run -F ffi --bin uniffi-bindgen generate --library target/debug/libhyperbee.so --language python --out-dir out
+```
+This generates a file `out/hyperbee.py`, which an be used. This file requires that `libhyperbee.so` be present alongside the `.py` file.
+Distributable python packages are still a work-in-progress. Currently only Python is tested. See [the tests](tests/python.rs) for example usage.
+
 ## Parity with JS Hyperbee
 
 - [x] full functional interoperability with JS Hyperbee files
@@ -52,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Future work
 
-- [ ] Build FFI wrappers
+- [x] Build FFI wrappers
 - [ ] improved wire format
 - [ ] configurable tree parameters
 
