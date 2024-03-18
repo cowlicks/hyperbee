@@ -9,14 +9,13 @@ use std::{
     ptr, slice,
 };
 
-use random_access_disk::RandomAccessDisk;
 use tokio::runtime::Runtime;
 
 use crate::Hyperbee;
 
 type RuntimePointer = *mut Runtime;
-type HyperbeePointer<M> = *mut Hyperbee<M>;
-type HbDiskPointer = HyperbeePointer<RandomAccessDisk>;
+type HyperbeePointer = *mut Hyperbee;
+type HbDiskPointer = HyperbeePointer;
 
 /// Type of callback we pass results to
 /// seq == 0 means the key was not found
@@ -82,9 +81,7 @@ pub extern "C" fn close_runtime(rt: RuntimePointer) {
 #[no_mangle]
 pub extern "C" fn close_hyperbee(hb: HbDiskPointer) {
     let hb = from_c(hb);
-    drop(ManuallyDrop::<Box<Hyperbee<RandomAccessDisk>>>::into_inner(
-        hb,
-    ));
+    drop(ManuallyDrop::<Box<Hyperbee>>::into_inner(hb));
 }
 
 pub fn c_vec_from_vec<T: std::fmt::Debug>(mut vec: Vec<T>) -> (*mut T, size_t) {
@@ -102,7 +99,7 @@ pub fn c_vec_from_vec<T: std::fmt::Debug>(mut vec: Vec<T>) -> (*mut T, size_t) {
 pub extern "C" fn hyperbee_from_storage_directory(
     rt: RuntimePointer,
     storage_directory: *const c_char,
-) -> HyperbeePointer<RandomAccessDisk> {
+) -> HyperbeePointer {
     let rt = from_c(rt);
     let storage_directory = match string_from_c_str(storage_directory) {
         None => {

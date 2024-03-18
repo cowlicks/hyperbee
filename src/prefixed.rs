@@ -14,6 +14,7 @@ use crate::{
 };
 
 pub static DEFAULT_PREFIXED_SEPERATOR: &[u8; 1] = b"\0";
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
 #[derive(Builder, Debug, Clone)]
 #[builder(derive(Debug))]
 pub struct PrefixedConfig {
@@ -23,6 +24,7 @@ pub struct PrefixedConfig {
     /// implementation](https://docs.pears.com/building-blocks/hyperbee#const-sub-db.sub-sub-prefix-options).
     pub seperator: Vec<u8>,
 }
+
 impl Default for PrefixedConfig {
     fn default() -> Self {
         Self {
@@ -33,6 +35,7 @@ impl Default for PrefixedConfig {
 
 /// A "sub" [`Hyperbee`](crate::Hyperbee), which can be used for grouping data. [`get`](Self::get), [`put`](Self::put), [`del`](Self::del), [`traverse`](Self::traverse) operations are automatically prefixed
 /// with [`Prefixed::prefix`] + [`PrefixedConfig::seperator`] where appropriate.
+#[derive(Debug)]
 pub struct Prefixed {
     /// All keys inserted with [`Prefixed::put`] are prefixed with this value
     pub prefix: Vec<u8>,

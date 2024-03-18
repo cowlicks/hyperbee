@@ -6,13 +6,10 @@ else
     LDFLAGS := -Wl,--gc-sections -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc -lssl -lcrypto
 endif
 
-ROOT:= $(shell git rev-parse --show-toplevel)
-SRC := $(ROOT)/src
-C_SOURCES := $(wildcard *.c);
-RS_SOURCES := $(wildcard $(SRC)/*.rs)
+include ../vars.mk
 
 # Buid the executable linking object file to Rust FFI library
-target/hyperbee: target/test.o $(ROOT)/target/debug/libhyperbee.so
+target/hyperbee: target/test.o $(C_LIB_PATH)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 target:
@@ -22,10 +19,6 @@ target:
 target/test.o: test.c | target
 	$(CC) -o $@ -c $<
 
-# Build Rust FFI library
-$(ROOT)/target/debug/libhyperbee.a: $(RS_SOURCES) $(ROOT)/Cargo.toml
-	cd $(ROOT) && cargo build
-
 test: target/hyperbee
 	target/hyperbee
 
@@ -33,3 +26,5 @@ clean:
 	rm -rf target
 
 .PHONY := test clean
+
+include ../Makefile

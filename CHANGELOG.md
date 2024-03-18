@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ffi` feature added that lets us build libraries for other languages. Includes `Hyperbee`'s `.get`, `.put`, `.del`, and `.sub` methods. Only Python has been tested so far. Generating bindings is documented in the README.
+
 ### Changed
 
 - `Hyperbee` no longer takes a generic parameter with `CoreMem` bound.

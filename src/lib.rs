@@ -8,6 +8,8 @@ mod blocks;
 mod changes;
 mod del;
 mod error;
+#[cfg(feature = "ffi")]
+pub mod ffi;
 mod hb;
 mod keys;
 pub mod prefixed;
@@ -55,6 +57,7 @@ struct KeyValue {
     seq: u64,
 }
 
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
 #[derive(Clone, Debug)]
 /// Data related to a key value pair within the [`Hyperbee`].
 pub struct KeyValueData {
@@ -435,3 +438,10 @@ impl BlockEntry {
             .clone())
     }
 }
+
+#[cfg(feature = "ffi")]
+mod uniffi_scaffolding {
+    uniffi::setup_scaffolding!();
+}
+#[cfg(feature = "ffi")]
+pub use uniffi_scaffolding::*;

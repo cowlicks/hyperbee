@@ -1,8 +1,6 @@
 mod common;
 
-use std::process::Output;
-
-use common::js::run_js;
+use common::{js::run_js, parse_json_result, write_100};
 use futures_lite::{Stream, StreamExt};
 use hyperbee::{
     traverse::{KeyDataResult, TraverseConfig},
@@ -14,27 +12,6 @@ async fn collect(
 ) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
     let stream_res = stream.collect::<Vec<KeyDataResult>>().await;
     Ok(stream_res.into_iter().map(|x| x.unwrap().key).collect())
-}
-
-macro_rules! write_100 {
-    ($hb:expr) => {{
-        let hb = $hb;
-        let keys: Vec<Vec<u8>> = (0..100)
-            .map(|x| x.clone().to_string().as_bytes().to_vec())
-            .collect();
-
-        for k in keys.iter() {
-            let val: Option<&[u8]> = Some(k);
-            hb.put(k, val).await?;
-        }
-        keys
-    }};
-}
-
-fn parse_js_result(output: Output) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
-    let stdout = String::from_utf8(output.stdout)?;
-    let res: Vec<String> = serde_json::from_str(&stdout)?;
-    Ok(res.into_iter().map(|x| x.into()).collect())
 }
 
 #[tokio::test]
@@ -73,7 +50,7 @@ async fn zero_to_one_hundred() -> Result<(), Box<dyn std::error::Error>> {
     write(JSON.stringify(out));
     ",
     )?;
-    let res = parse_js_result(output)?;
+    let res = parse_json_result(&output)?;
     assert_eq!(res, keys);
     Ok(())
 }
@@ -82,6 +59,8 @@ async fn zero_to_one_hundred() -> Result<(), Box<dyn std::error::Error>> {
 async fn stream_in_same_order() -> Result<(), Box<dyn std::error::Error>> {
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
+
+    // setup test
     let _ = write_100!(&hb);
 
     let rust_res: Vec<Vec<u8>> = collect(hb.traverse(Default::default()).await?).await?;
@@ -96,7 +75,7 @@ async fn stream_in_same_order() -> Result<(), Box<dyn std::error::Error>> {
     write(JSON.stringify(out));
     ",
     )?;
-    let js_res = parse_js_result(output)?;
+    let js_res = parse_json_result(&output)?;
     assert_eq!(js_res, rust_res);
     Ok(())
 }
@@ -105,6 +84,8 @@ async fn stream_in_same_order() -> Result<(), Box<dyn std::error::Error>> {
 async fn sub_database() -> Result<(), Box<dyn std::error::Error>> {
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
+
+    // setup test
     let pref = b"pref";
     let sub = hb.sub(pref, Default::default());
 
@@ -123,7 +104,7 @@ async fn sub_database() -> Result<(), Box<dyn std::error::Error>> {
     write(JSON.stringify(out));
     ",
     )?;
-    let js_res = parse_js_result(output)?;
+    let js_res = parse_json_result(&output)?;
     assert_eq!(js_res, rust_res);
     Ok(())
 }
