@@ -103,7 +103,7 @@ pub fn run_code(
 
 pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output, Box<dyn std::error::Error>> {
     let path = join_paths!(git_root()?, dir);
-    let cmd = format!("cd {path} && make {arg}");
+    let cmd = format!("cd {path} && flock make.lock make {arg} && rm -f make.lock ");
     let out = Command::new("sh").arg("-c").arg(cmd).output()?;
     if out.status.code() != Some(0) {
         return Err(Box::new(HyperbeeError::TestError(
