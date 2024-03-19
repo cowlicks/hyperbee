@@ -7,6 +7,7 @@ use std::{
     process::{Command, Output},
 };
 
+use hyperbee::HyperbeeError;
 use tempfile::TempDir;
 
 pub mod c;
@@ -83,11 +84,17 @@ pub fn run_code(
     let working_dir_path = working_dir.path().display().to_string();
     // copy dirs into working dir
     for dir in copy_dirs {
-        let _ = Command::new("cp")
+        let dir_cp_cmd = Command::new("cp")
             .arg("-r")
-            .arg(dir)
+            .arg(&dir)
             .arg(&working_dir_path)
             .output()?;
+        if dir_cp_cmd.status.code() != Some(0) {
+            return Err(Box::new(HyperbeeError::TestError(format!(
+                "failed to copy dir [{dir}] to [{working_dir_path}] got stderr: {}",
+                String::from_utf8_lossy(&dir_cp_cmd.stderr),
+            ))));
+        }
     }
     let script_path_str = script_path.display().to_string();
     let command_str = build_command(&working_dir_path, &script_path_str);
@@ -96,8 +103,14 @@ pub fn run_code(
 
 pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output, Box<dyn std::error::Error>> {
     let path = join_paths!(git_root()?, dir);
-    let cmd = format!("cd {path} && make {arg}");
-    Ok(Command::new("sh").arg("-c").arg(cmd).output()?)
+    let cmd = format!("cd {path} && flock make.lock make {arg} && rm -f make.lock ");
+    let out = Command::new("sh").arg("-c").arg(cmd).output()?;
+    if out.status.code() != Some(0) {
+        return Err(Box::new(HyperbeeError::TestError(
+            String::from_utf8_lossy(&out.stderr).to_string(),
+        )));
+    }
+    Ok(out)
 }
 
 pub fn parse_json_result(output: &Output) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {

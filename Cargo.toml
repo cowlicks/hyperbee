@@ -1,3 +1,4 @@
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [package]
 name = "hyperbee"
 version = "0.3.1"
@@ -24,11 +25,10 @@ path = "uniffi-bindgen.rs"
 required-features = ["ffi"]
 
 [features]
-default = []
+# TODO rm "ffi" from default when we split project into workspaces. So we can avoid using uniffi unless it is needed
+default = ["ffi"]
 clib = ["tokio/rt-multi-thread", "dep:libc"]
 ffi = ["clib", "dep:uniffi"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 async-trait = "0.1.77"
