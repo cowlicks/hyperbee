@@ -1,3 +1,8 @@
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
+
+# TODO This does not seem to run uniffi-bindgen with the ffi features
+# doc for this is here: https://www.maturin.rs/config#cargo-options
+#[tool.maturin]
+#features = ["ffi"]
