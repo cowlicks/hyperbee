@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Infastructure to publish python package. The package will be published when this is released.
+- Added docstrings to ffi functions
+- `ffi` feature now default so that we can build and distribute python packages. This will be fixed when package in split into workspaces.
 - `ffi` feature added that lets us build libraries for other languages. Includes `Hyperbee`'s `.get`, `.put`, `.del`, and `.sub` methods. Only Python has been tested so far. Generating bindings is documented in the README.
 
 ### Changed
