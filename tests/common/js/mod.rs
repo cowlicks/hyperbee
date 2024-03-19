@@ -3,7 +3,7 @@ use std::{path::PathBuf, process::Output};
 use tempfile::TempDir;
 
 pub static REL_PATH_TO_NODE_MODULES: &str = "./tests/common/js/node_modules";
-pub static REL_PATH_TO_JS_DIR: &str = "./tests/common/JS";
+pub static REL_PATH_TO_JS_DIR: &str = "./tests/common/js";
 
 pub fn require_js_data() -> Result<(), Box<dyn std::error::Error>> {
     let _ = run_make_from_with(REL_PATH_TO_JS_DIR, "")?;
