@@ -68,3 +68,14 @@ Distributable python packages are still a work-in-progress. Currently only Pytho
 ## Development
 
 Run the tests with `$ cargo test`.
+
+Each significant pull request should include an update the [`CHANGELOG.md`](CHANGELOG.md)
+
+## Release
+
+Releases are mostly handled with [`cargo release`](https://github.com/crate-ci/cargo-release).
+After each Rust release. We manually release a new python package. This is done with:
+```bash
+$ maturin build --release
+$ python -m twine upload target/wheels/hyperbeepy-<target>.whl
+```
