@@ -68,3 +68,21 @@ Distributable python packages are still a work-in-progress. Currently only Pytho
 ## Development
 
 Run the tests with `$ cargo test`.
+
+Each significant pull request should include an update the [`CHANGELOG.md`](CHANGELOG.md)
+
+## Release
+
+Releases are mostly handled with [`cargo release`](https://github.com/crate-ci/cargo-release).
+After each Rust release. We manually release a new python package. Building the python package is done with [`maturin`](https://github.com/PyO3/maturin) and it is released with [`twine`](https://pypi.org/project/twine/).
+```bash
+# create a virtualenv with the tools we need
+python -m venv venv && . venv/bin/activate
+pip install --upgrade twine maturin
+
+# build the wheels
+python -m maturin build --release
+
+# Upload the wheels to pypi. This uses my api token from ~/.pypirc
+python -m twine upload target/wheels/hyperbeepy-<target>.whl
+```
