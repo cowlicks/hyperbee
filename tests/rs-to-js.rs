@@ -1,21 +1,19 @@
 mod common;
 
-use common::{js::run_js, parse_json_result, write_100};
+use common::{js::run_js, parse_json_result, write_100, Result};
 use futures_lite::{Stream, StreamExt};
 use hyperbee::{
     traverse::{KeyDataResult, TraverseConfig},
     Hyperbee,
 };
 
-async fn collect(
-    stream: impl Stream<Item = KeyDataResult>,
-) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
+async fn collect(stream: impl Stream<Item = KeyDataResult>) -> Result<Vec<Vec<u8>>> {
     let stream_res = stream.collect::<Vec<KeyDataResult>>().await;
     Ok(stream_res.into_iter().map(|x| x.unwrap().key).collect())
 }
 
 #[tokio::test]
-async fn hello_world() -> Result<(), Box<dyn std::error::Error>> {
+async fn hello_world() -> Result<()> {
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
     let key = b"hello";
@@ -34,7 +32,7 @@ write(r.value.toString());",
 }
 
 #[tokio::test]
-async fn zero_to_one_hundred() -> Result<(), Box<dyn std::error::Error>> {
+async fn zero_to_one_hundred() -> Result<()> {
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
     let keys = write_100!(&hb);
@@ -56,7 +54,7 @@ async fn zero_to_one_hundred() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn stream_in_same_order() -> Result<(), Box<dyn std::error::Error>> {
+async fn stream_in_same_order() -> Result<()> {
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
 
@@ -81,7 +79,7 @@ async fn stream_in_same_order() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn sub_database() -> Result<(), Box<dyn std::error::Error>> {
+async fn sub_database() -> Result<()> {
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
 

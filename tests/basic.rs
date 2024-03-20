@@ -1,5 +1,5 @@
 mod common;
-use common::{get_data_dir, join_paths};
+use common::{get_data_dir, join_paths, Result};
 
 use hyperbee::{traverse::TraverseConfig, Hyperbee};
 
@@ -9,7 +9,7 @@ static MORE_HEIGHT_TEST_DATA_STORAGE: &str = "more_height";
 static SMALL_TEST_DATA_STORAGE: &str = "alphabet";
 
 #[tokio::test]
-async fn basic_integration() -> Result<(), Box<dyn std::error::Error>> {
+async fn basic_integration() -> Result<()> {
     require_js_data()?;
     let start = 0;
     let stop = 25;
@@ -28,7 +28,7 @@ async fn basic_integration() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn no_key() -> Result<(), Box<dyn std::error::Error>> {
+async fn no_key() -> Result<()> {
     require_js_data()?;
     let storage_dir = join_paths!(get_data_dir()?, BASIC_TEST_DATA_STORAGE);
     let hb = Hyperbee::from_storage_dir(storage_dir).await?;
@@ -38,7 +38,7 @@ async fn no_key() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn stream() -> Result<(), Box<dyn std::error::Error>> {
+async fn stream() -> Result<()> {
     use tokio_stream::StreamExt;
     require_js_data()?;
     let start = 0;
@@ -66,7 +66,7 @@ async fn stream() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn height() -> Result<(), Box<dyn std::error::Error>> {
+async fn height() -> Result<()> {
     require_js_data()?;
     let storage_dir = join_paths!(get_data_dir()?, MORE_HEIGHT_TEST_DATA_STORAGE);
     let hb = Hyperbee::from_storage_dir(storage_dir).await?;
@@ -76,7 +76,7 @@ async fn height() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn print() -> Result<(), Box<dyn std::error::Error>> {
+async fn print() -> Result<()> {
     require_js_data()?;
     let storage_dir = join_paths!(get_data_dir()?, SMALL_TEST_DATA_STORAGE);
     let hb = Hyperbee::from_storage_dir(storage_dir).await?;
