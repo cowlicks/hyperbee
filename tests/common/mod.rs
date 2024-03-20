@@ -14,6 +14,8 @@ pub mod c;
 pub mod js;
 pub mod python;
 
+pub type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
+
 pub static PATH_TO_DATA_DIR: &str = "tests/common/js/data";
 pub static PATH_TO_C_LIB: &str = "target/debug/libhyperbee.so";
 
@@ -33,7 +35,7 @@ macro_rules! join_paths {
 
 pub(crate) use join_paths;
 
-pub fn git_root() -> Result<String, Box<dyn std::error::Error>> {
+pub fn git_root() -> Result<String> {
     let x = Command::new("sh")
         .arg("-c")
         .arg("git rev-parse --show-toplevel")
@@ -41,15 +43,15 @@ pub fn git_root() -> Result<String, Box<dyn std::error::Error>> {
     Ok(String::from_utf8(x.stdout)?.trim().to_string())
 }
 
-pub fn path_to_c_lib() -> Result<String, Box<dyn std::error::Error>> {
+pub fn path_to_c_lib() -> Result<String> {
     Ok(join_paths!(git_root()?, PATH_TO_C_LIB))
 }
 
-pub fn get_data_dir() -> Result<String, Box<dyn std::error::Error>> {
+pub fn get_data_dir() -> Result<String> {
     Ok(join_paths!(git_root()?, &PATH_TO_DATA_DIR))
 }
 
-pub fn run_script_relative_to_git_root(script: &str) -> Result<Output, Box<dyn std::error::Error>> {
+pub fn run_script_relative_to_git_root(script: &str) -> Result<Output> {
     Ok(Command::new("sh")
         .arg("-c")
         .arg(format!("cd {} && {}", git_root()?, script))
@@ -64,7 +66,7 @@ pub fn run_code(
     script_file_name: &str,
     build_command: impl FnOnce(&str, &str) -> String,
     copy_dirs: Vec<String>,
-) -> Result<Output, Box<dyn std::error::Error>> {
+) -> Result<Output> {
     let storage_dir_name = format!("{}", storage_dir.path().display());
     let pre_script = build_pre_script(&storage_dir_name);
 
@@ -101,7 +103,7 @@ pub fn run_code(
     Ok(Command::new("sh").arg("-c").arg(command_str).output()?)
 }
 
-pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output, Box<dyn std::error::Error>> {
+pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output> {
     let path = join_paths!(git_root()?, dir);
     let cmd = format!("cd {path} && flock make.lock make {arg} && rm -f make.lock ");
     let out = Command::new("sh").arg("-c").arg(cmd).output()?;
@@ -113,7 +115,7 @@ pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output, Box<dyn std::e
     Ok(out)
 }
 
-pub fn parse_json_result(output: &Output) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
+pub fn parse_json_result(output: &Output) -> Result<Vec<Vec<u8>>> {
     let stdout = String::from_utf8(output.stdout.clone())?;
     let res: Vec<String> = serde_json::from_str(&stdout)?;
     Ok(res.into_iter().map(|x| x.into()).collect())
