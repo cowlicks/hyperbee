@@ -65,3 +65,35 @@ async fn copy_after_init() -> Result<()> {
     diff_dirs(&jsdir_str, &rdir_str)?;
     Ok(())
 }
+
+#[tokio::test]
+async fn bug_in_rs_js_disk_diff() -> Result<()> {
+    // NB: bug appears at 49
+    //for n_keys in 0..100 {
+    for n_keys in 48..50 {
+        let (jsdir, rdir) = create_storage_dirs_with_same_keys()?;
+        let jsdir_str = jsdir.path().display().to_string();
+        let rdir_str = rdir.path().display().to_string();
+
+        let hb = Hyperbee::from_storage_dir(&rdir_str).await?;
+        dbg!(hb.height().await?);
+        let _keys = write_range_to_hb!(&hb, n_keys);
+        let code = format!(
+            "
+        for (let i = 0; i < {n_keys}; i++) {{
+            const k = String(i);
+            await hb.put(k, k);
+        }}
+        "
+        );
+        let _output = run_js_writable(&jsdir_str, &code)?;
+        if let Err(e) = diff_dirs(&jsdir_str, &rdir_str) {
+            println!("{e}");
+            let cmd = format!("cp -r {jsdir_str} {rdir_str} /home/blake/git/hyperbee/.");
+            println!("{cmd}");
+            run_command(&cmd)?;
+            panic!("failed on n_keys = {n_keys}");
+        }
+    }
+    Ok(())
+}
