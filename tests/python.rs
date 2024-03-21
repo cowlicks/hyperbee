@@ -2,7 +2,7 @@ mod common;
 use common::{
     parse_json_result,
     python::{require_python, run_python},
-    write_100, Result,
+    write_range_to_hb, Result,
 };
 use hyperbee::Hyperbee;
 
@@ -118,7 +118,7 @@ async fn zero_to_one_hundred() -> Result<()> {
     let _x = require_python()?;
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
-    let keys = write_100!(&hb);
+    let keys = write_range_to_hb!(&hb);
     let code = format!(
         "
 async def main():

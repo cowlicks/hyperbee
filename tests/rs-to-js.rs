@@ -1,6 +1,6 @@
 mod common;
 
-use common::{js::run_js, parse_json_result, write_100, Result};
+use common::{js::run_js, parse_json_result, write_range_to_hb, Result};
 use futures_lite::{Stream, StreamExt};
 use hyperbee::{
     traverse::{KeyDataResult, TraverseConfig},
@@ -15,6 +15,7 @@ async fn collect(stream: impl Stream<Item = KeyDataResult>) -> Result<Vec<Vec<u8
 #[tokio::test]
 async fn hello_world() -> Result<()> {
     let storage_dir = tempfile::tempdir()?;
+    let storage_dir_path = format!("{}", storage_dir.path().display());
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
     let key = b"hello";
     let value = b"world";
@@ -22,7 +23,7 @@ async fn hello_world() -> Result<()> {
     let res = hb.get(b"hello").await?;
     assert_eq!(res, Some((1u64, Some(value.to_vec()))));
     let output = run_js(
-        &storage_dir,
+        &storage_dir_path,
         "
 const r = await hb.get('hello');
 write(r.value.toString());",
@@ -34,10 +35,11 @@ write(r.value.toString());",
 #[tokio::test]
 async fn zero_to_one_hundred() -> Result<()> {
     let storage_dir = tempfile::tempdir()?;
+    let storage_dir_path = format!("{}", storage_dir.path().display());
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
-    let keys = write_100!(&hb);
+    let keys = write_range_to_hb!(&hb);
     let output = run_js(
-        &storage_dir,
+        &storage_dir_path,
         "
     const out = [];
     for (let i = 0; i < 100; i++) {
@@ -56,15 +58,16 @@ async fn zero_to_one_hundred() -> Result<()> {
 #[tokio::test]
 async fn stream_in_same_order() -> Result<()> {
     let storage_dir = tempfile::tempdir()?;
+    let storage_dir_path = format!("{}", storage_dir.path().display());
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
 
     // setup test
-    let _ = write_100!(&hb);
+    let _ = write_range_to_hb!(&hb);
 
     let rust_res: Vec<Vec<u8>> = collect(hb.traverse(Default::default()).await?).await?;
 
     let output = run_js(
-        &storage_dir,
+        &storage_dir_path,
         "
     const out = [];
     for await (const x of hb.createReadStream()) {
@@ -81,18 +84,19 @@ async fn stream_in_same_order() -> Result<()> {
 #[tokio::test]
 async fn sub_database() -> Result<()> {
     let storage_dir = tempfile::tempdir()?;
+    let storage_dir_path = format!("{}", storage_dir.path().display());
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
 
     // setup test
     let pref = b"pref";
     let sub = hb.sub(pref, Default::default());
 
-    let _ = write_100!(&sub);
+    let _ = write_range_to_hb!(&sub);
     let traverse_config = TraverseConfig::default();
     let rust_res: Vec<Vec<u8>> = collect(sub.traverse(&traverse_config).await?).await?;
 
     let output = run_js(
-        &storage_dir,
+        &storage_dir_path,
         "
     const out = [];
     const sub = hb.sub('pref');
