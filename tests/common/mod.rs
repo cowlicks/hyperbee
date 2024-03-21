@@ -65,7 +65,7 @@ pub fn run_code(
     build_command: impl FnOnce(&str, &str) -> String,
     copy_dirs: Vec<String>,
 ) -> Result<Output> {
-    let storage_dir_name = format!("{}", storage_dir);
+    let storage_dir_name = storage_dir.to_string();
     let pre_script = build_pre_script(&storage_dir_name);
 
     let working_dir = tempfile::tempdir()?;
@@ -98,9 +98,9 @@ pub fn run_code(
     }
     let script_path_str = script_path.display().to_string();
     let cmd = build_command(&working_dir_path, &script_path_str);
-    Ok(check_cmd_output(
+    check_cmd_output(
         Command::new("sh").arg("-c").arg(cmd).output()?,
-    )?)
+    )
 }
 
 pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output> {

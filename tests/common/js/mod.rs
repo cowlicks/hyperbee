@@ -30,10 +30,7 @@ fn build_command(_working_dir: &str, script_path: &str) -> String {
 }
 
 fn build_pre_script(storage_dir: &str, opt: Option<&str>) -> String {
-    let opt = match opt {
-        Some(x) => x,
-        None => "{writable: false}",
-    };
+    let opt = opt.unwrap_or("{writable: false}");
     format!(
         "
 const Hypercore = require('hypercore');
@@ -48,11 +45,11 @@ const hb = new Hyperbee(core);
 }
 
 fn writable_pre_script(storage_dir: &str) -> String {
-    return build_pre_script(storage_dir, Some("{writable: true}"));
+    build_pre_script(storage_dir, Some("{writable: true}"))
 }
 
 fn no_write_pre_script(storage_dir: &str) -> String {
-    return build_pre_script(storage_dir, None);
+    build_pre_script(storage_dir, None)
 }
 
 pub fn run_js(storage_dir: &str, script: &str) -> Result<Output, Box<dyn std::error::Error>> {

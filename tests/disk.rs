@@ -9,23 +9,23 @@ use hyperbee::Hyperbee;
 
 fn run_command(cmd: &str) -> Result<Output> {
     println!("Running command: {cmd}");
-    Ok(check_cmd_output(
+    check_cmd_output(
         Command::new("sh").arg("-c").arg(cmd).output()?,
-    )?)
+    )
 }
 
 fn create_initialized_storage_dir(dir_str: &str) -> Result<Output> {
-    Ok(run_js_writable(dir_str, "")?)
+    run_js_writable(dir_str, "")
 }
 
 fn cp_dirs(a: &str, b: &str) -> Result<Output> {
     let cmd = format!("cp -r {a}/. {b}/.");
-    Ok(run_command(&cmd)?)
+    run_command(&cmd)
 }
 
 fn diff_dirs(a: &str, b: &str) -> Result<Output> {
     let cmd = format!("diff {a} {b}");
-    Ok(run_command(&cmd)?)
+    run_command(&cmd)
 }
 
 fn create_storage_dirs_with_same_keys() -> Result<(TempDir, TempDir)> {
