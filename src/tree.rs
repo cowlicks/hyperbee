@@ -58,10 +58,9 @@ impl Tree {
     }
 
     pub async fn height(&self) -> Result<usize, HyperbeeError> {
-        let root = self
-            .get_root(false)
-            .await?
-            .expect("root should already be written");
+        let Some(root) = self.get_root(false).await? else {
+            return Ok(0);
+        };
 
         let root = root.read().await;
         root.height().await
