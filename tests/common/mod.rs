@@ -117,10 +117,13 @@ pub fn parse_json_result(output: &Output) -> Result<Vec<Vec<u8>>> {
 }
 
 #[allow(unused_macros)]
-macro_rules! write_100 {
+macro_rules! write_range_to_hb {
     ($hb:expr) => {{
+        write_range_to_hb!($hb, 100)
+    }};
+    ($hb:expr, $nkeys:expr) => {{
         let hb = $hb;
-        let keys: Vec<Vec<u8>> = (0..100)
+        let keys: Vec<Vec<u8>> = (0..$nkeys)
             .map(|x| x.clone().to_string().as_bytes().to_vec())
             .collect();
 
@@ -133,7 +136,7 @@ macro_rules! write_100 {
 }
 
 #[allow(unused_imports)]
-pub(crate) use write_100;
+pub(crate) use write_range_to_hb;
 
 pub fn check_cmd_output(out: Output) -> Result<Output> {
     if out.status.code() != Some(0) {

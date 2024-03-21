@@ -27,8 +27,9 @@ pub fn path_to_python_target() -> Result<PathBuf, Box<dyn std::error::Error>> {
 pub fn run_python(script: &str) -> Result<Output, Box<dyn std::error::Error>> {
     let storage_dir = tempdir()?;
     let target_path = path_to_python_target()?.display().to_string();
+    let storage_dir_path = format!("{}", storage_dir.path().display());
     run_code(
-        &storage_dir,
+        &storage_dir_path,
         |_| PRE_SCRIPT.to_string(),
         script,
         POST_SCRIPT,
