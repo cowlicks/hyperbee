@@ -10,7 +10,7 @@ use crate::{
     messages::header::Metadata,
     prefixed::{Prefixed, PrefixedConfig},
     traverse::{KeyDataResult, TraverseConfig},
-    tree, KeyValueData,
+    tree, BlockEntry, KeyValueData,
 };
 
 use super::{tree::Tree, Shared};
@@ -144,5 +144,18 @@ impl Hyperbee {
         Ok(HyperbeeBuilder::default()
             .tree(Arc::new(RwLock::new(tree)))
             .build()?)
+    }
+
+    // TODO for debugging
+    pub async fn get_block(&self, seq: u64) -> Result<Option<BlockEntry>, HyperbeeError> {
+        let blocks = self.tree.read().await.blocks.clone();
+        self.tree
+            .read()
+            .await
+            .blocks
+            .read()
+            .await
+            .get_from_core(&seq, blocks)
+            .await
     }
 }

@@ -59,6 +59,7 @@ impl Tree {
 
     pub async fn height(&self) -> Result<usize, HyperbeeError> {
         let Some(root) = self.get_root(false).await? else {
+            // TODO should error if no node o
             return Ok(0);
         };
 
