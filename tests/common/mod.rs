@@ -8,8 +8,6 @@ use std::{
 };
 
 use hyperbee::HyperbeeError;
-use tempfile::TempDir;
-
 pub mod c;
 pub mod js;
 pub mod python;
@@ -59,7 +57,7 @@ pub fn run_script_relative_to_git_root(script: &str) -> Result<Output> {
 }
 
 pub fn run_code(
-    storage_dir: &TempDir,
+    storage_dir: &str,
     build_pre_script: impl FnOnce(&str) -> String,
     script: &str,
     post_script: &str,
@@ -67,7 +65,7 @@ pub fn run_code(
     build_command: impl FnOnce(&str, &str) -> String,
     copy_dirs: Vec<String>,
 ) -> Result<Output> {
-    let storage_dir_name = format!("{}", storage_dir.path().display());
+    let storage_dir_name = format!("{}", storage_dir);
     let pre_script = build_pre_script(&storage_dir_name);
 
     let working_dir = tempfile::tempdir()?;
@@ -99,19 +97,16 @@ pub fn run_code(
         }
     }
     let script_path_str = script_path.display().to_string();
-    let command_str = build_command(&working_dir_path, &script_path_str);
-    Ok(Command::new("sh").arg("-c").arg(command_str).output()?)
+    let cmd = build_command(&working_dir_path, &script_path_str);
+    Ok(check_cmd_output(
+        Command::new("sh").arg("-c").arg(cmd).output()?,
+    )?)
 }
 
 pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output> {
     let path = join_paths!(git_root()?, dir);
     let cmd = format!("cd {path} && flock make.lock make {arg} && rm -f make.lock ");
-    let out = Command::new("sh").arg("-c").arg(cmd).output()?;
-    if out.status.code() != Some(0) {
-        return Err(Box::new(HyperbeeError::TestError(
-            String::from_utf8_lossy(&out.stderr).to_string(),
-        )));
-    }
+    let out = check_cmd_output(Command::new("sh").arg("-c").arg(cmd).output()?)?;
     Ok(out)
 }
 
@@ -139,3 +134,14 @@ macro_rules! write_100 {
 
 #[allow(unused_imports)]
 pub(crate) use write_100;
+
+pub fn check_cmd_output(out: Output) -> Result<Output> {
+    if out.status.code() != Some(0) {
+        return Err(Box::new(HyperbeeError::TestError(format!(
+            "comand output status was not zero. Got:\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr),
+        ))));
+    }
+    Ok(out)
+}
