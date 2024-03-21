@@ -76,7 +76,6 @@ pub fn run_code(
 {post_script}
 "
     );
-    println!("{code}");
     let script_path = working_dir.path().join(script_file_name);
     let script_file = File::create(&script_path)?;
     write!(&script_file, "{}", &code)?;
@@ -98,9 +97,7 @@ pub fn run_code(
     }
     let script_path_str = script_path.display().to_string();
     let cmd = build_command(&working_dir_path, &script_path_str);
-    check_cmd_output(
-        Command::new("sh").arg("-c").arg(cmd).output()?,
-    )
+    check_cmd_output(Command::new("sh").arg("-c").arg(cmd).output()?)
 }
 
 pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output> {
