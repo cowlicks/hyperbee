@@ -7,11 +7,10 @@ use common::{check_cmd_output, js::run_js_writable, Result};
 
 use hyperbee::Hyperbee;
 
+use crate::common::write_range_to_hb;
+
 fn run_command(cmd: &str) -> Result<Output> {
-    println!("Running command: {cmd}");
-    check_cmd_output(
-        Command::new("sh").arg("-c").arg(cmd).output()?,
-    )
+    check_cmd_output(Command::new("sh").arg("-c").arg(cmd).output()?)
 }
 
 fn create_initialized_storage_dir(dir_str: &str) -> Result<Output> {
