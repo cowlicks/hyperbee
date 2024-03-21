@@ -19,7 +19,7 @@ use tokio::sync::{Mutex, RwLock};
 
 /// A key/value store built on [`hypercore::Hypercore`]. It uses an append only
 /// [B-Tree](https://en.wikipedia.org/wiki/B-tree) and is compatible with the [JavaScript Hyperbee
-/// library](https://docs.holepunch.to/building-blocks/hyperbee)
+/// library](https://docs.pears.com/building-blocks/hyperbee).
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Tree {

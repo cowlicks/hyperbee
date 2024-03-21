@@ -53,10 +53,10 @@ Distributable python packages are still a work-in-progress. Currently only Pytho
 
 - [x] full functional interoperability with JS Hyperbee files
 - [x] read, write, and delete operations
-- [x] in-order key streaming like JS's [`createReadStream`](https://docs.holepunch.to/building-blocks/hyperbee#const-stream-db.createreadstream-range-options)
+- [x] in-order key streaming like JS's [`createReadStream`](https://docs.pears.com/building-blocks/hyperbee#db.createreadstream)
 - [x] support `gt`, `lt`,  etc bounds for key streaming
 - [x] accept compare-and-swap for `put` and `del`.
-- [x] support prefixed key operations like JS's [`sub`](https://docs.holepunch.to/building-blocks/hyperbee#const-sub-db.sub-sub-prefix-options)
+- [x] support prefixed key operations like JS's [`sub`](https://docs.pears.com/building-blocks/hyperbee#db.sub)
 - [ ] one-to-one binary output
 
 ## Future work
