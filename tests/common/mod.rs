@@ -145,3 +145,14 @@ pub fn check_cmd_output(out: Output) -> Result<Output> {
     }
     Ok(out)
 }
+
+use tokio::sync::OnceCell;
+
+static INIT_LOG: OnceCell<()> = OnceCell::const_new();
+pub async fn setup_logs() {
+    INIT_LOG
+        .get_or_init(|| async {
+            tracing_subscriber::fmt::init();
+        })
+        .await;
+}
