@@ -21,6 +21,9 @@ mod tree;
 #[cfg(feature = "clib")]
 mod external;
 
+#[cfg(feature = "debug")]
+use std::io::Write;
+
 use std::{
     fmt::Debug,
     ops::{Range, RangeBounds},
@@ -421,12 +424,48 @@ impl Node {
     }
 
     /// Insert a key and it's children into [`self`].
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, key_ref, children, range))]
     async fn insert(&mut self, key_ref: KeyValue, children: Vec<Child>, range: Range<usize>) {
         trace!("inserting [{}] children", children.len());
         self.keys.splice(range.clone(), vec![key_ref]);
         self.children.insert(range.start, children).await;
     }
+
+    #[cfg(feature = "debug")]
+    async fn display(&self) -> Result<String, HyperbeeError> {
+        display_node(self).await
+        /*
+        let mut out = Vec::new();
+        write!(out, "Node {{ ")?;
+        write!(out, "[ ")?;
+        for (i, _k) in self.keys.iter().enumerate() {
+            let kv = self.get_key_value(i).await?;
+            let key = String::from_utf8_lossy(&kv.key);
+            write!(out, " {}", key)?;
+        }
+        write!(out, " ]")?;
+        write!(out, " }}")?;
+        Ok(String::from_utf8_lossy(&out).to_string())
+        */
+    }
+}
+
+#[cfg(feature = "debug")]
+use std::ops::Deref;
+
+#[cfg(feature = "debug")]
+async fn display_node<T: Deref<Target = Node>>(node: T) -> Result<String, HyperbeeError> {
+    let mut out = Vec::new();
+    write!(out, "Node {{ ")?;
+    write!(out, "[ ")?;
+    for (i, _k) in node.keys.iter().enumerate() {
+        let kv = node.get_key_value(i).await?;
+        let key = String::from_utf8_lossy(&kv.key);
+        write!(out, " {}", key)?;
+    }
+    write!(out, " ]")?;
+    write!(out, " }}")?;
+    Ok(String::from_utf8_lossy(&out).to_string())
 }
 
 impl BlockEntry {
@@ -449,6 +488,23 @@ impl BlockEntry {
             )
             .expect("offset *should* always point to a real node")
             .clone())
+    }
+
+    #[cfg(feature = "debug")]
+    pub async fn display(&self) -> Result<String, HyperbeeError> {
+        let mut out = Vec::new();
+        write!(out, "BlockEntry {{")?;
+        write!(out, " [ ")?;
+        let last_index = self.nodes.len() - 1;
+        for (i, node) in self.nodes.iter().enumerate() {
+            write!(out, " {}", node.read().await.display().await?)?;
+            if i != last_index {
+                write!(out, ",")?;
+            }
+        }
+        write!(out, " ]")?;
+        write!(out, " }}")?;
+        Ok(String::from_utf8_lossy(&out).to_string())
     }
 }
 
