@@ -163,9 +163,9 @@ impl Tree {
         };
 
         trace!(
-            "creating a new root with key = [{:#?}] and children = [{:#?}]",
+            "creating a new root with key = [{:#?}] and # children = [{}]",
             &cur_key,
-            &children
+            children.len(),
         );
         let new_root = Arc::new(RwLock::new(Node::new(
             vec![cur_key.clone()],

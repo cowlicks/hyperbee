@@ -96,18 +96,31 @@ type Shared<T> = Arc<RwLock<T>>;
 type SharedNode = Shared<Node>;
 type NodePath = Vec<(SharedNode, usize)>;
 
-#[derive(Debug)]
 struct Children {
     blocks: Shared<Blocks>,
     children: RwLock<Vec<Child>>,
 }
 
+impl Debug for Children {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Children")
+            .field("children", &self.children)
+            .finish()
+    }
+}
+
 /// A node of the B-Tree within the [`Hyperbee`]
-#[derive(Debug)]
 struct Node {
     keys: Vec<KeyValue>,
     children: Children,
     blocks: Shared<Blocks>,
+}
+
+/// custom debug because the struct is recursive
+impl Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Node").field("keys", &self.keys).finish()
+    }
 }
 
 impl KeyValue {
@@ -160,7 +173,7 @@ impl Children {
         }
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, new_children))]
     async fn insert(&self, index: usize, new_children: Vec<Child>) {
         if new_children.is_empty() {
             trace!("no children to insert, do nothing");
