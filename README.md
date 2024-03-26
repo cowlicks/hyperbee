@@ -57,7 +57,7 @@ Distributable python packages are still a work-in-progress. Currently only Pytho
 - [x] support `gt`, `lt`,  etc bounds for key streaming
 - [x] accept compare-and-swap for `put` and `del`.
 - [x] support prefixed key operations like JS's [`sub`](https://docs.holepunch.to/building-blocks/hyperbee#const-sub-db.sub-sub-prefix-options)
-- [ ] one-to-one binary output
+- [x] one-to-one binary output [#23](https://github.com/cowlicks/hyperbee/pull/23/)
 
 ## Future work
 
