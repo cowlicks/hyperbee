@@ -8,11 +8,11 @@ use std::{
 };
 
 use hyperbee::HyperbeeError;
-use tempfile::TempDir;
-
 pub mod c;
 pub mod js;
 pub mod python;
+
+pub type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
 pub static PATH_TO_DATA_DIR: &str = "tests/common/js/data";
 pub static PATH_TO_C_LIB: &str = "target/debug/libhyperbee.so";
@@ -33,7 +33,7 @@ macro_rules! join_paths {
 
 pub(crate) use join_paths;
 
-pub fn git_root() -> Result<String, Box<dyn std::error::Error>> {
+pub fn git_root() -> Result<String> {
     let x = Command::new("sh")
         .arg("-c")
         .arg("git rev-parse --show-toplevel")
@@ -41,15 +41,15 @@ pub fn git_root() -> Result<String, Box<dyn std::error::Error>> {
     Ok(String::from_utf8(x.stdout)?.trim().to_string())
 }
 
-pub fn path_to_c_lib() -> Result<String, Box<dyn std::error::Error>> {
+pub fn path_to_c_lib() -> Result<String> {
     Ok(join_paths!(git_root()?, PATH_TO_C_LIB))
 }
 
-pub fn get_data_dir() -> Result<String, Box<dyn std::error::Error>> {
+pub fn get_data_dir() -> Result<String> {
     Ok(join_paths!(git_root()?, &PATH_TO_DATA_DIR))
 }
 
-pub fn run_script_relative_to_git_root(script: &str) -> Result<Output, Box<dyn std::error::Error>> {
+pub fn run_script_relative_to_git_root(script: &str) -> Result<Output> {
     Ok(Command::new("sh")
         .arg("-c")
         .arg(format!("cd {} && {}", git_root()?, script))
@@ -57,15 +57,15 @@ pub fn run_script_relative_to_git_root(script: &str) -> Result<Output, Box<dyn s
 }
 
 pub fn run_code(
-    storage_dir: &TempDir,
+    storage_dir: &str,
     build_pre_script: impl FnOnce(&str) -> String,
     script: &str,
     post_script: &str,
     script_file_name: &str,
     build_command: impl FnOnce(&str, &str) -> String,
     copy_dirs: Vec<String>,
-) -> Result<Output, Box<dyn std::error::Error>> {
-    let storage_dir_name = format!("{}", storage_dir.path().display());
+) -> Result<Output> {
+    let storage_dir_name = storage_dir.to_string();
     let pre_script = build_pre_script(&storage_dir_name);
 
     let working_dir = tempfile::tempdir()?;
@@ -76,7 +76,6 @@ pub fn run_code(
 {post_script}
 "
     );
-    println!("{code}");
     let script_path = working_dir.path().join(script_file_name);
     let script_file = File::create(&script_path)?;
     write!(&script_file, "{}", &code)?;
@@ -97,33 +96,31 @@ pub fn run_code(
         }
     }
     let script_path_str = script_path.display().to_string();
-    let command_str = build_command(&working_dir_path, &script_path_str);
-    Ok(Command::new("sh").arg("-c").arg(command_str).output()?)
+    let cmd = build_command(&working_dir_path, &script_path_str);
+    check_cmd_output(Command::new("sh").arg("-c").arg(cmd).output()?)
 }
 
-pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output, Box<dyn std::error::Error>> {
+pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output> {
     let path = join_paths!(git_root()?, dir);
     let cmd = format!("cd {path} && flock make.lock make {arg} && rm -f make.lock ");
-    let out = Command::new("sh").arg("-c").arg(cmd).output()?;
-    if out.status.code() != Some(0) {
-        return Err(Box::new(HyperbeeError::TestError(
-            String::from_utf8_lossy(&out.stderr).to_string(),
-        )));
-    }
+    let out = check_cmd_output(Command::new("sh").arg("-c").arg(cmd).output()?)?;
     Ok(out)
 }
 
-pub fn parse_json_result(output: &Output) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
+pub fn parse_json_result(output: &Output) -> Result<Vec<Vec<u8>>> {
     let stdout = String::from_utf8(output.stdout.clone())?;
     let res: Vec<String> = serde_json::from_str(&stdout)?;
     Ok(res.into_iter().map(|x| x.into()).collect())
 }
 
 #[allow(unused_macros)]
-macro_rules! write_100 {
+macro_rules! write_range_to_hb {
     ($hb:expr) => {{
+        write_range_to_hb!($hb, 100)
+    }};
+    ($hb:expr, $nkeys:expr) => {{
         let hb = $hb;
-        let keys: Vec<Vec<u8>> = (0..100)
+        let keys: Vec<Vec<u8>> = (0..$nkeys)
             .map(|x| x.clone().to_string().as_bytes().to_vec())
             .collect();
 
@@ -136,4 +133,26 @@ macro_rules! write_100 {
 }
 
 #[allow(unused_imports)]
-pub(crate) use write_100;
+pub(crate) use write_range_to_hb;
+
+pub fn check_cmd_output(out: Output) -> Result<Output> {
+    if out.status.code() != Some(0) {
+        return Err(Box::new(HyperbeeError::TestError(format!(
+            "comand output status was not zero. Got:\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr),
+        ))));
+    }
+    Ok(out)
+}
+
+use tokio::sync::OnceCell;
+
+static INIT_LOG: OnceCell<()> = OnceCell::const_new();
+pub async fn setup_logs() {
+    INIT_LOG
+        .get_or_init(|| async {
+            tracing_subscriber::fmt::init();
+        })
+        .await;
+}

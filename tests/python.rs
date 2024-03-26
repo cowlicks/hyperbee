@@ -2,12 +2,12 @@ mod common;
 use common::{
     parse_json_result,
     python::{require_python, run_python},
-    write_100,
+    write_range_to_hb, Result,
 };
 use hyperbee::Hyperbee;
 
 #[tokio::test]
-async fn test_sub_prefix() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_sub_prefix() -> Result<()> {
     let x = match require_python() {
         Err(e) => {
             println!("{}", e);
@@ -44,7 +44,7 @@ async def main():
 }
 
 #[tokio::test]
-async fn hello_world_get_set_del() -> Result<(), Box<dyn std::error::Error>> {
+async fn hello_world_get_set_del() -> Result<()> {
     let x = require_python()?;
     dbg!(&x);
     let out = run_python(
@@ -68,7 +68,7 @@ async def main():
 }
 
 #[tokio::test]
-async fn optionals() -> Result<(), Box<dyn std::error::Error>> {
+async fn optionals() -> Result<()> {
     let _x = require_python()?;
     let storage_dir = tempfile::tempdir()?;
     {
@@ -96,7 +96,7 @@ async def main():
     Ok(())
 }
 #[tokio::test]
-async fn check_version() -> Result<(), Box<dyn std::error::Error>> {
+async fn check_version() -> Result<()> {
     let _x = require_python()?;
     let out = run_python(
         "
@@ -114,11 +114,11 @@ async def main():
 }
 
 #[tokio::test]
-async fn zero_to_one_hundred() -> Result<(), Box<dyn std::error::Error>> {
+async fn zero_to_one_hundred() -> Result<()> {
     let _x = require_python()?;
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
-    let keys = write_100!(&hb);
+    let keys = write_range_to_hb!(&hb);
     let code = format!(
         "
 async def main():

@@ -23,7 +23,7 @@ mod external;
 
 use std::{
     fmt::Debug,
-    ops::{Range, RangeBounds},
+    ops::{Deref, Range, RangeBounds},
     sync::Arc,
 };
 
@@ -69,7 +69,6 @@ pub struct KeyValueData {
     pub value: Option<Vec<u8>>,
 }
 
-#[derive(Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
 struct Child {
     /// Index of the [`BlockEntry`] within the [`hypercore::Hypercore`] that contains the [`Node`]
@@ -80,10 +79,18 @@ struct Child {
     cached_node: Option<SharedNode>,
 }
 
-#[derive(Clone, Debug)]
+impl Debug for Child {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Child")
+            .field("seq", &self.seq)
+            .field("offset", &self.offset)
+            .finish()
+    }
+}
+
 /// A "block" from a [`Hypercore`](hypercore::Hypercore) deserialized into the form used in
 /// Hyperbee
-struct BlockEntry {
+pub struct BlockEntry {
     /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
     nodes: Vec<SharedNode>,
     /// NodeSchema::new(hypercore.get(seq)).key
@@ -92,22 +99,78 @@ struct BlockEntry {
     value: Option<Vec<u8>>,
 }
 
+impl Debug for BlockEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BlockEntry {{ ")?;
+        let mut nodes = vec![];
+        for node in self.nodes.iter() {
+            nodes.push(node.try_read().unwrap());
+        }
+        f.debug_list().entries(nodes).finish()?;
+        write!(f, "}}")
+    }
+}
+
 type Shared<T> = Arc<RwLock<T>>;
 type SharedNode = Shared<Node>;
 type NodePath = Vec<(SharedNode, usize)>;
 
-#[derive(Debug)]
 struct Children {
     blocks: Shared<Blocks>,
     children: RwLock<Vec<Child>>,
 }
 
+impl Debug for Children {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.children.try_read() {
+            Ok(children) => {
+                let mut dl = f.debug_list();
+                for child in children.iter() {
+                    dl.entry(&format_args!("({}, {})", child.seq, child.offset));
+                }
+                dl.finish()
+            }
+            Err(_) => write!(f, "<locked>"),
+        }
+    }
+}
+
 /// A node of the B-Tree within the [`Hyperbee`]
-#[derive(Debug)]
 struct Node {
     keys: Vec<KeyValue>,
     children: Children,
     blocks: Shared<Blocks>,
+}
+
+struct KeyValueVecDebug<'a>(&'a Vec<KeyValue>);
+impl Debug for KeyValueVecDebug<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut dl = f.debug_list();
+        for kv in self.0.iter() {
+            dl.entry(&format_args!("{}", kv.seq));
+        }
+        dl.finish()
+    }
+}
+
+/// custom debug because the struct is recursive
+impl Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        node_debug(self, f)
+    }
+}
+
+fn node_debug<T: Deref<Target = Node>>(
+    node: T,
+    f: &mut std::fmt::Formatter<'_>,
+) -> std::fmt::Result {
+    f.debug_struct("Node")
+        .field(
+            "keys",
+            &format_args!("{:?}", node.keys.iter().map(|k| k.seq).collect::<Vec<_>>()),
+        )
+        .field("children", &node.children)
+        .finish()
 }
 
 impl KeyValue {
@@ -153,6 +216,14 @@ fn make_node_vec<B: Buf>(buf: B, blocks: Shared<Blocks>) -> Result<Vec<SharedNod
 }
 
 impl Children {
+    async fn update_offsets(&mut self, seq: u64, n_nodes_in_block: u64) {
+        for child in self.children.write().await.iter_mut() {
+            if child.seq == seq {
+                child.offset = n_nodes_in_block - child.offset;
+            }
+        }
+    }
+
     fn new(blocks: Shared<Blocks>, children: Vec<Child>) -> Self {
         Self {
             blocks,
@@ -160,7 +231,7 @@ impl Children {
         }
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, new_children))]
     async fn insert(&self, index: usize, new_children: Vec<Child>) {
         if new_children.is_empty() {
             trace!("no children to insert, do nothing");
@@ -408,7 +479,7 @@ impl Node {
     }
 
     /// Insert a key and it's children into [`self`].
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, key_ref, children, range))]
     async fn insert(&mut self, key_ref: KeyValue, children: Vec<Child>, range: Range<usize>) {
         trace!("inserting [{}] children", children.len());
         self.keys.splice(range.clone(), vec![key_ref]);

@@ -49,4 +49,7 @@ pub enum HyperbeeError {
     HeaderAlreadyExists,
     #[error("Problem in tests: {0}")]
     TestError(String),
+    #[cfg(feature = "debug")]
+    #[error("There was an IO Error")]
+    IoError(#[from] std::io::Error),
 }

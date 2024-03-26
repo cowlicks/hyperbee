@@ -24,11 +24,12 @@ name = "uniffi-bindgen"
 path = "uniffi-bindgen.rs"
 required-features = ["ffi"]
 
-[features]
 # TODO rm "ffi" from default when we split project into workspaces. So we can avoid using uniffi unless it is needed
-default = ["ffi"]
+[features]
+default = ["ffi", "debug"]
 clib = ["tokio/rt-multi-thread", "dep:libc"]
 ffi = ["clib", "dep:uniffi"]
+debug = []
 
 [dependencies]
 async-trait = "0.1.77"
