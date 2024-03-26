@@ -154,10 +154,14 @@ impl Tree {
 
                 let (left, mid_key, right) = cur_node.write().await.split().await;
 
-                children = vec![
-                    changes.add_node(left.clone()),
-                    changes.add_node(right.clone()),
-                ];
+                // NB: !! we currently *must* add right and left to changes in this order so that
+                // we match the exact order of JS hypercore. We add right, then left, because later
+                // when the changes are commited, array of changed nodes is reversed, so it becomes
+                // left, then right.
+                let rchild = changes.add_node(right.clone());
+                let lchild = changes.add_node(left.clone());
+                children = vec![lchild, rchild];
+
                 cur_key = mid_key;
             }
         };
@@ -255,7 +259,6 @@ mod test {
                 let key = vec![j];
                 let val = Some(key.clone());
                 let res = hb.get(&key).await?.unwrap();
-                dbg!(&res);
                 assert_eq!(res.1, val);
             }
         }
@@ -277,7 +280,6 @@ mod test {
                 let key = vec![j];
                 let val = Some(vec![j + 1]);
                 let res = hb.get(&key).await?.unwrap();
-                dbg!(&res, &key, &val);
                 assert_eq!(res.1, val);
             }
         }
