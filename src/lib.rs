@@ -21,12 +21,9 @@ mod tree;
 #[cfg(feature = "clib")]
 mod external;
 
-#[cfg(feature = "debug")]
-use std::io::Write;
-
 use std::{
     fmt::Debug,
-    ops::{Range, RangeBounds},
+    ops::{Deref, Range, RangeBounds},
     sync::Arc,
 };
 
@@ -72,7 +69,6 @@ pub struct KeyValueData {
     pub value: Option<Vec<u8>>,
 }
 
-#[derive(Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
 struct Child {
     /// Index of the [`BlockEntry`] within the [`hypercore::Hypercore`] that contains the [`Node`]
@@ -83,7 +79,15 @@ struct Child {
     cached_node: Option<SharedNode>,
 }
 
-#[derive(Clone, Debug)]
+impl Debug for Child {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Child")
+            .field("seq", &self.seq)
+            .field("offset", &self.offset)
+            .finish()
+    }
+}
+
 /// A "block" from a [`Hypercore`](hypercore::Hypercore) deserialized into the form used in
 /// Hyperbee
 pub struct BlockEntry {
@@ -93,6 +97,18 @@ pub struct BlockEntry {
     key: Vec<u8>,
     /// NodeSchema::new(hypercore.get(seq)).value
     value: Option<Vec<u8>>,
+}
+
+impl Debug for BlockEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BlockEntry {{ ")?;
+        let mut nodes = vec![];
+        for node in self.nodes.iter() {
+            nodes.push(node.try_read().unwrap());
+        }
+        f.debug_list().entries(nodes).finish()?;
+        write!(f, "}}")
+    }
 }
 
 type Shared<T> = Arc<RwLock<T>>;
@@ -106,9 +122,16 @@ struct Children {
 
 impl Debug for Children {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Children")
-            .field("children", &self.children)
-            .finish()
+        match self.children.try_read() {
+            Ok(children) => {
+                let mut dl = f.debug_list();
+                for child in children.iter() {
+                    dl.entry(&format_args!("({}, {})", child.seq, child.offset));
+                }
+                dl.finish()
+            }
+            Err(_) => write!(f, "<locked>"),
+        }
     }
 }
 
@@ -119,11 +142,35 @@ struct Node {
     blocks: Shared<Blocks>,
 }
 
+struct KeyValueVecDebug<'a>(&'a Vec<KeyValue>);
+impl Debug for KeyValueVecDebug<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut dl = f.debug_list();
+        for kv in self.0.iter() {
+            dl.entry(&format_args!("{}", kv.seq));
+        }
+        dl.finish()
+    }
+}
+
 /// custom debug because the struct is recursive
 impl Debug for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Node").field("keys", &self.keys).finish()
+        node_debug(self, f)
     }
+}
+
+fn node_debug<T: Deref<Target = Node>>(
+    node: T,
+    f: &mut std::fmt::Formatter<'_>,
+) -> std::fmt::Result {
+    f.debug_struct("Node")
+        .field(
+            "keys",
+            &format_args!("{:?}", node.keys.iter().map(|k| k.seq).collect::<Vec<_>>()),
+        )
+        .field("children", &node.children)
+        .finish()
 }
 
 impl KeyValue {
@@ -430,42 +477,6 @@ impl Node {
         self.keys.splice(range.clone(), vec![key_ref]);
         self.children.insert(range.start, children).await;
     }
-
-    #[cfg(feature = "debug")]
-    async fn display(&self) -> Result<String, HyperbeeError> {
-        display_node(self).await
-        /*
-        let mut out = Vec::new();
-        write!(out, "Node {{ ")?;
-        write!(out, "[ ")?;
-        for (i, _k) in self.keys.iter().enumerate() {
-            let kv = self.get_key_value(i).await?;
-            let key = String::from_utf8_lossy(&kv.key);
-            write!(out, " {}", key)?;
-        }
-        write!(out, " ]")?;
-        write!(out, " }}")?;
-        Ok(String::from_utf8_lossy(&out).to_string())
-        */
-    }
-}
-
-#[cfg(feature = "debug")]
-use std::ops::Deref;
-
-#[cfg(feature = "debug")]
-async fn display_node<T: Deref<Target = Node>>(node: T) -> Result<String, HyperbeeError> {
-    let mut out = Vec::new();
-    write!(out, "Node {{ ")?;
-    write!(out, "[ ")?;
-    for (i, _k) in node.keys.iter().enumerate() {
-        let kv = node.get_key_value(i).await?;
-        let key = String::from_utf8_lossy(&kv.key);
-        write!(out, " {}", key)?;
-    }
-    write!(out, " ]")?;
-    write!(out, " }}")?;
-    Ok(String::from_utf8_lossy(&out).to_string())
 }
 
 impl BlockEntry {
@@ -488,23 +499,6 @@ impl BlockEntry {
             )
             .expect("offset *should* always point to a real node")
             .clone())
-    }
-
-    #[cfg(feature = "debug")]
-    pub async fn display(&self) -> Result<String, HyperbeeError> {
-        let mut out = Vec::new();
-        write!(out, "BlockEntry {{")?;
-        write!(out, " [ ")?;
-        let last_index = self.nodes.len() - 1;
-        for (i, node) in self.nodes.iter().enumerate() {
-            write!(out, " {}", node.read().await.display().await?)?;
-            if i != last_index {
-                write!(out, ",")?;
-            }
-        }
-        write!(out, " ]")?;
-        write!(out, " }}")?;
-        Ok(String::from_utf8_lossy(&out).to_string())
     }
 }
 
