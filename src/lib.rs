@@ -90,7 +90,7 @@ impl Debug for Child {
 
 /// A "block" from a [`Hypercore`](hypercore::Hypercore) deserialized into the form used in
 /// Hyperbee
-pub struct BlockEntry {
+struct BlockEntry {
     /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
     nodes: Vec<SharedNode>,
     /// NodeSchema::new(hypercore.get(seq)).key
