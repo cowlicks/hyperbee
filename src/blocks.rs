@@ -104,22 +104,36 @@ impl Blocks {
         let Changes {
             key,
             value,
-            nodes,
             root,
+            mut nodes,
+            seq,
             ..
         } = changes;
-
-        trace!("adding changes with n_nodes = {}", nodes.len());
+        trace!("Adding changes with # non-root nodes [{}]", nodes.len());
         let mut new_nodes = vec![];
-        // encode nodes
-        new_nodes.push(
-            root.expect("Root *should* always be added in the put/del logic")
-                .read()
-                .await
-                .to_level()
-                .await,
-        );
+
+        let n_nodes_in_block = nodes.len() + 1; // +1 from root
+        let n_nodes_in_block: u64 = n_nodes_in_block.try_into().unwrap();
+
+        let root = root.expect("Root *should* always be added in the put/del logic");
+
+        // re-order nodes to match js hyperbee
+        // and update their offset
+        root.write()
+            .await
+            .children
+            .update_offsets(seq, n_nodes_in_block)
+            .await;
+
+        new_nodes.push(root.read().await.to_level().await);
+
+        nodes.reverse();
         for node in nodes.into_iter() {
+            node.write()
+                .await
+                .children
+                .update_offsets(seq, n_nodes_in_block)
+                .await;
             new_nodes.push(node.read().await.to_level().await);
         }
 

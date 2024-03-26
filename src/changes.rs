@@ -4,7 +4,7 @@ use crate::{Child, SharedNode};
 /// Structure to store in-progress changes to the [`Hyperbee`]
 /// NB: because of how hyperbee-js works, we need to distinguish between root/non-root nodes.
 pub(crate) struct Changes {
-    seq: u64,
+    pub seq: u64,
     pub key: Vec<u8>,
     pub value: Option<Vec<u8>>,
     pub nodes: Vec<SharedNode>,

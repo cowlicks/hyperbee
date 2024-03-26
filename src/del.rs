@@ -461,12 +461,15 @@ impl Tree {
             propagate_changes_up_tree(changes, path, child).await
         };
 
-        let root = root.read().await;
-        // If we removed all keys from the root but it still has a child, make the child the root
-        if root.keys.is_empty() && root.n_children().await == 1 {
-            changes.overwrite_root(root.get_child(0).await?);
-        }
-
+        // we scope this `root.read(..)` so it is dopped before `.add_changes(..)` below because
+        // add_changes calls `root.write(..)`
+        {
+            let root = root.read().await;
+            // If we removed all keys from the root but it still has a child, make the child the root
+            if root.keys.is_empty() && root.n_children().await == 1 {
+                changes.overwrite_root(root.get_child(0).await?);
+            }
+        };
         self.blocks.read().await.add_changes(changes).await?;
         Ok(Some((true, seq)))
     }
