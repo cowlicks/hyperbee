@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `Debug` implementation for `Children`, `Child`, `Node` and `BlockEntry` changed to be more readable.
+- On-disk binary output is now identical to JavaScript Hyperbee.
 - `Hyperbee` no longer takes a generic parameter with `CoreMem` bound.
 
 ### Removed
