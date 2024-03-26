@@ -142,17 +142,6 @@ struct Node {
     blocks: Shared<Blocks>,
 }
 
-struct KeyValueVecDebug<'a>(&'a Vec<KeyValue>);
-impl Debug for KeyValueVecDebug<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut dl = f.debug_list();
-        for kv in self.0.iter() {
-            dl.entry(&format_args!("{}", kv.seq));
-        }
-        dl.finish()
-    }
-}
-
 /// custom debug because the struct is recursive
 impl Debug for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
