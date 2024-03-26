@@ -59,7 +59,9 @@ impl Tree {
 
     pub async fn height(&self) -> Result<usize, HyperbeeError> {
         let Some(root) = self.get_root(false).await? else {
-            // TODO should error if no node o
+            // When there is no root, return zero.
+            // TODO Should we also return zere when there is a root, but it is empty?
+            // We currently return `1`.
             return Ok(0);
         };
 
@@ -178,5 +180,23 @@ impl Clone for Tree {
         Self {
             blocks: self.blocks.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[tokio::test]
+    async fn height_zero() -> Result<(), HyperbeeError> {
+        let tree = Tree::from_ram().await?;
+        assert_eq!(tree.height().await?, 0);
+
+        tree.put(b"foo", None).await?;
+        assert_eq!(tree.height().await?, 1);
+        tree.del(b"foo").await?;
+        // one reason to remove this method from public API. Should the empty root node ad to the height? It does.
+        assert_eq!(tree.height().await?, 1);
+        Ok(())
     }
 }
