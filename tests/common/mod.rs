@@ -5,6 +5,7 @@ use std::{
     fs::File,
     io::Write,
     process::{Command, Output},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use tokio::sync::OnceCell;
@@ -160,4 +161,47 @@ pub async fn setup_logs() {
             tracing_subscriber::fmt::init();
         })
         .await;
+}
+// TODO this (and other stuff in this module) are copiedfrom src/tests.rs. DRY this by using a
+// feature in src and requiring these tests use that feature.
+/// Seedable deterministic pseudorandom number generator used for reproducible randomized testing
+pub struct Rand {
+    seed: u64,
+    counter: AtomicU64,
+    sin_scale: f64,
+    ordering: Ordering,
+}
+
+impl Rand {
+    pub fn rand(&self) -> f64 {
+        let count = self.counter.fetch_add(1, self.ordering);
+        let x = ((self.seed + count) as f64).sin() * self.sin_scale;
+        x - x.floor()
+    }
+    pub fn rand_int_lt(&self, max: u64) -> u64 {
+        (self.rand() * (max as f64)).floor() as u64
+    }
+    pub fn shuffle<T>(&self, mut arr: Vec<T>) -> Vec<T> {
+        let mut out = vec![];
+        while !arr.is_empty() {
+            let i = self.rand_int_lt(arr.len() as u64) as usize;
+            out.push(arr.remove(i));
+        }
+        out
+    }
+}
+
+impl Default for Rand {
+    fn default() -> Self {
+        Self {
+            seed: 42,
+            counter: Default::default(),
+            sin_scale: 10_000_f64,
+            ordering: Ordering::SeqCst,
+        }
+    }
+}
+
+pub fn i32_key_vec(i: i32) -> Vec<u8> {
+    i.clone().to_string().as_bytes().to_vec()
 }
