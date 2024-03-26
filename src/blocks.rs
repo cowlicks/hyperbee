@@ -75,7 +75,7 @@ impl Blocks {
         self.cache.read().await.get(seq).cloned()
     }
 
-    pub async fn get_from_core(
+    async fn get_from_core(
         &self,
         seq: &u64,
         blocks: Shared<Self>,
@@ -112,10 +112,11 @@ impl Blocks {
         trace!("Adding changes with # non-root nodes [{}]", nodes.len());
         let mut new_nodes = vec![];
 
-        let n_nodes_in_block = nodes.len() + 1; // +1 from root
-        let n_nodes_in_block: u64 = n_nodes_in_block.try_into().unwrap();
+        // NB: the + 1u64 is from the root
+        // Could # nodes be greater than u64? No way.
+        let n_nodes_in_block: u64 = 1u64 + nodes.len() as u64;
 
-        let root = root.expect("Root *should* always be added in the put/del logic");
+        let root = root.expect("Root *must* always be added in the put/del logic");
 
         // re-order nodes to match js hyperbee
         // and update their offset
