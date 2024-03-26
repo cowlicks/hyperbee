@@ -26,10 +26,9 @@ required-features = ["ffi"]
 
 # TODO rm "ffi" from default when we split project into workspaces. So we can avoid using uniffi unless it is needed
 [features]
-default = ["ffi", "debug"]
+default = ["ffi"]
 clib = ["tokio/rt-multi-thread", "dep:libc"]
 ffi = ["clib", "dep:uniffi"]
-debug = []
 
 [dependencies]
 async-trait = "0.1.77"

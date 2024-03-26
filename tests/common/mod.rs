@@ -7,7 +7,6 @@ use std::{
     process::{Command, Output},
 };
 
-use hyperbee::HyperbeeError;
 pub mod c;
 pub mod js;
 pub mod python;
@@ -16,6 +15,12 @@ pub type Result<T> = core::result::Result<T, Box<dyn std::error::Error>>;
 
 pub static PATH_TO_DATA_DIR: &str = "tests/common/js/data";
 pub static PATH_TO_C_LIB: &str = "target/debug/libhyperbee.so";
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Problem in tests: {0}")]
+    TestError(String),
+}
 
 macro_rules! join_paths {
     ( $path:expr$(,)?) => {
@@ -89,7 +94,7 @@ pub fn run_code(
             .arg(&working_dir_path)
             .output()?;
         if dir_cp_cmd.status.code() != Some(0) {
-            return Err(Box::new(HyperbeeError::TestError(format!(
+            return Err(Box::new(Error::TestError(format!(
                 "failed to copy dir [{dir}] to [{working_dir_path}] got stderr: {}",
                 String::from_utf8_lossy(&dir_cp_cmd.stderr),
             ))));
@@ -137,7 +142,7 @@ pub(crate) use write_range_to_hb;
 
 pub fn check_cmd_output(out: Output) -> Result<Output> {
     if out.status.code() != Some(0) {
-        return Err(Box::new(HyperbeeError::TestError(format!(
+        return Err(Box::new(Error::TestError(format!(
             "comand output status was not zero. Got:\nstdout: {}\nstderr: {}",
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr),
