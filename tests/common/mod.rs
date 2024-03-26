@@ -7,6 +7,8 @@ use std::{
     process::{Command, Output},
 };
 
+use tokio::sync::OnceCell;
+
 pub mod c;
 pub mod js;
 pub mod python;
@@ -150,8 +152,6 @@ pub fn check_cmd_output(out: Output) -> Result<Output> {
     }
     Ok(out)
 }
-
-use tokio::sync::OnceCell;
 
 static INIT_LOG: OnceCell<()> = OnceCell::const_new();
 pub async fn setup_logs() {
