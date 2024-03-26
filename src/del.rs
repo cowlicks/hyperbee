@@ -176,10 +176,6 @@ impl Side {
         // pull donated parts out of donor
         let donated_key = self.get_donor_key(donor.clone()).await;
         let donated_child = self.get_donor_child(donor.clone()).await;
-        // create new ref for changed donor
-        let donor_ref = changes.add_node(donor.clone());
-        // replace donor that changed in the father
-        father.read().await.children.children.write().await[donor_index] = donor_ref;
 
         // swap donated_key in father to get key for deficient_child
         let donated_key_from_father = self
@@ -194,7 +190,16 @@ impl Side {
         )
         .await;
 
+        info!("add rotation fixed node changes");
         let newly_non_deficient_child_ref = changes.add_node(deficient_child.clone());
+
+        // create new ref for changed donor
+        // NB: we do this after we add fixed deficient child to changes so we match JS HB's binary
+        // output
+        info!("add rotation donor changes");
+        let donor_ref = changes.add_node(donor.clone());
+        // replace donor that changed in the father
+        father.read().await.children.children.write().await[donor_index] = donor_ref;
 
         father.read().await.children.children.write().await[deficient_index] =
             newly_non_deficient_child_ref;
@@ -296,6 +301,19 @@ async fn repair_one(
     order: usize,
     changes: &mut Changes,
 ) -> Result<SharedNode, HyperbeeError> {
+    /*
+    // NB: We do the same as JavaScript Hyperbee which is:
+    // 1 rotate from left
+    // 2 rotate from right
+    // 3 merge from left
+    // 4 merge from right
+    // See here: https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L1343-L1368
+    if let Some(res) = Left
+        .maybe_rotate(father.clone(), deficient_index, order, changes)
+        .await?
+    {
+        return Ok(res);
+    }
     if let Some(res) = Right
         .maybe_rotate(father.clone(), deficient_index, order, changes)
         .await?
@@ -303,7 +321,7 @@ async fn repair_one(
         return Ok(res);
     }
     if let Some(res) = Left
-        .maybe_rotate(father.clone(), deficient_index, order, changes)
+        .maybe_merge(father.clone(), deficient_index, changes)
         .await?
     {
         return Ok(res);
@@ -314,10 +332,33 @@ async fn repair_one(
     {
         return Ok(res);
     }
+    */
+    if let Some(res) = Left
+        .maybe_rotate(father.clone(), deficient_index, order, changes)
+        .await?
+    {
+        info!("rotated from left");
+        return Ok(res);
+    }
+    if let Some(res) = Right
+        .maybe_rotate(father.clone(), deficient_index, order, changes)
+        .await?
+    {
+        info!("rotated from right");
+        return Ok(res);
+    }
     if let Some(res) = Left
         .maybe_merge(father.clone(), deficient_index, changes)
         .await?
     {
+        info!("merged from left");
+        return Ok(res);
+    }
+    if let Some(res) = Right
+        .maybe_merge(father.clone(), deficient_index, changes)
+        .await?
+    {
+        info!("merged from right");
         return Ok(res);
     }
     panic!("this should never happen");
