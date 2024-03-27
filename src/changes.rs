@@ -23,6 +23,7 @@ impl Changes {
     }
 
     /// Add a node that's changed. Returns the's stored node's reference
+    #[tracing::instrument(skip(self, node))]
     pub fn add_node(&mut self, node: SharedNode) -> Child {
         self.nodes.push(node.clone());
         let offset: u64 = self
@@ -34,6 +35,7 @@ impl Changes {
     }
 
     /// Should only be used when [`Hyperbee::del`] causes a dangling root
+    #[tracing::instrument(skip(self, root))]
     pub fn overwrite_root(&mut self, root: SharedNode) -> Child {
         self.root = Some(root.clone());
         Child::new(self.seq, 0, Some(root))

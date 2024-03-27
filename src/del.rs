@@ -165,6 +165,7 @@ impl Side {
         }
     }
 
+    #[tracing::instrument(skip(self, father, changes))]
     async fn rotate(
         &self,
         father: SharedNode,
