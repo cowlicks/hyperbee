@@ -450,12 +450,10 @@ impl Tree {
 
         // remove the key from the node
         cur_node.write().await.keys.remove(cur_index);
-        // handle leaf nodes
-        let child = if cur_node.read().await.is_leaf().await {
-            let child_ref = changes.add_changed_node(path.len(), cur_node.clone());
+
+        if cur_node.read().await.is_leaf().await {
+            // removed from leaf
             path.push((cur_node.clone(), cur_index));
-            child_ref
-        // handle internal nodes
         } else {
             // We replace the deleted key with the largest key that is smaller than the deleted
             // value.
@@ -486,7 +484,6 @@ impl Tree {
             path.push((cur_node.clone(), cur_index));
             path.append(&mut left_path);
             path.push((bottom.clone(), bottom_index));
-            changes.add_node(bottom.clone())
         };
 
         let (bottom_node, _) = path.pop().expect("if/else above ensures path is not empty");
@@ -496,7 +493,8 @@ impl Tree {
         {
             repair(&mut path, MAX_KEYS, &mut changes).await?
         } else {
-            child
+            info!("bottom node does not need repair");
+            changes.add_changed_node(path.len(), bottom_node.clone())
         };
 
         // if not root propagate changes
