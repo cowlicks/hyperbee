@@ -190,19 +190,22 @@ impl Side {
         )
         .await;
 
-        info!("add rotation fixed node changes");
-        let newly_non_deficient_child_ref = changes.add_node(deficient_child.clone());
-
         // create new ref for changed donor
         // NB: we do this after we add fixed deficient child to changes so we match JS HB's binary
         // output
-        info!("add rotation donor changes");
-        let donor_ref = changes.add_node(donor.clone());
-        // replace donor that changed in the father
-        father.read().await.children.children.write().await[donor_index] = donor_ref;
+        let (donor_ref, fixed_ref) = match *self {
+            Right => (
+                changes.add_node(donor.clone()),
+                changes.add_node(deficient_child.clone()),
+            ),
+            Left => {
+                let fixed_ref = changes.add_node(deficient_child.clone());
+                (changes.add_node(donor.clone()), fixed_ref)
+            }
+        };
 
-        father.read().await.children.children.write().await[deficient_index] =
-            newly_non_deficient_child_ref;
+        father.read().await.children.children.write().await[donor_index] = donor_ref;
+        father.read().await.children.children.write().await[deficient_index] = fixed_ref;
 
         Ok(father)
     }
