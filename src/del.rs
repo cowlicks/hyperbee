@@ -354,38 +354,12 @@ async fn repair_one(
     order: usize,
     changes: &mut Changes,
 ) -> Result<SharedNode, HyperbeeError> {
-    /*
     // NB: We do the same as JavaScript Hyperbee which is:
     // 1 rotate from left
     // 2 rotate from right
     // 3 merge from left
     // 4 merge from right
     // See here: https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L1343-L1368
-    if let Some(res) = Left
-        .maybe_rotate(father.clone(), deficient_index, order, changes)
-        .await?
-    {
-        return Ok(res);
-    }
-    if let Some(res) = Right
-        .maybe_rotate(father.clone(), deficient_index, order, changes)
-        .await?
-    {
-        return Ok(res);
-    }
-    if let Some(res) = Left
-        .maybe_merge(father.clone(), deficient_index, changes)
-        .await?
-    {
-        return Ok(res);
-    }
-    if let Some(res) = Right
-        .maybe_merge(father.clone(), deficient_index, changes)
-        .await?
-    {
-        return Ok(res);
-    }
-    */
     if let Some(res) = Left
         .maybe_rotate(father.clone(), deficient_index, order, changes)
         .await?
