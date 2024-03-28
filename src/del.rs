@@ -23,6 +23,55 @@ enum Side {
 /// deficient_index - index in the father of the deficient child
 /// donor - the child of the father that donates to the deficint child
 impl Side {
+    /// After removing a key from an internal node (`node` where the key was at `key_index`), this
+    /// functions replaces the removed key with a key from a child. It chooses the key by looking
+    /// at the right an left children, descending to their leftmost/rightmost child, and selecting
+    /// the one with the most keys. If they have the same number of keys, choose the left one.
+    ///
+    /// This mimics the behavior of JS HB.
+    /// https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L1316-L1329
+    async fn replace_removed_internal_key_with_a_key_from_child(
+        path: &mut NodePath,
+        node: SharedNode,
+        key_index: usize,
+    ) -> Result<(), HyperbeeError> {
+        let left_child_index = key_index;
+        let right_child_index = left_child_index + 1;
+
+        let left_child = node.read().await.get_child(left_child_index).await?;
+        let right_child = node.read().await.get_child(right_child_index).await?;
+
+        let (_, left_path) = nearest_node(left_child, &InfiniteKeys::Positive).await?;
+        let (_, right_path) = nearest_node(right_child, &InfiniteKeys::Negative).await?;
+
+        let keys_in_left_descendent = left_path.last().unwrap().0.read().await.keys.len();
+        let keys_in_right_descendent = right_path.last().unwrap().0.read().await.keys.len();
+
+        let (child_index, replacement_key, mut path_to_bottom) =
+            if keys_in_left_descendent < keys_in_right_descendent {
+                // Right
+                let donor = right_path.last().unwrap().0.write().await.keys.remove(0);
+                (right_child_index, donor, right_path)
+            } else {
+                //Side::Left
+                let donor = left_path
+                    .last()
+                    .unwrap()
+                    .0
+                    .write()
+                    .await
+                    .keys
+                    .pop()
+                    .unwrap();
+                (left_child_index, donor, left_path)
+            };
+        node.write().await.keys.insert(key_index, replacement_key);
+
+        path.push((node.clone(), child_index));
+        path.append(&mut path_to_bottom);
+        Ok(())
+    }
+
     /// This is just:
     /// match self { Right => index + 1, Left => index - 1 }
     /// but with bounds checking
@@ -455,35 +504,12 @@ impl Tree {
             // removed from leaf
             path.push((cur_node.clone(), cur_index));
         } else {
-            // We replace the deleted key with the largest key that is smaller than the deleted
-            // value.
-            let left_sub_tree = cur_node.read().await.get_child(cur_index).await?;
-            let (_, mut left_path) =
-                nearest_node(left_sub_tree.clone(), &InfiniteKeys::Positive).await?;
-
-            let (bottom, bottom_index) = left_path
-                .pop()
-                .expect("There is always at least one node returned by `nearest_node`");
-            let replacement_key = bottom
-                .write()
-                .await
-                .keys
-                .pop()
-                .expect("The only possible node with zero keys is an empty root, which is not an internal node so we wouldn't be in this block.");
-
-            // insert the replacement key into where the deleted key was
-            cur_node
-                .write()
-                .await
-                .keys
-                .insert(cur_index, replacement_key);
-
-            // now the bottom node where the replacement key came from could be deficient
-            // so we add the path to the replacement key to our original `path` so we can repair
-            // the tree if necessary
-            path.push((cur_node.clone(), cur_index));
-            path.append(&mut left_path);
-            path.push((bottom.clone(), bottom_index));
+            // removed from internal node
+            info!("deleted from internal node so...");
+            Side::replace_removed_internal_key_with_a_key_from_child(
+                &mut path, cur_node, cur_index,
+            )
+            .await?;
         };
 
         let (bottom_node, _) = path.pop().expect("if/else above ensures path is not empty");
