@@ -82,8 +82,8 @@ struct Child {
 impl Clone for Child {
     fn clone(&self) -> Self {
         Self {
-            seq: self.seq.clone(),
-            offset: self.offset.clone(),
+            seq: self.seq,
+            offset: self.offset,
             cached_node: self.cached_node.clone(),
         }
     }
