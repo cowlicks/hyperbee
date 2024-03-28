@@ -111,25 +111,20 @@ impl Blocks {
         } = changes;
         trace!("Adding changes with # non-root nodes [{}]", nodes.len());
         let mut new_nodes = vec![];
-
         // NB: the + 1u64 is from the root
         // Could # nodes be greater than u64? No way.
         let n_nodes_in_block: u64 = 1u64 + nodes.len() as u64;
 
-        let root = root.expect("Root *must* always be added in the put/del logic");
-
         // re-order nodes to match js hyperbee
         // and update their offset
-        root.write()
-            .await
-            .children
-            .update_offsets(seq, n_nodes_in_block)
-            .await;
+        let mut node_reorder = vec![];
+        node_reorder.append(&mut nodes);
+        if let Some(root) = root {
+            node_reorder.push(root);
+        }
 
-        new_nodes.push(root.read().await.to_level().await);
-
-        nodes.reverse();
-        for node in nodes.into_iter() {
+        node_reorder.reverse();
+        for node in node_reorder.into_iter() {
             node.write()
                 .await
                 .children
