@@ -196,18 +196,9 @@ impl Side {
         let Some(donor_index) = self.get_donor_index(father.clone(), deficient_index).await else {
             return Ok(None);
         };
-
-        let can = min_keys(order)
-            < (father
-                .read()
-                .await
-                .get_child(donor_index)
-                .await?
-                .read()
-                .await
-                .keys
-                .len());
-        if can {
+        let donor_child = father.read().await.get_child(donor_index).await?;
+        let can_rotate = min_keys(order) < donor_child.read().await.keys.len();
+        if can_rotate {
             Ok(Some(donor_index))
         } else {
             Ok(None)
@@ -219,6 +210,7 @@ impl Side {
         &self,
         father: SharedNode,
         deficient_index: usize,
+        deficient_child: SharedNode,
         donor_index: usize,
         changes: &mut Changes,
     ) -> Result<SharedNode, HyperbeeError> {
@@ -232,7 +224,6 @@ impl Side {
             .swap_donor_key_in_father(father.clone(), deficient_index, donated_key)
             .await;
 
-        let deficient_child = father.read().await.get_child(deficient_index).await?;
         self.insert_donations_into_deficient_child(
             deficient_child.clone(),
             donated_key_from_father,
@@ -264,6 +255,7 @@ impl Side {
         &self,
         father: SharedNode,
         deficient_index: usize,
+        deficient_child: SharedNode,
         order: usize,
         changes: &mut Changes,
     ) -> Result<Option<SharedNode>, HyperbeeError> {
@@ -274,8 +266,14 @@ impl Side {
             return Ok(None);
         };
         Ok(Some(
-            self.rotate(father, deficient_index, donor_index, changes)
-                .await?,
+            self.rotate(
+                father,
+                deficient_index,
+                deficient_child,
+                donor_index,
+                changes,
+            )
+            .await?,
         ))
     }
 
@@ -284,6 +282,7 @@ impl Side {
         &self,
         father: SharedNode,
         deficient_index: usize,
+        deficient_child: SharedNode,
         changes: &mut Changes,
     ) -> Result<Option<SharedNode>, HyperbeeError> {
         let Some(donor_index) = self.get_donor_index(father.clone(), deficient_index).await else {
@@ -294,7 +293,6 @@ impl Side {
         // Left lower, right higher
         let (left, right) = {
             let donor_child = father.read().await.get_child(donor_index).await?;
-            let deficient_child = father.read().await.get_child(deficient_index).await?;
             match self {
                 Right => (deficient_child, donor_child),
                 Left => (donor_child, deficient_child),
@@ -335,7 +333,17 @@ impl Side {
             )
             .await;
         // Replace new LHS child in the father
-        let left_ref = changes.add_node(left.clone());
+        info!("add merged nodes father changes: {left:#?}");
+        info!(
+            "Father numebr of keys = [{}]",
+            father.read().await.keys.len()
+        );
+        let left_ref = if father.read().await.keys.len() == 0 {
+            changes.add_root(left.clone())
+        } else {
+            changes.add_node(left.clone())
+        };
+
         father
             .read()
             .await
@@ -348,9 +356,12 @@ impl Side {
 
 #[tracing::instrument(skip(father, changes))]
 /// The orering of the kinds of repairs here is choosen to match the Hyperbee-js implementation
+/// Returns the updated father node with it's deficient child problem fixed.
+/// However, the father node itself may now be in-need of repair.
 async fn repair_one(
     father: SharedNode,
     deficient_index: usize,
+    deficient_child: SharedNode,
     order: usize,
     changes: &mut Changes,
 ) -> Result<SharedNode, HyperbeeError> {
@@ -361,28 +372,50 @@ async fn repair_one(
     // 4 merge from right
     // See here: https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L1343-L1368
     if let Some(res) = Left
-        .maybe_rotate(father.clone(), deficient_index, order, changes)
+        .maybe_rotate(
+            father.clone(),
+            deficient_index,
+            deficient_child.clone(),
+            order,
+            changes,
+        )
         .await?
     {
         info!("rotated from left");
         return Ok(res);
     }
     if let Some(res) = Right
-        .maybe_rotate(father.clone(), deficient_index, order, changes)
+        .maybe_rotate(
+            father.clone(),
+            deficient_index,
+            deficient_child.clone(),
+            order,
+            changes,
+        )
         .await?
     {
         info!("rotated from right");
         return Ok(res);
     }
     if let Some(res) = Left
-        .maybe_merge(father.clone(), deficient_index, changes)
+        .maybe_merge(
+            father.clone(),
+            deficient_index,
+            deficient_child.clone(),
+            changes,
+        )
         .await?
     {
         info!("merged from left");
         return Ok(res);
     }
     if let Some(res) = Right
-        .maybe_merge(father.clone(), deficient_index, changes)
+        .maybe_merge(
+            father.clone(),
+            deficient_index,
+            deficient_child.clone(),
+            changes,
+        )
         .await?
     {
         info!("merged from right");
@@ -397,38 +430,49 @@ async fn repair(
     order: usize,
     changes: &mut Changes,
 ) -> Result<Child, HyperbeeError> {
-    let father_ref = loop {
-        // next item, should be checked that it needs repair before
-        let (father, deficient_index) =
-            path.pop().expect("path.len() > 0 should be checked before");
+    let (mut father, mut deficient_index) =
+        path.pop().expect("path.len() > 0 should be checked before");
+    let mut deficient_child = father.read().await.get_child(deficient_index).await?;
 
-        // Do repair
-        let cur_father = repair_one(father, deficient_index, order, changes).await?;
-        // if root empty use child
+    let father_ref = loop {
+        let father_with_repaired_child =
+            repair_one(father, deficient_index, deficient_child, order, changes).await?;
+
+        // if repair above created an empty root, we are done.
+        // It is not so obvious why this is true, so to explain:
+        // only merges steal keys from the father, so the above was a merge
+        // the last change commited was the newly merged node
+        // so if we stop now, since this is the last commited change it becomes the root
         if path.is_empty()
-            && cur_father.read().await.keys.is_empty()
-            && cur_father.read().await.n_children().await == 1
+            && father_with_repaired_child.read().await.keys.is_empty()
+            && father_with_repaired_child.read().await.n_children().await == 1
         {
-            let new_root = cur_father.read().await.get_child(0).await?;
-            break changes.add_root(new_root);
+            // get the ref of the new root, which is the ref to child 0 in the father
+            info!("\nrepair removed all keys from root. Replacing root with it's child");
+            break father_with_repaired_child
+                .read()
+                .await
+                .children
+                .get_child_ref(0)
+                .await;
         }
 
-        // store updated father
-        let father_ref = changes.add_changed_node(path.len(), cur_father.clone());
-
+        // is all fixed or no more nodes, we're done. Commit father
         // if no more nodes, or father does not need repair, we are done
-        if path.is_empty() || cur_father.read().await.keys.len() >= min_keys(MAX_KEYS) {
+        if path.is_empty() || father_with_repaired_child.read().await.keys.len() >= min_keys(order)
+        {
+            info!(
+                "repairs completed. There are [{}] nodes remaining in `path`",
+                path.len()
+            );
+            let father_ref =
+                changes.add_changed_node(path.len(), father_with_repaired_child.clone());
             break father_ref;
         }
 
-        // add father_ref to next node in path and continue repair up tree
-        let (grandpa, cur_deficient_index) = path
-            .pop()
-            .expect("path.is_empty branch above checks this exists");
-
-        grandpa.read().await.children.children.write().await[cur_deficient_index] =
-            father_ref.clone();
-        path.push((grandpa, cur_deficient_index));
+        // continue repairs
+        deficient_child = father_with_repaired_child;
+        (father, deficient_index) = path.pop().expect("path.len() > 0 should be checked before");
     };
 
     Ok(father_ref)
