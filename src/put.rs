@@ -25,7 +25,7 @@ pub async fn propagate_changes_up_tree(
             Some(x) => x,
         };
         node.read().await.children.children.write().await[index] = cur_child;
-        cur_child = changes.add_changed_node(path.len(), node.clone());
+        cur_child = changes.add_node(node.clone());
     }
 }
 
@@ -133,7 +133,7 @@ impl Tree {
                         .insert(cur_key, children, cur_index..stop)
                         .await;
 
-                    let child = changes.add_changed_node(path.len(), cur_node.clone());
+                    let child = changes.add_node(cur_node.clone());
                     if !path.is_empty() {
                         trace!("inserted into some child");
                         let changes = propagate_changes_up_tree(changes, path, child).await;
@@ -179,7 +179,7 @@ impl Tree {
 
         // create a new root
         // put chlidren in node_schema then put the below thing
-        changes.add_root(new_root);
+        changes.add_node(new_root);
         let _ = self.blocks.read().await.add_changes(changes).await?;
 
         Ok((matched, Some(seq)))

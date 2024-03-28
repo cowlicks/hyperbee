@@ -3,6 +3,7 @@ use crate::{
     Child, HyperbeeError, KeyValue, KeyValueData, NodePath, SharedNode, Tree, MAX_KEYS,
 };
 
+use tracing::info;
 use Side::{Left, Right};
 
 /// When deleting from a B-Tree, we might need to [`Side::merge`] or [`Side::rotate`] to
@@ -338,11 +339,7 @@ impl Side {
             "Father numebr of keys = [{}]",
             father.read().await.keys.len()
         );
-        let left_ref = if father.read().await.keys.is_empty() {
-            changes.add_root(left.clone())
-        } else {
-            changes.add_node(left.clone())
-        };
+        let left_ref = changes.add_node(left.clone());
 
         father
             .read()
@@ -465,8 +462,7 @@ async fn repair(
                 "repairs completed. There are [{}] nodes remaining in `path`",
                 path.len()
             );
-            let father_ref =
-                changes.add_changed_node(path.len(), father_with_repaired_child.clone());
+            let father_ref = changes.add_node(father_with_repaired_child.clone());
             break father_ref;
         }
 
@@ -544,25 +540,17 @@ impl Tree {
             repair(&mut path, MAX_KEYS, &mut changes).await?
         } else {
             info!("bottom node does not need repair");
-            changes.add_changed_node(path.len(), bottom_node.clone())
+            changes.add_node(bottom_node.clone())
         };
 
         // if not root propagate changes
-        let mut changes = if path.is_empty() {
+        let changes = if path.is_empty() {
             changes
         } else {
+            info!("propagating changes");
             propagate_changes_up_tree(changes, path, child).await
         };
 
-        // we scope this `root.read(..)` so it is dopped before `.add_changes(..)` below because
-        // add_changes calls `root.write(..)`
-        {
-            let root = root.read().await;
-            // If we removed all keys from the root but it still has a child, make the child the root
-            if root.keys.is_empty() && root.n_children().await == 1 {
-                changes.overwrite_root(root.get_child(0).await?);
-            }
-        };
         self.blocks.read().await.add_changes(changes).await?;
         Ok(Some((true, seq)))
     }
