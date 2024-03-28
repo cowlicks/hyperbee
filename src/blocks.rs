@@ -75,7 +75,7 @@ impl Blocks {
         self.cache.read().await.get(seq).cloned()
     }
 
-    async fn get_from_core(
+    pub async fn get_from_core(
         &self,
         seq: &u64,
         blocks: Shared<Self>,
@@ -113,7 +113,7 @@ impl Blocks {
         let mut new_nodes = vec![];
         // NB: the + 1u64 is from the root
         // Could # nodes be greater than u64? No way.
-        let n_nodes_in_block: u64 = 1u64 + nodes.len() as u64;
+        let n_nodes_in_block: u64 = nodes.len() as u64;
 
         // re-order nodes to match js hyperbee
         // and update their offset
