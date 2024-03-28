@@ -338,7 +338,7 @@ impl Side {
             "Father numebr of keys = [{}]",
             father.read().await.keys.len()
         );
-        let left_ref = if father.read().await.keys.len() == 0 {
+        let left_ref = if father.read().await.keys.is_empty() {
             changes.add_root(left.clone())
         } else {
             changes.add_node(left.clone())
@@ -535,6 +535,12 @@ impl Tree {
         // path
         let child = if !path.is_empty() && bottom_node.read().await.keys.len() < min_keys(MAX_KEYS)
         {
+            info!(
+                "bottom node has # = [{}] keys which is less order >> 1 = {} >> 1 = [{}]",
+                bottom_node.read().await.keys.len(),
+                MAX_KEYS, // TODO pass MAX_KEYS through as `order` to here
+                min_keys(MAX_KEYS)
+            );
             repair(&mut path, MAX_KEYS, &mut changes).await?
         } else {
             info!("bottom node does not need repair");
