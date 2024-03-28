@@ -100,7 +100,7 @@ impl Debug for Child {
 
 /// A "block" from a [`Hypercore`](hypercore::Hypercore) deserialized into the form used in
 /// Hyperbee
-struct BlockEntry {
+pub struct BlockEntry {
     /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
     nodes: Vec<SharedNode>,
     /// NodeSchema::new(hypercore.get(seq)).key
@@ -496,13 +496,14 @@ impl BlockEntry {
     /// Get a [`Node`] from this [`BlockEntry`] at the provided `offset`.
     /// offset is the offset of the node within the hypercore block
     fn get_tree_node(&self, offset: u64) -> Result<SharedNode, HyperbeeError> {
+        let x = format!("offset [{}] *should* always point to a real node", offset);
         Ok(self
             .nodes
             .get(
                 usize::try_from(offset)
                     .map_err(|e| HyperbeeError::U64ToUsizeConversionError(offset, e))?,
             )
-            .expect("offset *should* always point to a real node")
+            .expect(&x)
             .clone())
     }
 }
