@@ -79,6 +79,16 @@ struct Child {
     cached_node: Option<SharedNode>,
 }
 
+impl Clone for Child {
+    fn clone(&self) -> Self {
+        Self {
+            seq: self.seq.clone(),
+            offset: self.offset.clone(),
+            cached_node: self.cached_node.clone(),
+        }
+    }
+}
+
 impl Debug for Child {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Child")
@@ -178,12 +188,6 @@ impl Child {
     }
 }
 
-impl Clone for Child {
-    fn clone(&self) -> Self {
-        Self::new(self.seq, self.offset, self.cached_node.clone())
-    }
-}
-
 /// Deserialize bytes from a Hypercore block into [`Node`]s.
 fn make_node_vec<B: Buf>(buf: B, blocks: Shared<Blocks>) -> Result<Vec<SharedNode>, DecodeError> {
     Ok(YoloIndex::decode(buf)?
@@ -242,10 +246,14 @@ impl Children {
             .splice(index..(index + replace_split_child), new_children);
     }
 
+    async fn get_child_ref(&self, index: usize) -> Child {
+        self.children.read().await[index].clone()
+    }
+
     #[tracing::instrument(skip(self))]
     async fn get_child(&self, index: usize) -> Result<Shared<Node>, HyperbeeError> {
         let (seq, offset) = {
-            let child_ref = &self.children.read().await[index];
+            let child_ref = &self.get_child_ref(index).await;
             if let Some(node) = &child_ref.cached_node {
                 return Ok(node.clone());
             }
