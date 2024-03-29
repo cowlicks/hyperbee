@@ -10,7 +10,7 @@ use common::{check_cmd_output, js::run_js_writable, Result};
 
 use hyperbee::Hyperbee;
 
-use crate::common::{i32_key_vec, setup_logs, write_range_to_hb, Rand};
+use crate::common::{i32_key_vec, write_range_to_hb, Rand};
 
 fn run_command(cmd: impl AsRef<str>) -> Result<Output> {
     let s = cmd.as_ref();
@@ -43,20 +43,6 @@ fn create_storage_dirs_with_same_keys() -> Result<(TempDir, TempDir)> {
     let _ = cp_dirs(&jsdir, &rdir)?;
 
     Ok((jsdir, rdir))
-}
-
-macro_rules! print_tree {
-    ( $hb:ident ) => {
-        println!("{}.print() =\n{}", stringify!($hb), $hb.print().await?)
-    };
-}
-
-macro_rules! print_last_block {
-    ( $hb:ident ) => {
-        let tip = $hb.version().await - 1;
-        let be = $hb.get_block(&tip).await?;
-        println!("{}.get_block({}) = \n {:#?}", stringify!($hb), tip, be);
-    };
 }
 
 macro_rules! put_rs_and_js_range {
@@ -180,7 +166,7 @@ async fn double_merge_replace_root() -> Result<()> {
 }
 
 #[tokio::test]
-async fn rand_100() -> Result<()> {
+async fn order_via_depth_first_search() -> Result<()> {
     let rand = Rand::default();
     let n_keys = 148;
     let stop = 123;
@@ -197,20 +183,8 @@ async fn rand_100() -> Result<()> {
     );
     let (hb, jsdir, rsdir) = put_rs_and_js_range!(keys.clone().into_iter(), extra_js);
     let jshb = Hyperbee::from_storage_dir(&jsdir).await?;
-
-    //assert_eq!(hb.print().await?, jshb.print().await?);
-    println!("PUTTING {last_i}");
-    print_tree!(hb);
-    println!("PUT {last_i}");
-    setup_logs().await;
     hb.put(&last, Some(&last)).await?;
     assert_eq!(hb.print().await?, jshb.print().await?);
-    print_tree!(hb);
-    println!("----------------------------------------------------");
-    print_tree!(jshb);
-    // TODO this shows the problem. The last 'put' places the two leaf nodes in different places
-    print_last_block!(hb);
-    print_last_block!(jshb);
 
     diff_dirs(&jsdir, &rsdir)?;
     Ok(())
@@ -223,5 +197,35 @@ async fn pulls_from_child_with_more_keys() -> Result<()> {
     let (hb, jsdir, rdir) = put_rs_and_js_range!(range, format!("await hb.del('{}')", delete_me));
     hb.del(&i32_key_vec(delete_me)).await?;
     diff_dirs(&jsdir, &rdir)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn big_random_test() -> Result<()> {
+    let rand = Rand::default();
+    let n_keys = 1000;
+    let keys: Vec<i32> = rand.shuffle((0..n_keys).collect());
+    let del_keys = rand.shuffle(keys.clone());
+
+    let extra_js = format!(
+        "
+    const del_keys = {};
+    for (const ikey of del_keys) {{
+        const key = String(ikey);
+        await hb.del(key);
+    }}
+",
+        serde_json::to_string(&del_keys)?,
+    );
+
+    let (hb, jsdir, rsdir) = put_rs_and_js_range!(keys.clone().into_iter(), extra_js);
+    for key in del_keys.iter() {
+        let key = i32_key_vec(*key);
+        hb.del(&key).await?;
+    }
+
+    let jshb = Hyperbee::from_storage_dir(&jsdir).await?;
+    assert_eq!(hb.print().await?, jshb.print().await?);
+    diff_dirs(&jsdir, &rsdir)?;
     Ok(())
 }

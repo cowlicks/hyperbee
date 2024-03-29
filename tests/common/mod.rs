@@ -1,5 +1,7 @@
 // cargo thinks everything in here is unused even though it is used in the integration tests
 #![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_macros)]
 
 use std::{
     fs::File,
@@ -213,3 +215,19 @@ impl Default for Rand {
 pub fn i32_key_vec(i: i32) -> Vec<u8> {
     i.clone().to_string().as_bytes().to_vec()
 }
+
+macro_rules! print_tree {
+    ( $hb:ident ) => {
+        println!("{}.print() =\n{}", stringify!($hb), $hb.print().await?)
+    };
+}
+pub(crate) use print_tree;
+
+macro_rules! print_last_block {
+    ( $hb:ident ) => {
+        let tip = $hb.version().await - 1;
+        let be = $hb.get_block(&tip).await?;
+        println!("{}.get_block({}) = \n {:#?}", stringify!($hb), tip, be);
+    };
+}
+pub(crate) use print_last_block;
