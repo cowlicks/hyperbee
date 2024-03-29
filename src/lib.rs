@@ -198,14 +198,6 @@ fn make_node_vec<B: Buf>(buf: B, blocks: Shared<Blocks>) -> Result<Vec<SharedNod
 }
 
 impl Children {
-    async fn update_offsets(&mut self, seq: u64, n_nodes_in_block: u64) {
-        for child in self.children.write().await.iter_mut() {
-            if child.seq == seq {
-                child.offset = n_nodes_in_block - child.offset - 1;
-            }
-        }
-    }
-
     fn new(blocks: Shared<Blocks>, children: Vec<Child>) -> Self {
         Self {
             blocks,
