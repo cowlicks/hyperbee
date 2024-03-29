@@ -222,12 +222,3 @@ macro_rules! print_tree {
     };
 }
 pub(crate) use print_tree;
-
-macro_rules! print_last_block {
-    ( $hb:ident ) => {
-        let tip = $hb.version().await - 1;
-        let be = $hb.get_block(&tip).await?;
-        println!("{}.get_block({}) = \n {:#?}", stringify!($hb), tip, be);
-    };
-}
-pub(crate) use print_last_block;

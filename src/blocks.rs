@@ -75,7 +75,7 @@ impl Blocks {
         self.cache.read().await.get(seq).cloned()
     }
 
-    pub async fn get_from_core(
+    async fn get_from_core(
         &self,
         seq: &u64,
         blocks: Shared<Self>,
