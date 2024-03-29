@@ -29,6 +29,6 @@ impl Changes {
             .try_into()
             .expect("this would happen when sizeof(usize) < sizeof(u64), lkey on 32bit. And when the offset (which is on the order of the height of the tree) is greater than usize::MAX. Well that would be crazy. We should Probably have a check for usize >= u64 on startup... or something... TODO");
         self.nodes.push(node.clone());
-        Child::new(self.seq, offset, Some(node))
+        Child::new(self.seq, offset)
     }
 }

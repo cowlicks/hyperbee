@@ -11,7 +11,7 @@ use tracing::trace;
 use crate::{
     changes::Changes,
     messages::{Node as NodeSchema, YoloIndex},
-    BlockEntry, HyperbeeError, Shared,
+    BlockEntry, Child, HyperbeeError, Shared, SharedNode,
 };
 
 #[derive(Builder, Debug)]

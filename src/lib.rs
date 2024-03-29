@@ -75,8 +75,6 @@ struct Child {
     pub seq: u64,
     /// Index of the `Node` within the [`BlockEntry`] referenced by [`Child::seq`]
     pub offset: u64,
-    /// Cache of the child node
-    cached_node: Option<SharedNode>,
 }
 
 impl Clone for Child {
@@ -84,7 +82,6 @@ impl Clone for Child {
         Self {
             seq: self.seq,
             offset: self.offset,
-            cached_node: self.cached_node.clone(),
         }
     }
 }
@@ -179,12 +176,8 @@ impl KeyValue {
 }
 
 impl Child {
-    fn new(seq: u64, offset: u64, node: Option<SharedNode>) -> Self {
-        Child {
-            seq,
-            offset,
-            cached_node: node,
-        }
+    fn new(seq: u64, offset: u64) -> Self {
+        Child { seq, offset }
     }
 }
 
@@ -197,11 +190,7 @@ fn make_node_vec<B: Buf>(buf: B, blocks: Shared<Blocks>) -> Result<Vec<SharedNod
             let keys = level.keys.iter().map(|k| KeyValue::new(*k)).collect();
             let mut children = vec![];
             for i in (0..(level.children.len())).step_by(2) {
-                children.push(Child::new(
-                    level.children[i],
-                    level.children[i + 1],
-                    Option::None,
-                ));
+                children.push(Child::new(level.children[i], level.children[i + 1]));
             }
             Arc::new(RwLock::new(Node::new(keys, children, blocks.clone())))
         })
@@ -254,9 +243,6 @@ impl Children {
     async fn get_child(&self, index: usize) -> Result<Shared<Node>, HyperbeeError> {
         let (seq, offset) = {
             let child_ref = &self.get_child_ref(index).await;
-            if let Some(node) = &child_ref.cached_node {
-                return Ok(node.clone());
-            }
             (child_ref.seq, child_ref.offset)
         };
         let block = self
@@ -266,7 +252,6 @@ impl Children {
             .get(&seq, self.blocks.clone())
             .await?;
         let node = block.read().await.get_tree_node(offset)?;
-        self.children.write().await[index].cached_node = Some(node.clone());
         Ok(node)
     }
 
