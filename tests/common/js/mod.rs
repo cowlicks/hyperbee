@@ -1,5 +1,8 @@
 use super::{git_root, join_paths, run_code, run_make_from_with};
-use std::{path::PathBuf, process::Output};
+use std::{
+    path::{Path, PathBuf},
+    process::Output,
+};
 
 pub static REL_PATH_TO_NODE_MODULES: &str = "./tests/common/js/node_modules";
 pub static REL_PATH_TO_JS_DIR: &str = "./tests/common/js";
@@ -64,12 +67,10 @@ pub fn run_js(storage_dir: &str, script: &str) -> Result<Output, Box<dyn std::er
     )
 }
 
-pub fn run_js_writable(
-    storage_dir: &str,
-    script: &str,
-) -> Result<Output, Box<dyn std::error::Error>> {
+pub fn run_js_writable<T: AsRef<Path>>(storage_dir: T, script: &str) -> super::Result<Output> {
+    let path = storage_dir.as_ref();
     run_code(
-        storage_dir,
+        &path.to_string_lossy(),
         writable_pre_script,
         script,
         POST_SCRIPT,

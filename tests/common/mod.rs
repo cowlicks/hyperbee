@@ -124,11 +124,11 @@ pub fn parse_json_result(output: &Output) -> Result<Vec<Vec<u8>>> {
 #[allow(unused_macros)]
 macro_rules! write_range_to_hb {
     ($hb:expr) => {{
-        write_range_to_hb!($hb, 100)
+        write_range_to_hb!($hb, 0..100)
     }};
-    ($hb:expr, $nkeys:expr) => {{
+    ($hb:expr, $range:expr) => {{
         let hb = $hb;
-        let keys: Vec<Vec<u8>> = (0..$nkeys)
+        let keys: Vec<Vec<u8>> = ($range)
             .map(|x| x.clone().to_string().as_bytes().to_vec())
             .collect();
 
@@ -144,6 +144,7 @@ macro_rules! write_range_to_hb {
 pub(crate) use write_range_to_hb;
 
 pub fn check_cmd_output(out: Output) -> Result<Output> {
+    eprint!("{}", String::from_utf8_lossy(&out.stdout));
     if out.status.code() != Some(0) {
         return Err(Box::new(Error::TestError(format!(
             "comand output status was not zero. Got:\nstdout: {}\nstderr: {}",
@@ -158,7 +159,14 @@ static INIT_LOG: OnceCell<()> = OnceCell::const_new();
 pub async fn setup_logs() {
     INIT_LOG
         .get_or_init(|| async {
-            tracing_subscriber::fmt::init();
+            tracing_subscriber::fmt::fmt()
+                .event_format(
+                    tracing_subscriber::fmt::format()
+                        .without_time()
+                        .with_file(true)
+                        .with_line_number(true),
+                )
+                .init();
         })
         .await;
 }

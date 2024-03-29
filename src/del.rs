@@ -260,6 +260,7 @@ impl Side {
         order: usize,
         changes: &mut Changes,
     ) -> Result<Option<SharedNode>, HyperbeeError> {
+        // TODO should we pass donor child?
         let Some(donor_index) = self
             .can_rotate(father.clone(), deficient_index, order)
             .await?

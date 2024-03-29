@@ -1,29 +1,38 @@
 mod common;
 
-use std::process::{Command, Output};
+use std::{
+    ffi::OsStr,
+    path::Path,
+    process::{Command, Output},
+};
 use tempfile::{tempdir, TempDir};
 
 use common::{check_cmd_output, js::run_js_writable, Result};
 
 use hyperbee::Hyperbee;
 
-use crate::common::{i32_key_vec, write_range_to_hb, Rand};
+use crate::common::{i32_key_vec, setup_logs, write_range_to_hb, Rand};
 
-fn run_command(cmd: &str) -> Result<Output> {
-    check_cmd_output(Command::new("sh").arg("-c").arg(cmd).output()?)
+fn run_command(cmd: impl AsRef<str>) -> Result<Output> {
+    let s = cmd.as_ref();
+    check_cmd_output(Command::new("sh").arg("-c").arg(s).output()?)
 }
 
-fn create_initialized_storage_dir(dir_str: &str) -> Result<Output> {
-    run_js_writable(dir_str, "")
+fn create_initialized_storage_dir<T: AsRef<Path>>(dir: T) -> Result<Output> {
+    run_js_writable(dir, "")
 }
 
-fn cp_dirs(a: &str, b: &str) -> Result<Output> {
+fn cp_dirs<T: AsRef<Path>>(a: T, b: T) -> Result<Output> {
+    let a = a.as_ref().to_string_lossy();
+    let b = b.as_ref().to_string_lossy();
     let cmd = format!("cp -r {a}/. {b}/.");
     run_command(&cmd)
 }
 
-fn diff_dirs(a: &str, b: &str) -> Result<Output> {
-    let cmd = format!("diff {a} {b}");
+fn diff_dirs<T: AsRef<Path>>(a: T, b: T) -> Result<Output> {
+    let astr = a.as_ref().to_string_lossy();
+    let bstr = b.as_ref().to_string_lossy();
+    let cmd = format!("diff {astr} {bstr}");
     run_command(&cmd)
 }
 
@@ -31,11 +40,8 @@ fn create_storage_dirs_with_same_keys() -> Result<(TempDir, TempDir)> {
     let rdir = tempdir()?;
     let jsdir = tempdir()?;
 
-    let jsdir_str = jsdir.path().display().to_string();
-    let rdir_str = rdir.path().display().to_string();
-
-    let _ = create_initialized_storage_dir(&jsdir_str)?;
-    let _ = cp_dirs(&jsdir_str, &rdir_str)?;
+    let _ = create_initialized_storage_dir(&jsdir)?;
+    let _ = cp_dirs(&jsdir, &rdir)?;
 
     Ok((jsdir, rdir))
 }
