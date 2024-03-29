@@ -154,16 +154,16 @@ async fn take_children_with_seq(node: &SharedNode, seq: u64) -> Vec<(SharedNode,
 /// To get the same on-disk binary data as JavaScript Hyperbee, we reorder the nodes.
 /// via a depth-first search.
 /// https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L237-L249
-async fn reorder_nodes(seq: u64, nodes: &Vec<SharedNode>) -> Vec<SharedNode> {
+async fn reorder_nodes(seq: u64, nodes: &[SharedNode]) -> Vec<SharedNode> {
     let root = &nodes[nodes.len() - 1];
     let mut child_stack = vec![];
     let mut out = vec![root.clone()];
 
     child_stack.append(&mut take_children_with_seq(root, seq).await);
 
-    while !child_stack.is_empty() {
+    while let Some((node, child_index)) = child_stack.pop() {
         // Get the next child, update it's offset
-        let (node, child_index) = child_stack.pop().expect("checked by `.is_empty` above");
+
         // The get the childs old offset, so we can get the node it points to
         let old_offset = node.read().await.children.children.read().await[child_index].offset;
         // The child's node is pushed into `out` so it's offset will be `out.len()`
@@ -184,8 +184,8 @@ mod _unused {
     #![allow(dead_code)]
     use crate::SharedNode;
 
-    async fn reverse_nodes(seq: u64, nodes: &Vec<SharedNode>) -> Vec<SharedNode> {
-        let mut nodes = nodes.clone();
+    async fn reverse_nodes(seq: u64, nodes: &[SharedNode]) -> Vec<SharedNode> {
+        let mut nodes = nodes.to_owned();
         let mut out = vec![];
         // Could # nodes be greater than u64? No way.
         let n_nodes_in_block: u64 = nodes.len() as u64;
