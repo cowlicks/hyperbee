@@ -27,12 +27,11 @@ use std::{
     sync::Arc,
 };
 
-use prost::{bytes::Buf, DecodeError, Message};
 use tokio::sync::RwLock;
 use tracing::trace;
 
 use blocks::Blocks;
-use messages::{yolo_index, YoloIndex};
+use messages::yolo_index;
 
 use tree::Tree;
 
@@ -69,6 +68,7 @@ pub struct KeyValueData {
     pub value: Option<Vec<u8>>,
 }
 
+#[derive(Clone, Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
 struct Child {
     /// Index of the [`BlockEntry`] within the [`hypercore::Hypercore`] that contains the [`Node`]
@@ -77,44 +77,9 @@ struct Child {
     pub offset: u64,
 }
 
-impl Clone for Child {
-    fn clone(&self) -> Self {
-        Self {
-            seq: self.seq,
-            offset: self.offset,
-        }
-    }
-}
-
-impl Debug for Child {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Child")
-            .field("seq", &self.seq)
-            .field("offset", &self.offset)
-            .finish()
-    }
-}
-
-/// A "block" from a [`Hypercore`](hypercore::Hypercore) deserialized into the form used in
-/// Hyperbee
-struct BlockEntry {
-    /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
-    nodes: Vec<SharedNode>,
-    /// NodeSchema::new(hypercore.get(seq)).key
-    key: Vec<u8>,
-    /// NodeSchema::new(hypercore.get(seq)).value
-    value: Option<Vec<u8>>,
-}
-
-impl Debug for BlockEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BlockEntry {{ ")?;
-        let mut nodes = vec![];
-        for node in self.nodes.iter() {
-            nodes.push(node.try_read().unwrap());
-        }
-        f.debug_list().entries(nodes).finish()?;
-        write!(f, "}}")
+impl Child {
+    fn new(seq: u64, offset: u64) -> Self {
+        Child { seq, offset }
     }
 }
 
@@ -173,28 +138,6 @@ impl KeyValue {
     fn new(seq: u64) -> Self {
         KeyValue { seq }
     }
-}
-
-impl Child {
-    fn new(seq: u64, offset: u64) -> Self {
-        Child { seq, offset }
-    }
-}
-
-/// Deserialize bytes from a Hypercore block into [`Node`]s.
-fn make_node_vec<B: Buf>(buf: B, blocks: Shared<Blocks>) -> Result<Vec<SharedNode>, DecodeError> {
-    Ok(YoloIndex::decode(buf)?
-        .levels
-        .iter()
-        .map(|level| {
-            let keys = level.keys.iter().map(|k| KeyValue::new(*k)).collect();
-            let mut children = vec![];
-            for i in (0..(level.children.len())).step_by(2) {
-                children.push(Child::new(level.children[i], level.children[i + 1]));
-            }
-            Arc::new(RwLock::new(Node::new(keys, children, blocks.clone())))
-        })
-        .collect())
 }
 
 impl Children {
@@ -458,29 +401,6 @@ impl Node {
         trace!("inserting [{}] children", children.len());
         self.keys.splice(range.clone(), vec![key_ref]);
         self.children.insert(range.start, children).await;
-    }
-}
-
-impl BlockEntry {
-    fn new(entry: messages::Node, blocks: Shared<Blocks>) -> Result<Self, HyperbeeError> {
-        Ok(BlockEntry {
-            nodes: make_node_vec(&entry.index[..], blocks)?,
-            key: entry.key,
-            value: entry.value,
-        })
-    }
-
-    /// Get a [`Node`] from this [`BlockEntry`] at the provided `offset`.
-    /// offset is the offset of the node within the hypercore block
-    fn get_tree_node(&self, offset: u64) -> Result<SharedNode, HyperbeeError> {
-        Ok(self
-            .nodes
-            .get(
-                usize::try_from(offset)
-                    .map_err(|e| HyperbeeError::U64ToUsizeConversionError(offset, e))?,
-            )
-            .expect("offset *should* always point to a real node")
-            .clone())
     }
 }
 

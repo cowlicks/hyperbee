@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 use async_trait::async_trait;
 use derive_builder::Builder;
 use hypercore::{AppendOutcome, Hypercore, Info};
-use prost::Message;
+use prost::{bytes::Buf, DecodeError, Message};
 use random_access_storage::RandomAccess;
 use tokio::sync::{Mutex, RwLock};
 use tracing::trace;
@@ -11,7 +11,7 @@ use tracing::trace;
 use crate::{
     changes::Changes,
     messages::{Node as NodeSchema, YoloIndex},
-    BlockEntry, HyperbeeError, Shared, SharedNode,
+    Child, HyperbeeError, KeyValue, Node, Shared, SharedNode,
 };
 
 #[derive(Builder, Debug)]
@@ -176,4 +176,66 @@ async fn reorder_nodes(seq: u64, nodes: &[SharedNode]) -> Vec<SharedNode> {
         child_stack.append(&mut take_children_with_seq(&childs_node, seq).await);
     }
     out
+}
+
+/// Deserialize bytes from a Hypercore block into [`Node`]s.
+fn make_node_vec<B: Buf>(buf: B, blocks: Shared<Blocks>) -> Result<Vec<SharedNode>, DecodeError> {
+    Ok(YoloIndex::decode(buf)?
+        .levels
+        .iter()
+        .map(|level| {
+            let keys = level.keys.iter().map(|k| KeyValue::new(*k)).collect();
+            let mut children = vec![];
+            for i in (0..(level.children.len())).step_by(2) {
+                children.push(Child::new(level.children[i], level.children[i + 1]));
+            }
+            Arc::new(RwLock::new(Node::new(keys, children, blocks.clone())))
+        })
+        .collect())
+}
+
+/// A "block" from a [`Hypercore`](hypercore::Hypercore) deserialized into the form used in
+/// Hyperbee
+pub(crate) struct BlockEntry {
+    /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
+    nodes: Vec<SharedNode>,
+    /// NodeSchema::new(hypercore.get(seq)).key
+    pub key: Vec<u8>,
+    /// NodeSchema::new(hypercore.get(seq)).value
+    pub value: Option<Vec<u8>>,
+}
+
+impl BlockEntry {
+    fn new(entry: NodeSchema, blocks: Shared<Blocks>) -> Result<Self, HyperbeeError> {
+        Ok(BlockEntry {
+            nodes: make_node_vec(&entry.index[..], blocks)?,
+            key: entry.key,
+            value: entry.value,
+        })
+    }
+
+    /// Get a [`Node`] from this [`BlockEntry`] at the provided `offset`.
+    /// offset is the offset of the node within the hypercore block
+    pub fn get_tree_node(&self, offset: u64) -> Result<SharedNode, HyperbeeError> {
+        Ok(self
+            .nodes
+            .get(
+                usize::try_from(offset)
+                    .map_err(|e| HyperbeeError::U64ToUsizeConversionError(offset, e))?,
+            )
+            .expect("offset *should* always point to a real node")
+            .clone())
+    }
+}
+
+impl Debug for BlockEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BlockEntry {{ ")?;
+        let mut nodes = vec![];
+        for node in self.nodes.iter() {
+            nodes.push(node.try_read().unwrap());
+        }
+        f.debug_list().entries(nodes).finish()?;
+        write!(f, "}}")
+    }
 }

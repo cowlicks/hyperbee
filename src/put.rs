@@ -12,16 +12,16 @@ use crate::{
 /// root.
 #[tracing::instrument(skip(changes, path))]
 pub async fn propagate_changes_up_tree(
-    mut changes: Changes,
+    changes: &mut Changes,
     mut path: NodePath,
     new_child: Child,
-) -> Changes {
+) {
     let mut cur_child = new_child;
     loop {
         // this should add children to node
         // add node to changes, as root or node, and redo loop if not root
         let (node, index) = match path.pop() {
-            None => return changes,
+            None => break,
             Some(x) => x,
         };
         node.read().await.children.children.write().await[index] = cur_child;
@@ -136,7 +136,7 @@ impl Tree {
                     let child = changes.add_node(cur_node.clone());
                     if !path.is_empty() {
                         trace!("inserted into some child");
-                        let changes = propagate_changes_up_tree(changes, path, child).await;
+                        propagate_changes_up_tree(&mut changes, path, child).await;
                         let _ = self.blocks.read().await.add_changes(changes).await?;
                         return Ok((matched, Some(seq)));
                     };
@@ -154,13 +154,10 @@ impl Tree {
 
                 let (left, mid_key, right) = cur_node.write().await.split().await;
 
-                // NB: !! we currently *must* add right and left to changes in this order so that
-                // we match the exact order of JS hypercore. We add right, then left, because later
-                // when the changes are commited, array of changed nodes is reversed, so it becomes
-                // left, then right.
-                let rchild = changes.add_node(right.clone());
-                let lchild = changes.add_node(left.clone());
-                children = vec![lchild, rchild];
+                children = vec![
+                    changes.add_node(left.clone()),
+                    changes.add_node(right.clone()),
+                ];
 
                 cur_key = mid_key;
             }

@@ -31,7 +31,7 @@ impl Side {
     ///
     /// This mimics the behavior of JS HB.
     /// https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L1316-L1329
-    async fn replace_removed_internal_key_with_a_key_from_child(
+    async fn replace_removed_internal_key_with_a_key_from_leaf(
         path: &mut NodePath,
         node: SharedNode,
         key_index: usize,
@@ -40,32 +40,28 @@ impl Side {
         let right_child_index = left_child_index + 1;
 
         let left_child = node.read().await.get_child(left_child_index).await?;
-        let right_child = node.read().await.get_child(right_child_index).await?;
-
         let (_, left_path) = nearest_node(left_child, &InfiniteKeys::Positive).await?;
+        let num_left_keys = left_path.last().unwrap().0.read().await.keys.len();
+
+        let right_child = node.read().await.get_child(right_child_index).await?;
         let (_, right_path) = nearest_node(right_child, &InfiniteKeys::Negative).await?;
+        let num_right_keys = right_path.last().unwrap().0.read().await.keys.len();
 
-        let keys_in_left_descendent = left_path.last().unwrap().0.read().await.keys.len();
-        let keys_in_right_descendent = right_path.last().unwrap().0.read().await.keys.len();
-
-        let (child_index, replacement_key, mut path_to_bottom) =
-            if keys_in_left_descendent < keys_in_right_descendent {
-                // Right
-                let donor = right_path.last().unwrap().0.write().await.keys.remove(0);
-                (right_child_index, donor, right_path)
-            } else {
-                //Side::Left
-                let donor = left_path
-                    .last()
-                    .unwrap()
-                    .0
-                    .write()
-                    .await
-                    .keys
-                    .pop()
-                    .unwrap();
-                (left_child_index, donor, left_path)
-            };
+        let (child_index, replacement_key, mut path_to_bottom) = if num_left_keys < num_right_keys {
+            let donor = right_path.last().unwrap().0.write().await.keys.remove(0);
+            (right_child_index, donor, right_path)
+        } else {
+            let donor = left_path
+                .last()
+                .unwrap()
+                .0
+                .write()
+                .await
+                .keys
+                .pop()
+                .unwrap();
+            (left_child_index, donor, left_path)
+        };
         node.write().await.keys.insert(key_index, replacement_key);
 
         path.push((node.clone(), child_index));
@@ -193,14 +189,14 @@ impl Side {
         father: SharedNode,
         deficient_index: usize,
         order: usize,
-    ) -> Result<Option<usize>, HyperbeeError> {
+    ) -> Result<Option<(usize, SharedNode)>, HyperbeeError> {
         let Some(donor_index) = self.get_donor_index(father.clone(), deficient_index).await else {
             return Ok(None);
         };
         let donor_child = father.read().await.get_child(donor_index).await?;
         let can_rotate = min_keys(order) < donor_child.read().await.keys.len();
         if can_rotate {
-            Ok(Some(donor_index))
+            Ok(Some((donor_index, donor_child)))
         } else {
             Ok(None)
         }
@@ -213,9 +209,9 @@ impl Side {
         deficient_index: usize,
         deficient_child: SharedNode,
         donor_index: usize,
+        donor: SharedNode,
         changes: &mut Changes,
     ) -> Result<SharedNode, HyperbeeError> {
-        let donor = father.read().await.get_child(donor_index).await?;
         // pull donated parts out of donor
         let donated_key = self.get_donor_key(donor.clone()).await;
         let donated_child = self.get_donor_child(donor.clone()).await;
@@ -232,22 +228,9 @@ impl Side {
         )
         .await;
 
-        // create new ref for changed donor
-        // NB: we do this after we add fixed deficient child to changes so we match JS HB's binary
-        // output
-        let (donor_ref, fixed_ref) = match *self {
-            Right => (
-                changes.add_node(donor.clone()),
-                changes.add_node(deficient_child.clone()),
-            ),
-            Left => {
-                let fixed_ref = changes.add_node(deficient_child.clone());
-                (changes.add_node(donor.clone()), fixed_ref)
-            }
-        };
-
-        father.read().await.children.children.write().await[donor_index] = donor_ref;
-        father.read().await.children.children.write().await[deficient_index] = fixed_ref;
+        father.read().await.children.children.write().await[donor_index] = changes.add_node(donor);
+        father.read().await.children.children.write().await[deficient_index] =
+            changes.add_node(deficient_child);
 
         Ok(father)
     }
@@ -260,8 +243,7 @@ impl Side {
         order: usize,
         changes: &mut Changes,
     ) -> Result<Option<SharedNode>, HyperbeeError> {
-        // TODO should we pass donor child?
-        let Some(donor_index) = self
+        let Some((donor_index, donor_child)) = self
             .can_rotate(father.clone(), deficient_index, order)
             .await?
         else {
@@ -273,6 +255,7 @@ impl Side {
                 deficient_index,
                 deficient_child,
                 donor_index,
+                donor_child,
                 changes,
             )
             .await?,
@@ -291,8 +274,7 @@ impl Side {
             return Ok(None);
         };
 
-        // Get donor child an deficient child  ordered from lowest to highest.
-        // Left lower, right higher
+        // Order donor child and deficient child from lowest to highest.
         let (left, right) = {
             let donor_child = father.read().await.get_child(donor_index).await?;
             match self {
@@ -336,10 +318,6 @@ impl Side {
             .await;
         // Replace new LHS child in the father
         info!("add merged nodes father changes: {left:#?}");
-        info!(
-            "Father numebr of keys = [{}]",
-            father.read().await.keys.len()
-        );
         let left_ref = changes.add_node(left.clone());
 
         father
@@ -440,7 +418,7 @@ async fn repair(
         // It is not so obvious why this is true, so to explain:
         // only merges steal keys from the father, so the above was a merge
         // the last change commited was the newly merged node
-        // so if we stop now, since this is the last commited change it becomes the root
+        // so if we stop now, since this is the last commited change, it becomes the root
         if path.is_empty()
             && father_with_repaired_child.read().await.keys.is_empty()
             && father_with_repaired_child.read().await.n_children().await == 1
@@ -455,21 +433,15 @@ async fn repair(
                 .await;
         }
 
-        // is all fixed or no more nodes, we're done. Commit father
         // if no more nodes, or father does not need repair, we are done
         if path.is_empty() || father_with_repaired_child.read().await.keys.len() >= min_keys(order)
         {
-            info!(
-                "repairs completed. There are [{}] nodes remaining in `path`",
-                path.len()
-            );
-            let father_ref = changes.add_node(father_with_repaired_child.clone());
-            break father_ref;
+            break changes.add_node(father_with_repaired_child);
         }
 
         // continue repairs
         deficient_child = father_with_repaired_child;
-        (father, deficient_index) = path.pop().expect("path.len() > 0 should be checked before");
+        (father, deficient_index) = path.pop().expect("path.is_empty() checked above");
     };
 
     Ok(father_ref)
@@ -504,7 +476,7 @@ impl Tree {
                 return Ok(Some((false, seq)));
             }
         }
-        // NB: jS hyperbee stores the "key" the deleted "key" in the created BlockEntry. So we are
+        // NB: js hyperbee stores the "key" the deleted "key" in the created BlockEntry. So we are
         // doing that too
         let mut changes: Changes = Changes::new(self.version().await, key, None);
 
@@ -516,40 +488,31 @@ impl Tree {
         cur_node.write().await.keys.remove(cur_index);
 
         if cur_node.read().await.is_leaf().await {
-            // removed from leaf
+            info!("deleted key from leaf");
             path.push((cur_node.clone(), cur_index));
         } else {
             // removed from internal node
-            info!("deleted from internal node so...");
-            Side::replace_removed_internal_key_with_a_key_from_child(
-                &mut path, cur_node, cur_index,
-            )
-            .await?;
+            info!("deleted key from internal node");
+            Side::replace_removed_internal_key_with_a_key_from_leaf(&mut path, cur_node, cur_index)
+                .await?;
         };
 
         let (bottom_node, _) = path.pop().expect("if/else above ensures path is not empty");
         // if node is not root and is deficient do repair. This repairs all deficient nodes in the
         // path
-        let child = if !path.is_empty() && bottom_node.read().await.keys.len() < min_keys(MAX_KEYS)
-        {
-            info!(
-                "bottom node has # = [{}] keys which is less order >> 1 = {} >> 1 = [{}]",
-                bottom_node.read().await.keys.len(),
-                MAX_KEYS, // TODO pass MAX_KEYS through as `order` to here
-                min_keys(MAX_KEYS)
-            );
-            repair(&mut path, MAX_KEYS, &mut changes).await?
-        } else {
-            info!("bottom node does not need repair");
-            changes.add_node(bottom_node.clone())
-        };
+        let child_ref =
+            if !path.is_empty() && bottom_node.read().await.keys.len() < min_keys(MAX_KEYS) {
+                info!("del requires a rebalance");
+                repair(&mut path, MAX_KEYS, &mut changes).await?
+            } else {
+                info!("del does not require a rebalance");
+                changes.add_node(bottom_node.clone())
+            };
 
         // if not root propagate changes
-        let changes = if path.is_empty() {
-            changes
-        } else {
+        if !path.is_empty() {
             info!("propagating changes");
-            propagate_changes_up_tree(changes, path, child).await
+            propagate_changes_up_tree(&mut changes, path, child_ref).await;
         };
 
         self.blocks.read().await.add_changes(changes).await?;

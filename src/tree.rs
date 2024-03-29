@@ -60,7 +60,7 @@ impl Tree {
     pub async fn height(&self) -> Result<usize, HyperbeeError> {
         let Some(root) = self.get_root(false).await? else {
             // When there is no root, return zero.
-            // TODO Should we also return zere when there is a root, but it is empty?
+            // TODO Should we also return zero when there is a root, but it is empty?
             // We currently return `1`.
             return Ok(0);
         };
