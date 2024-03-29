@@ -1,7 +1,6 @@
 mod common;
 
 use std::{
-    ffi::OsStr,
     path::Path,
     process::{Command, Output},
 };
@@ -26,14 +25,14 @@ fn cp_dirs<T: AsRef<Path>>(a: T, b: T) -> Result<Output> {
     let a = a.as_ref().to_string_lossy();
     let b = b.as_ref().to_string_lossy();
     let cmd = format!("cp -r {a}/. {b}/.");
-    run_command(&cmd)
+    run_command(cmd)
 }
 
 fn diff_dirs<T: AsRef<Path>>(a: T, b: T) -> Result<Output> {
     let astr = a.as_ref().to_string_lossy();
     let bstr = b.as_ref().to_string_lossy();
     let cmd = format!("diff {astr} {bstr}");
-    run_command(&cmd)
+    run_command(cmd)
 }
 
 fn create_storage_dirs_with_same_keys() -> Result<(TempDir, TempDir)> {
@@ -114,7 +113,7 @@ async fn compare_disk_hello_world() -> Result<()> {
 #[tokio::test]
 async fn compare_trees_of_some_ranges() -> Result<()> {
     for n_keys in (8..12).chain(47..53) {
-        let (hb, jsdir, rdir) = put_rs_and_js_range!(0..n_keys);
+        let (_hb, jsdir, rdir) = put_rs_and_js_range!(0..n_keys);
         diff_dirs(&jsdir, &rdir)?;
     }
     Ok(())
@@ -159,7 +158,7 @@ async fn merge_from_right_the_same() -> Result<()> {
 async fn double_merge_replace_root() -> Result<()> {
     let rand = Rand::default();
     let keys: Vec<i32> = rand.shuffle((0..100).collect());
-    let mut del_keys = rand.shuffle(keys.clone()).to_vec()[..43].to_vec();
+    let del_keys = rand.shuffle(keys.clone()).to_vec()[..43].to_vec();
 
     let extra_js = format!(
         "
@@ -212,10 +211,8 @@ async fn rand_100() -> Result<()> {
     // TODO this shows the problem. The last 'put' places the two leaf nodes in different places
     print_last_block!(hb);
     print_last_block!(jshb);
-    panic!();
 
-    //diff_dirs(&jsdir, &rsdir)?;
-    //diff_dirs(&jsdir, &rsdir)?;
+    diff_dirs(&jsdir, &rsdir)?;
     Ok(())
 }
 
