@@ -8,7 +8,6 @@ pub(crate) struct Changes {
     pub key: Vec<u8>,
     pub value: Option<Vec<u8>>,
     pub nodes: Vec<SharedNode>,
-    pub root: Option<SharedNode>,
 }
 
 impl Changes {
@@ -18,7 +17,6 @@ impl Changes {
             key: key.to_vec(),
             value: value.map(<[u8]>::to_vec),
             nodes: vec![],
-            root: None,
         }
     }
 

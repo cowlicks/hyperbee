@@ -104,14 +104,12 @@ impl Blocks {
         let Changes {
             key,
             value,
-            root,
             mut nodes,
             seq,
             ..
         } = changes;
         trace!("Adding changes with # non-root nodes [{}]", nodes.len());
         let mut new_nodes = vec![];
-        // NB: the + 1u64 is from the root
         // Could # nodes be greater than u64? No way.
         let n_nodes_in_block: u64 = nodes.len() as u64;
 
@@ -119,9 +117,6 @@ impl Blocks {
         // and update their offset
         let mut node_reorder = vec![];
         node_reorder.append(&mut nodes);
-        if let Some(root) = root {
-            node_reorder.push(root);
-        }
 
         node_reorder.reverse();
         for node in node_reorder.into_iter() {
