@@ -107,7 +107,7 @@ impl Blocks {
             seq,
             ..
         } = changes;
-        trace!("Adding changes with # non-root nodes [{}]", nodes.len());
+        trace!("Adding changes with # nodes [{}]", nodes.len());
         let reordered_nodes = reorder_nodes(seq, &nodes).await;
 
         let mut levels = vec![];
