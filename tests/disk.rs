@@ -4,13 +4,11 @@ use std::{
     path::Path,
     process::{Command, Output},
 };
-use tempfile::{tempdir, TempDir};
-
-use common::{check_cmd_output, js::run_js_writable, Result};
 
 use hyperbee::Hyperbee;
+use tempfile::{tempdir, TempDir};
 
-use crate::common::{i32_key_vec, write_range_to_hb, Rand};
+use common::{check_cmd_output, i32_key_vec, js::run_js_writable, write_range_to_hb, Rand, Result};
 
 fn run_command(cmd: impl AsRef<str>) -> Result<Output> {
     let s = cmd.as_ref();
