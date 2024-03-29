@@ -39,6 +39,10 @@ pub use error::HyperbeeError;
 pub use hb::{Hyperbee, HyperbeeBuilder, HyperbeeBuilderError};
 pub use messages::header::Metadata;
 
+type Shared<T> = Arc<RwLock<T>>;
+type SharedNode = Shared<Node>;
+type NodePath = Vec<(SharedNode, usize)>;
+
 /// Same value as JS hyperbee https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L663
 static PROTOCOL: &str = "hyperbee";
 /// Same value as JS hyperbee https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L16-L18
@@ -54,6 +58,12 @@ fn min_keys(max_keys: usize) -> usize {
 struct KeyValue {
     /// Index of key value pair within the [`hypercore::Hypercore`].
     seq: u64,
+}
+
+impl KeyValue {
+    fn new(seq: u64) -> Self {
+        KeyValue { seq }
+    }
 }
 
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]
@@ -83,61 +93,9 @@ impl Child {
     }
 }
 
-type Shared<T> = Arc<RwLock<T>>;
-type SharedNode = Shared<Node>;
-type NodePath = Vec<(SharedNode, usize)>;
-
 struct Children {
     blocks: Shared<Blocks>,
     children: RwLock<Vec<Child>>,
-}
-
-impl Debug for Children {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.children.try_read() {
-            Ok(children) => {
-                let mut dl = f.debug_list();
-                for child in children.iter() {
-                    dl.entry(&format_args!("({}, {})", child.seq, child.offset));
-                }
-                dl.finish()
-            }
-            Err(_) => write!(f, "<locked>"),
-        }
-    }
-}
-
-/// A node of the B-Tree within the [`Hyperbee`]
-struct Node {
-    keys: Vec<KeyValue>,
-    children: Children,
-    blocks: Shared<Blocks>,
-}
-
-/// custom debug because the struct is recursive
-impl Debug for Node {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        node_debug(self, f)
-    }
-}
-
-fn node_debug<T: Deref<Target = Node>>(
-    node: T,
-    f: &mut std::fmt::Formatter<'_>,
-) -> std::fmt::Result {
-    f.debug_struct("Node")
-        .field(
-            "keys",
-            &format_args!("{:?}", node.keys.iter().map(|k| k.seq).collect::<Vec<_>>()),
-        )
-        .field("children", &node.children)
-        .finish()
-}
-
-impl KeyValue {
-    fn new(seq: u64) -> Self {
-        KeyValue { seq }
-    }
 }
 
 impl Children {
@@ -209,6 +167,136 @@ impl Children {
             .splice(range, replace_with)
             .collect()
     }
+}
+
+impl Debug for Children {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.children.try_read() {
+            Ok(children) => {
+                let mut dl = f.debug_list();
+                for child in children.iter() {
+                    dl.entry(&format_args!("({}, {})", child.seq, child.offset));
+                }
+                dl.finish()
+            }
+            Err(_) => write!(f, "<locked>"),
+        }
+    }
+}
+
+/// A node of the B-Tree within the [`Hyperbee`]
+struct Node {
+    keys: Vec<KeyValue>,
+    children: Children,
+    blocks: Shared<Blocks>,
+}
+
+impl Node {
+    fn new(keys: Vec<KeyValue>, children: Vec<Child>, blocks: Shared<Blocks>) -> Self {
+        Node {
+            keys,
+            children: Children::new(blocks.clone(), children),
+            blocks,
+        }
+    }
+
+    pub async fn n_children(&self) -> usize {
+        self.children.len().await
+    }
+
+    async fn is_leaf(&self) -> bool {
+        self.n_children().await == 0
+    }
+
+    /// The number of children between this node and a leaf + 1
+    pub async fn height(&self) -> Result<usize, HyperbeeError> {
+        if self.is_leaf().await {
+            Ok(1)
+        } else {
+            let mut out = 1;
+            let mut cur_child = self.get_child(0).await?;
+            loop {
+                out += 1;
+                if cur_child.read().await.n_children().await == 0 {
+                    return Ok(out);
+                }
+                let next_child = cur_child.read().await.get_child(0).await?;
+                cur_child = next_child;
+            }
+        }
+    }
+
+    /// Serialize this node
+    async fn to_level(&self) -> yolo_index::Level {
+        let mut children = vec![];
+        for c in self.children.children.read().await.iter() {
+            children.push(c.seq);
+            children.push(c.offset);
+        }
+        yolo_index::Level {
+            keys: self.keys.iter().map(|k| k.seq).collect(),
+            children,
+        }
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn get_key_value(&self, index: usize) -> Result<KeyValueData, HyperbeeError> {
+        let KeyValue { seq, .. } = self.keys[index];
+        let key = self
+            .blocks
+            .read()
+            .await
+            .get(&seq, self.blocks.clone())
+            .await?
+            .read()
+            .await
+            .key
+            .clone();
+        let value = self
+            .blocks
+            .read()
+            .await
+            .get(&seq, self.blocks.clone())
+            .await?
+            .read()
+            .await
+            .value
+            .clone();
+        Ok(KeyValueData { seq, key, value })
+    }
+
+    /// Get the child at the provided index
+    async fn get_child(&self, index: usize) -> Result<Shared<Node>, HyperbeeError> {
+        self.children.get_child(index).await
+    }
+
+    /// Insert a key and it's children into [`self`].
+    #[tracing::instrument(skip(self, key_ref, children, range))]
+    async fn insert(&mut self, key_ref: KeyValue, children: Vec<Child>, range: Range<usize>) {
+        trace!("inserting [{}] children", children.len());
+        self.keys.splice(range.clone(), vec![key_ref]);
+        self.children.insert(range.start, children).await;
+    }
+}
+
+/// custom debug because the struct is recursive
+impl Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        node_debug(self, f)
+    }
+}
+
+fn node_debug<T: Deref<Target = Node>>(
+    node: T,
+    f: &mut std::fmt::Formatter<'_>,
+) -> std::fmt::Result {
+    f.debug_struct("Node")
+        .field(
+            "keys",
+            &format_args!("{:?}", node.keys.iter().map(|k| k.seq).collect::<Vec<_>>()),
+        )
+        .field("children", &node.children)
+        .finish()
 }
 
 #[tracing::instrument(skip(node))]
@@ -313,94 +401,6 @@ where
             current_node.read().await.get_child(child_index).await?
         };
         current_node = next_node;
-    }
-}
-
-impl Node {
-    fn new(keys: Vec<KeyValue>, children: Vec<Child>, blocks: Shared<Blocks>) -> Self {
-        Node {
-            keys,
-            children: Children::new(blocks.clone(), children),
-            blocks,
-        }
-    }
-
-    pub async fn n_children(&self) -> usize {
-        self.children.len().await
-    }
-
-    async fn is_leaf(&self) -> bool {
-        self.n_children().await == 0
-    }
-
-    /// The number of children between this node and a leaf + 1
-    pub async fn height(&self) -> Result<usize, HyperbeeError> {
-        if self.is_leaf().await {
-            Ok(1)
-        } else {
-            let mut out = 1;
-            let mut cur_child = self.get_child(0).await?;
-            loop {
-                out += 1;
-                if cur_child.read().await.n_children().await == 0 {
-                    return Ok(out);
-                }
-                let next_child = cur_child.read().await.get_child(0).await?;
-                cur_child = next_child;
-            }
-        }
-    }
-
-    /// Serialize this node
-    async fn to_level(&self) -> yolo_index::Level {
-        let mut children = vec![];
-        for c in self.children.children.read().await.iter() {
-            children.push(c.seq);
-            children.push(c.offset);
-        }
-        yolo_index::Level {
-            keys: self.keys.iter().map(|k| k.seq).collect(),
-            children,
-        }
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn get_key_value(&self, index: usize) -> Result<KeyValueData, HyperbeeError> {
-        let KeyValue { seq, .. } = self.keys[index];
-        let key = self
-            .blocks
-            .read()
-            .await
-            .get(&seq, self.blocks.clone())
-            .await?
-            .read()
-            .await
-            .key
-            .clone();
-        let value = self
-            .blocks
-            .read()
-            .await
-            .get(&seq, self.blocks.clone())
-            .await?
-            .read()
-            .await
-            .value
-            .clone();
-        Ok(KeyValueData { seq, key, value })
-    }
-
-    /// Get the child at the provided index
-    async fn get_child(&self, index: usize) -> Result<Shared<Node>, HyperbeeError> {
-        self.children.get_child(index).await
-    }
-
-    /// Insert a key and it's children into [`self`].
-    #[tracing::instrument(skip(self, key_ref, children, range))]
-    async fn insert(&mut self, key_ref: KeyValue, children: Vec<Child>, range: Range<usize>) {
-        trace!("inserting [{}] children", children.len());
-        self.keys.splice(range.clone(), vec![key_ref]);
-        self.children.insert(range.start, children).await;
     }
 }
 
