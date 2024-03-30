@@ -47,6 +47,4 @@ pub enum HyperbeeError {
     NoRootError,
     #[error("The tree already has a header")]
     HeaderAlreadyExists,
-    #[error("Problem in tests: {0}")]
-    TestError(String),
 }

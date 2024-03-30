@@ -1,11 +1,11 @@
 mod common;
-use common::join_paths;
+use common::{join_paths, Result};
 
 use crate::common::{get_data_dir, js::require_js_data};
 static HYPERBEE_STORAGE_DIR: &str = "with_replaced_values";
 
 #[tokio::test]
-async fn with_replaced_values() -> Result<(), Box<dyn std::error::Error>> {
+async fn with_replaced_values() -> Result<()> {
     require_js_data()?;
     let start = 0;
     let stop = 25;

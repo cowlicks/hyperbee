@@ -23,22 +23,25 @@ mod external;
 
 use std::{
     fmt::Debug,
-    ops::{Range, RangeBounds},
+    ops::{Deref, Range},
     sync::Arc,
 };
 
-use prost::{bytes::Buf, DecodeError, Message};
 use tokio::sync::RwLock;
 use tracing::trace;
 
 use blocks::Blocks;
-use messages::{yolo_index, YoloIndex};
+use messages::yolo_index;
 
 use tree::Tree;
 
 pub use error::HyperbeeError;
 pub use hb::{Hyperbee, HyperbeeBuilder, HyperbeeBuilderError};
 pub use messages::header::Metadata;
+
+type Shared<T> = Arc<RwLock<T>>;
+type SharedNode = Shared<Node>;
+type NodePath = Vec<(SharedNode, usize)>;
 
 /// Same value as JS hyperbee https://github.com/holepunchto/hyperbee/blob/e1b398f5afef707b73e62f575f2b166bcef1fa34/index.js#L663
 static PROTOCOL: &str = "hyperbee";
@@ -57,6 +60,12 @@ struct KeyValue {
     seq: u64,
 }
 
+impl KeyValue {
+    fn new(seq: u64) -> Self {
+        KeyValue { seq }
+    }
+}
+
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]
 #[derive(Clone, Debug)]
 /// Data related to a key value pair within the [`Hyperbee`].
@@ -69,87 +78,24 @@ pub struct KeyValueData {
     pub value: Option<Vec<u8>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 /// Pointer used within a [`Node`] to reference to it's child nodes.
 struct Child {
     /// Index of the [`BlockEntry`] within the [`hypercore::Hypercore`] that contains the [`Node`]
     pub seq: u64,
     /// Index of the `Node` within the [`BlockEntry`] referenced by [`Child::seq`]
     pub offset: u64,
-    /// Cache of the child node
-    cached_node: Option<SharedNode>,
-}
-
-#[derive(Clone, Debug)]
-/// A "block" from a [`Hypercore`](hypercore::Hypercore) deserialized into the form used in
-/// Hyperbee
-struct BlockEntry {
-    /// Pointers::new(NodeSchema::new(hypercore.get(seq)).index))
-    nodes: Vec<SharedNode>,
-    /// NodeSchema::new(hypercore.get(seq)).key
-    key: Vec<u8>,
-    /// NodeSchema::new(hypercore.get(seq)).value
-    value: Option<Vec<u8>>,
-}
-
-type Shared<T> = Arc<RwLock<T>>;
-type SharedNode = Shared<Node>;
-type NodePath = Vec<(SharedNode, usize)>;
-
-#[derive(Debug)]
-struct Children {
-    blocks: Shared<Blocks>,
-    children: RwLock<Vec<Child>>,
-}
-
-/// A node of the B-Tree within the [`Hyperbee`]
-#[derive(Debug)]
-struct Node {
-    keys: Vec<KeyValue>,
-    children: Children,
-    blocks: Shared<Blocks>,
-}
-
-impl KeyValue {
-    fn new(seq: u64) -> Self {
-        KeyValue { seq }
-    }
 }
 
 impl Child {
-    fn new(seq: u64, offset: u64, node: Option<SharedNode>) -> Self {
-        Child {
-            seq,
-            offset,
-            cached_node: node,
-        }
+    fn new(seq: u64, offset: u64) -> Self {
+        Child { seq, offset }
     }
 }
 
-impl Clone for Child {
-    fn clone(&self) -> Self {
-        Self::new(self.seq, self.offset, self.cached_node.clone())
-    }
-}
-
-/// Deserialize bytes from a Hypercore block into [`Node`]s.
-fn make_node_vec<B: Buf>(buf: B, blocks: Shared<Blocks>) -> Result<Vec<SharedNode>, DecodeError> {
-    Ok(YoloIndex::decode(buf)?
-        .levels
-        .iter()
-        .map(|level| {
-            let keys = level.keys.iter().map(|k| KeyValue::new(*k)).collect();
-            let mut children = vec![];
-            for i in (0..(level.children.len())).step_by(2) {
-                children.push(Child::new(
-                    level.children[i],
-                    level.children[i + 1],
-                    Option::None,
-                ));
-            }
-            Arc::new(RwLock::new(Node::new(keys, children, blocks.clone())))
-        })
-        .collect())
+struct Children {
+    blocks: Shared<Blocks>,
+    children: RwLock<Vec<Child>>,
 }
 
 impl Children {
@@ -160,7 +106,7 @@ impl Children {
         }
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, new_children))]
     async fn insert(&self, index: usize, new_children: Vec<Child>) {
         if new_children.is_empty() {
             trace!("no children to insert, do nothing");
@@ -185,10 +131,7 @@ impl Children {
     #[tracing::instrument(skip(self))]
     async fn get_child(&self, index: usize) -> Result<Shared<Node>, HyperbeeError> {
         let (seq, offset) = {
-            let child_ref = &self.children.read().await[index];
-            if let Some(node) = &child_ref.cached_node {
-                return Ok(node.clone());
-            }
+            let child_ref = &self.children.read().await[index].clone();
             (child_ref.seq, child_ref.offset)
         };
         let block = self
@@ -198,29 +141,149 @@ impl Children {
             .get(&seq, self.blocks.clone())
             .await?;
         let node = block.read().await.get_tree_node(offset)?;
-        self.children.write().await[index].cached_node = Some(node.clone());
         Ok(node)
     }
 
     async fn len(&self) -> usize {
         self.children.read().await.len()
     }
+}
 
-    async fn splice<R: RangeBounds<usize>, I: IntoIterator<Item = Child>>(
-        &self,
-        range: R,
-        replace_with: I,
-    ) -> Vec<Child> {
-        // Leaf node do nothing. Should we Err instead?
-        if self.children.read().await.is_empty() {
-            return vec![];
+impl Debug for Children {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.children.try_read() {
+            Ok(children) => {
+                let mut dl = f.debug_list();
+                for child in children.iter() {
+                    dl.entry(&format_args!("({}, {})", child.seq, child.offset));
+                }
+                dl.finish()
+            }
+            Err(_) => write!(f, "<locked>"),
         }
-        self.children
-            .write()
-            .await
-            .splice(range, replace_with)
-            .collect()
     }
+}
+
+macro_rules! wchildren {
+    ($node:expr) => {
+        $node.read().await.children.children.write().await
+    };
+}
+pub(crate) use wchildren;
+
+/// A node of the B-Tree within the [`Hyperbee`]
+struct Node {
+    keys: Vec<KeyValue>,
+    children: Children,
+    blocks: Shared<Blocks>,
+}
+
+impl Node {
+    fn new(keys: Vec<KeyValue>, children: Vec<Child>, blocks: Shared<Blocks>) -> Self {
+        Node {
+            keys,
+            children: Children::new(blocks.clone(), children),
+            blocks,
+        }
+    }
+
+    pub async fn n_children(&self) -> usize {
+        self.children.len().await
+    }
+
+    async fn is_leaf(&self) -> bool {
+        self.n_children().await == 0
+    }
+
+    /// The number of children between this node and a leaf + 1
+    pub async fn height(&self) -> Result<usize, HyperbeeError> {
+        if self.is_leaf().await {
+            Ok(1)
+        } else {
+            let mut out = 1;
+            let mut cur_child = self.get_child(0).await?;
+            loop {
+                out += 1;
+                if cur_child.read().await.n_children().await == 0 {
+                    return Ok(out);
+                }
+                let next_child = cur_child.read().await.get_child(0).await?;
+                cur_child = next_child;
+            }
+        }
+    }
+
+    /// Serialize this node
+    async fn to_level(&self) -> yolo_index::Level {
+        let mut children = vec![];
+        for c in self.children.children.read().await.iter() {
+            children.push(c.seq);
+            children.push(c.offset);
+        }
+        yolo_index::Level {
+            keys: self.keys.iter().map(|k| k.seq).collect(),
+            children,
+        }
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn get_key_value(&self, index: usize) -> Result<KeyValueData, HyperbeeError> {
+        let KeyValue { seq, .. } = self.keys[index];
+        let key = self
+            .blocks
+            .read()
+            .await
+            .get(&seq, self.blocks.clone())
+            .await?
+            .read()
+            .await
+            .key
+            .clone();
+        let value = self
+            .blocks
+            .read()
+            .await
+            .get(&seq, self.blocks.clone())
+            .await?
+            .read()
+            .await
+            .value
+            .clone();
+        Ok(KeyValueData { seq, key, value })
+    }
+
+    /// Get the child at the provided index
+    async fn get_child(&self, index: usize) -> Result<Shared<Node>, HyperbeeError> {
+        self.children.get_child(index).await
+    }
+
+    /// Insert a key and it's children into [`self`].
+    #[tracing::instrument(skip(self, key_ref, children, range))]
+    async fn insert(&mut self, key_ref: KeyValue, children: Vec<Child>, range: Range<usize>) {
+        trace!("inserting [{}] children", children.len());
+        self.keys.splice(range.clone(), vec![key_ref]);
+        self.children.insert(range.start, children).await;
+    }
+}
+
+/// custom debug because the struct is recursive
+impl Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        node_debug(self, f)
+    }
+}
+
+fn node_debug<T: Deref<Target = Node>>(
+    node: T,
+    f: &mut std::fmt::Formatter<'_>,
+) -> std::fmt::Result {
+    f.debug_struct("Node")
+        .field(
+            "keys",
+            &format_args!("{:?}", node.keys.iter().map(|k| k.seq).collect::<Vec<_>>()),
+        )
+        .field("children", &node.children)
+        .finish()
 }
 
 #[tracing::instrument(skip(node))]
@@ -325,117 +388,6 @@ where
             current_node.read().await.get_child(child_index).await?
         };
         current_node = next_node;
-    }
-}
-
-impl Node {
-    fn new(keys: Vec<KeyValue>, children: Vec<Child>, blocks: Shared<Blocks>) -> Self {
-        Node {
-            keys,
-            children: Children::new(blocks.clone(), children),
-            blocks,
-        }
-    }
-
-    pub async fn n_children(&self) -> usize {
-        self.children.len().await
-    }
-
-    async fn is_leaf(&self) -> bool {
-        self.n_children().await == 0
-    }
-
-    /// The number of children between this node and a leaf + 1
-    pub async fn height(&self) -> Result<usize, HyperbeeError> {
-        if self.is_leaf().await {
-            Ok(1)
-        } else {
-            let mut out = 1;
-            let mut cur_child = self.get_child(0).await?;
-            loop {
-                out += 1;
-                if cur_child.read().await.n_children().await == 0 {
-                    return Ok(out);
-                }
-                let next_child = cur_child.read().await.get_child(0).await?;
-                cur_child = next_child;
-            }
-        }
-    }
-
-    /// Serialize this node
-    async fn to_level(&self) -> yolo_index::Level {
-        let mut children = vec![];
-        for c in self.children.children.read().await.iter() {
-            children.push(c.seq);
-            children.push(c.offset);
-        }
-        yolo_index::Level {
-            keys: self.keys.iter().map(|k| k.seq).collect(),
-            children,
-        }
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn get_key_value(&self, index: usize) -> Result<KeyValueData, HyperbeeError> {
-        let KeyValue { seq, .. } = self.keys[index];
-        let key = self
-            .blocks
-            .read()
-            .await
-            .get(&seq, self.blocks.clone())
-            .await?
-            .read()
-            .await
-            .key
-            .clone();
-        let value = self
-            .blocks
-            .read()
-            .await
-            .get(&seq, self.blocks.clone())
-            .await?
-            .read()
-            .await
-            .value
-            .clone();
-        Ok(KeyValueData { seq, key, value })
-    }
-
-    /// Get the child at the provided index
-    async fn get_child(&self, index: usize) -> Result<Shared<Node>, HyperbeeError> {
-        self.children.get_child(index).await
-    }
-
-    /// Insert a key and it's children into [`self`].
-    #[tracing::instrument(skip(self))]
-    async fn insert(&mut self, key_ref: KeyValue, children: Vec<Child>, range: Range<usize>) {
-        trace!("inserting [{}] children", children.len());
-        self.keys.splice(range.clone(), vec![key_ref]);
-        self.children.insert(range.start, children).await;
-    }
-}
-
-impl BlockEntry {
-    fn new(entry: messages::Node, blocks: Shared<Blocks>) -> Result<Self, HyperbeeError> {
-        Ok(BlockEntry {
-            nodes: make_node_vec(&entry.index[..], blocks)?,
-            key: entry.key,
-            value: entry.value,
-        })
-    }
-
-    /// Get a [`Node`] from this [`BlockEntry`] at the provided `offset`.
-    /// offset is the offset of the node within the hypercore block
-    fn get_tree_node(&self, offset: u64) -> Result<SharedNode, HyperbeeError> {
-        Ok(self
-            .nodes
-            .get(
-                usize::try_from(offset)
-                    .map_err(|e| HyperbeeError::U64ToUsizeConversionError(offset, e))?,
-            )
-            .expect("offset *should* always point to a real node")
-            .clone())
     }
 }
 

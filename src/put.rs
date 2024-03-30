@@ -4,28 +4,28 @@ use tokio::sync::RwLock;
 use tracing::trace;
 
 use crate::{
-    changes::Changes, nearest_node, Child, HyperbeeError, KeyValue, KeyValueData, Node, NodePath,
-    SharedNode, Tree, MAX_KEYS,
+    changes::Changes, nearest_node, wchildren, Child, HyperbeeError, KeyValue, KeyValueData, Node,
+    NodePath, SharedNode, Tree, MAX_KEYS,
 };
 
 /// After making changes to a tree, this function updates parent references all the way to the
 /// root.
 #[tracing::instrument(skip(changes, path))]
 pub async fn propagate_changes_up_tree(
-    mut changes: Changes,
+    changes: &mut Changes,
     mut path: NodePath,
     new_child: Child,
-) -> Changes {
+) {
     let mut cur_child = new_child;
     loop {
         // this should add children to node
         // add node to changes, as root or node, and redo loop if not root
         let (node, index) = match path.pop() {
-            None => return changes,
+            None => break,
             Some(x) => x,
         };
-        node.read().await.children.children.write().await[index] = cur_child;
-        cur_child = changes.add_changed_node(path.len(), node.clone());
+        wchildren!(node)[index] = cur_child;
+        cur_child = changes.add_node(node);
     }
 }
 
@@ -44,13 +44,18 @@ impl Node {
         );
         let left = Node::new(
             self.keys.splice(0..key_median_index, vec![]).collect(),
-            self.children.splice(0..children_median_index, vec![]).await,
+            self.children
+                .children
+                .write()
+                .await
+                .splice(0..children_median_index, vec![])
+                .collect(),
             self.blocks.clone(),
         );
         let mid_key = self.keys.remove(0);
         let right = Node::new(
             self.keys.drain(..).collect(),
-            self.children.splice(0.., vec![]).await,
+            self.children.children.write().await.drain(..).collect(),
             self.blocks.clone(),
         );
         (
@@ -133,10 +138,10 @@ impl Tree {
                         .insert(cur_key, children, cur_index..stop)
                         .await;
 
-                    let child = changes.add_changed_node(path.len(), cur_node.clone());
+                    let child = changes.add_node(cur_node.clone());
                     if !path.is_empty() {
                         trace!("inserted into some child");
-                        let changes = propagate_changes_up_tree(changes, path, child).await;
+                        propagate_changes_up_tree(&mut changes, path, child).await;
                         let _ = self.blocks.read().await.add_changes(changes).await?;
                         return Ok((matched, Some(seq)));
                     };
@@ -158,14 +163,15 @@ impl Tree {
                     changes.add_node(left.clone()),
                     changes.add_node(right.clone()),
                 ];
+
                 cur_key = mid_key;
             }
         };
 
         trace!(
-            "creating a new root with key = [{:#?}] and children = [{:#?}]",
+            "creating a new root with key = [{:#?}] and # children = [{}]",
             &cur_key,
-            &children
+            children.len(),
         );
         let new_root = Arc::new(RwLock::new(Node::new(
             vec![cur_key.clone()],
@@ -175,7 +181,7 @@ impl Tree {
 
         // create a new root
         // put chlidren in node_schema then put the below thing
-        changes.add_root(new_root);
+        changes.add_node(new_root);
         let _ = self.blocks.read().await.add_changes(changes).await?;
 
         Ok((matched, Some(seq)))
@@ -255,7 +261,6 @@ mod test {
                 let key = vec![j];
                 let val = Some(key.clone());
                 let res = hb.get(&key).await?.unwrap();
-                dbg!(&res);
                 assert_eq!(res.1, val);
             }
         }
@@ -277,7 +282,6 @@ mod test {
                 let key = vec![j];
                 let val = Some(vec![j + 1]);
                 let res = hb.get(&key).await?.unwrap();
-                dbg!(&res, &key, &val);
                 assert_eq!(res.1, val);
             }
         }
