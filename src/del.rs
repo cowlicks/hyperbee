@@ -1,6 +1,6 @@
 use crate::{
     changes::Changes, keys::InfiniteKeys, min_keys, nearest_node, put::propagate_changes_up_tree,
-    Child, HyperbeeError, KeyValue, KeyValueData, NodePath, SharedNode, Tree, MAX_KEYS,
+    wchildren, Child, HyperbeeError, KeyValue, KeyValueData, NodePath, SharedNode, Tree, MAX_KEYS,
 };
 
 use tracing::info;
@@ -74,22 +74,14 @@ impl Side {
     /// but with bounds checking
     async fn get_donor_index(&self, father: SharedNode, deficient_index: usize) -> Option<usize> {
         match *self {
-            Left => {
-                if deficient_index == 0 {
-                    None
-                } else {
-                    Some(deficient_index - 1)
-                }
-            }
-            Right => {
-                let donor_index = deficient_index + 1;
-                let n_children = father.read().await.n_children().await;
-                if donor_index >= n_children {
-                    None
-                } else {
-                    Some(donor_index)
-                }
-            }
+            Left => match deficient_index == 0 {
+                true => None,
+                false => Some(deficient_index - 1),
+            },
+            Right => match deficient_index + 1 >= father.read().await.n_children().await {
+                true => None,
+                false => Some(deficient_index + 1),
+            },
         }
     }
 
@@ -118,16 +110,8 @@ impl Side {
             return None;
         }
         Some(match self {
-            Right => donor.read().await.children.children.write().await.remove(0),
-            Left => donor
-                .read()
-                .await
-                .children
-                .children
-                .write()
-                .await
-                .pop()
-                .expect("children is non empty, checked above"),
+            Right => wchildren!(donor).remove(0),
+            Left => wchildren!(donor).pop().expect("node is not a leaf"),
         })
     }
 
@@ -158,27 +142,13 @@ impl Side {
             Right => {
                 deficient_child.write().await.keys.push(key);
                 if let Some(child) = child {
-                    deficient_child
-                        .read()
-                        .await
-                        .children
-                        .children
-                        .write()
-                        .await
-                        .push(child);
+                    wchildren!(deficient_child).push(child);
                 }
             }
             Left => {
                 deficient_child.write().await.keys.insert(0, key);
                 if let Some(child) = child {
-                    deficient_child
-                        .read()
-                        .await
-                        .children
-                        .children
-                        .write()
-                        .await
-                        .insert(0, child);
+                    wchildren!(deficient_child).insert(0, child);
                 }
             }
         }
@@ -228,9 +198,8 @@ impl Side {
         )
         .await;
 
-        father.read().await.children.children.write().await[donor_index] = changes.add_node(donor);
-        father.read().await.children.children.write().await[deficient_index] =
-            changes.add_node(deficient_child);
+        wchildren!(father)[donor_index] = changes.add_node(donor);
+        wchildren!(father)[deficient_index] = changes.add_node(deficient_child);
 
         Ok(father)
     }
@@ -291,12 +260,7 @@ impl Side {
             Right => deficient_index + 1,
             Left => deficient_index,
         };
-        father
-            .read()
-            .await
-            .children
-            .splice(right_child_index..=right_child_index, vec![])
-            .await;
+        wchildren!(father).splice(right_child_index..=right_child_index, vec![]);
 
         // Move donated key from father and RHS keys into LHS
         let n_left_keys = left.read().await.keys.len();
@@ -308,24 +272,15 @@ impl Side {
             .splice(n_left_keys..n_left_keys, keys_to_add);
         // Move RHS children into LHS
         let n_left_children = left.read().await.n_children().await;
-        left.write()
-            .await
-            .children
-            .splice(
-                n_left_children..n_left_children,
-                right.read().await.children.children.write().await.drain(..),
-            )
-            .await;
+        wchildren!(left).splice(
+            n_left_children..n_left_children,
+            wchildren!(right).drain(..),
+        );
         // Replace new LHS child in the father
         info!("add merged nodes father changes: {left:#?}");
         let left_ref = changes.add_node(left.clone());
 
-        father
-            .read()
-            .await
-            .children
-            .splice((right_child_index - 1)..(right_child_index), vec![left_ref])
-            .await;
+        wchildren!(father).splice((right_child_index - 1)..(right_child_index), vec![left_ref]);
         Ok(Some(father))
     }
 }
@@ -429,8 +384,10 @@ async fn repair(
                 .read()
                 .await
                 .children
-                .get_child_ref(0)
-                .await;
+                .children
+                .read()
+                .await[0]
+                .clone();
         }
 
         // if no more nodes, or father does not need repair, we are done

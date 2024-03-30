@@ -11,7 +11,7 @@ use tracing::trace;
 use crate::{
     changes::Changes,
     messages::{Node as NodeSchema, YoloIndex},
-    Child, HyperbeeError, KeyValue, Node, Shared, SharedNode,
+    wchildren, Child, HyperbeeError, KeyValue, Node, Shared, SharedNode,
 };
 
 #[derive(Builder, Debug)]
@@ -167,7 +167,7 @@ async fn reorder_nodes(seq: u64, nodes: &[SharedNode]) -> Vec<SharedNode> {
         // The get the childs old offset, so we can get the node it points to
         let old_offset = node.read().await.children.children.read().await[child_index].offset;
         // The child's node is pushed into `out` so it's offset will be `out.len()`
-        node.read().await.children.children.write().await[child_index].offset = out.len() as u64;
+        wchildren!(node)[child_index].offset = out.len() as u64;
 
         let childs_node = nodes[old_offset as usize].clone();
         // Push the child's node into the output

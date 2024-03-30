@@ -23,7 +23,7 @@ mod external;
 
 use std::{
     fmt::Debug,
-    ops::{Deref, Range, RangeBounds},
+    ops::{Deref, Range},
     sync::Arc,
 };
 
@@ -128,14 +128,10 @@ impl Children {
             .splice(index..(index + replace_split_child), new_children);
     }
 
-    async fn get_child_ref(&self, index: usize) -> Child {
-        self.children.read().await[index].clone()
-    }
-
     #[tracing::instrument(skip(self))]
     async fn get_child(&self, index: usize) -> Result<Shared<Node>, HyperbeeError> {
         let (seq, offset) = {
-            let child_ref = &self.get_child_ref(index).await;
+            let child_ref = &self.children.read().await[index].clone();
             (child_ref.seq, child_ref.offset)
         };
         let block = self
@@ -150,22 +146,6 @@ impl Children {
 
     async fn len(&self) -> usize {
         self.children.read().await.len()
-    }
-
-    async fn splice<R: RangeBounds<usize>, I: IntoIterator<Item = Child>>(
-        &self,
-        range: R,
-        replace_with: I,
-    ) -> Vec<Child> {
-        // Leaf node do nothing. Should we Err instead?
-        if self.children.read().await.is_empty() {
-            return vec![];
-        }
-        self.children
-            .write()
-            .await
-            .splice(range, replace_with)
-            .collect()
     }
 }
 
@@ -183,6 +163,13 @@ impl Debug for Children {
         }
     }
 }
+
+macro_rules! wchildren {
+    ($node:expr) => {
+        $node.read().await.children.children.write().await
+    };
+}
+pub(crate) use wchildren;
 
 /// A node of the B-Tree within the [`Hyperbee`]
 struct Node {

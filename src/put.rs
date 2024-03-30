@@ -4,8 +4,8 @@ use tokio::sync::RwLock;
 use tracing::trace;
 
 use crate::{
-    changes::Changes, nearest_node, Child, HyperbeeError, KeyValue, KeyValueData, Node, NodePath,
-    SharedNode, Tree, MAX_KEYS,
+    changes::Changes, nearest_node, wchildren, Child, HyperbeeError, KeyValue, KeyValueData, Node,
+    NodePath, SharedNode, Tree, MAX_KEYS,
 };
 
 /// After making changes to a tree, this function updates parent references all the way to the
@@ -24,8 +24,8 @@ pub async fn propagate_changes_up_tree(
             None => break,
             Some(x) => x,
         };
-        node.read().await.children.children.write().await[index] = cur_child;
-        cur_child = changes.add_node(node.clone());
+        wchildren!(node)[index] = cur_child;
+        cur_child = changes.add_node(node);
     }
 }
 
@@ -44,13 +44,18 @@ impl Node {
         );
         let left = Node::new(
             self.keys.splice(0..key_median_index, vec![]).collect(),
-            self.children.splice(0..children_median_index, vec![]).await,
+            self.children
+                .children
+                .write()
+                .await
+                .splice(0..children_median_index, vec![])
+                .collect(),
             self.blocks.clone(),
         );
         let mid_key = self.keys.remove(0);
         let right = Node::new(
             self.keys.drain(..).collect(),
-            self.children.splice(0.., vec![]).await,
+            self.children.children.write().await.drain(..).collect(),
             self.blocks.clone(),
         );
         (
