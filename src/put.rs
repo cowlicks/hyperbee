@@ -288,6 +288,7 @@ mod test {
         Ok(())
     }
 
+    #[cfg(feature = "debug")]
     #[tokio::test]
     async fn print_put() -> Result<(), Box<dyn std::error::Error>> {
         let hb = Tree::from_ram().await?;
@@ -317,7 +318,6 @@ mod test {
             let val = Some(key.clone());
             hb.put(&key, val.as_deref()).await?;
             hb = check_tree(hb).await?;
-            let _ = hb.print().await?;
 
             for j in 0..(i + 1) {
                 let js = j.to_string();
@@ -352,7 +352,6 @@ mod test {
             }
 
             hb = check_tree(hb).await?;
-            let _ = hb.print().await?;
         }
         Ok(())
     }

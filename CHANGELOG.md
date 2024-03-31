@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `Hyperbee::print` and `Hyperbee::height` are removed from the default API. They can still be accessed by enabling the `debug` feature.
 - `CoreMem` trait and all usage of it.
 
 

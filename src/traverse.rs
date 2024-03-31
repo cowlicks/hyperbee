@@ -447,8 +447,10 @@ impl<'a> Stream for Traverse<'a> {
     }
 }
 
+#[cfg(feature = "debug")]
 static LEADER: &str = "\t";
 
+#[cfg(feature = "debug")]
 /// Print the keys of the provided node and it's descendents as a tree
 pub(crate) async fn print(node: SharedNode) -> Result<String, HyperbeeError> {
     let starting_height = node.read().await.height().await?;

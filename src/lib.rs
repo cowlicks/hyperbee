@@ -195,6 +195,7 @@ impl Node {
         self.n_children().await == 0
     }
 
+    #[cfg(feature = "debug")]
     /// The number of children between this node and a leaf + 1
     pub async fn height(&self) -> Result<usize, HyperbeeError> {
         if self.is_leaf().await {

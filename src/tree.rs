@@ -8,7 +8,7 @@ use crate::{
     error::HyperbeeError,
     messages::{header::Metadata, Header},
     nearest_node,
-    traverse::{self, KeyDataResult, Traverse, TraverseConfig},
+    traverse::{KeyDataResult, Traverse, TraverseConfig},
     Node, Shared, PROTOCOL,
 };
 use std::{
@@ -57,6 +57,7 @@ impl Tree {
         Ok(Some(root))
     }
 
+    #[cfg(feature = "debug")]
     pub async fn height(&self) -> Result<usize, HyperbeeError> {
         let Some(root) = self.get_root(false).await? else {
             // When there is no root, return zero.
@@ -119,13 +120,14 @@ impl Tree {
         self.blocks.read().await.append(&buf).await
     }
 
+    #[cfg(feature = "debug")]
     /// Returs a string representing the structure of the tree showing the keys in each node
     pub async fn print(&self) -> Result<String, HyperbeeError> {
         let root = self
             .get_root(false)
             .await?
             .ok_or(HyperbeeError::NoRootError)?;
-        let out = traverse::print(root).await?;
+        let out = crate::traverse::print(root).await?;
         Ok(out)
     }
 
@@ -183,6 +185,7 @@ impl Clone for Tree {
     }
 }
 
+#[cfg(feature = "debug")]
 #[cfg(test)]
 mod test {
     use super::*;
