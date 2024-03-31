@@ -29,6 +29,7 @@ required-features = ["ffi"]
 default = ["ffi"]
 clib = ["tokio/rt-multi-thread", "dep:libc"]
 ffi = ["clib", "dep:uniffi"]
+debug = []
 
 [dependencies]
 async-trait = "0.1.77"

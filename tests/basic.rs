@@ -5,8 +5,6 @@ use hyperbee::{traverse::TraverseConfig, Hyperbee};
 
 use crate::common::js::require_js_data;
 static BASIC_TEST_DATA_STORAGE: &str = "basic";
-static MORE_HEIGHT_TEST_DATA_STORAGE: &str = "more_height";
-static SMALL_TEST_DATA_STORAGE: &str = "alphabet";
 
 #[tokio::test]
 async fn basic_integration() -> Result<()> {
@@ -65,6 +63,10 @@ async fn stream() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "debug")]
+static MORE_HEIGHT_TEST_DATA_STORAGE: &str = "more_height";
+
+#[cfg(feature = "debug")]
 #[tokio::test]
 async fn height() -> Result<()> {
     require_js_data()?;
@@ -75,6 +77,10 @@ async fn height() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "debug")]
+static SMALL_TEST_DATA_STORAGE: &str = "alphabet";
+
+#[cfg(feature = "debug")]
 #[tokio::test]
 async fn print() -> Result<()> {
     require_js_data()?;

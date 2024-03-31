@@ -43,11 +43,13 @@ impl Hyperbee {
         self.tree.read().await.create_header(metadata).await
     }
 
+    #[cfg(feature = "debug")]
     /// The number of levels in the tree
     pub async fn height(&self) -> Result<usize, HyperbeeError> {
         self.tree.read().await.height().await
     }
 
+    #[cfg(feature = "debug")]
     /// Returs a string representing the structure of the tree showing the keys in each node
     pub async fn print(&self) -> Result<String, HyperbeeError> {
         self.tree.read().await.print().await

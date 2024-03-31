@@ -180,9 +180,12 @@ async fn order_via_depth_first_search() -> Result<()> {
         last_i
     );
     let (hb, jsdir, rsdir) = put_rs_and_js_range!(keys.clone().into_iter(), extra_js);
-    let jshb = Hyperbee::from_storage_dir(&jsdir).await?;
     hb.put(&last, Some(&last)).await?;
-    assert_eq!(hb.print().await?, jshb.print().await?);
+    #[cfg(feature = "debug")]
+    {
+        let jshb = Hyperbee::from_storage_dir(&jsdir).await?;
+        assert_eq!(hb.print().await?, jshb.print().await?);
+    }
 
     diff_dirs(&jsdir, &rsdir)?;
     Ok(())
@@ -222,8 +225,12 @@ async fn big_random_test() -> Result<()> {
         hb.del(&key).await?;
     }
 
-    let jshb = Hyperbee::from_storage_dir(&jsdir).await?;
-    assert_eq!(hb.print().await?, jshb.print().await?);
+    #[cfg(feature = "debug")]
+    {
+        let jshb = Hyperbee::from_storage_dir(&jsdir).await?;
+        assert_eq!(hb.print().await?, jshb.print().await?);
+    }
+
     diff_dirs(&jsdir, &rsdir)?;
     Ok(())
 }
