@@ -1,7 +1,8 @@
 use derive_builder::Builder;
 use futures_lite::{Stream, StreamExt};
-use hypercore::{AppendOutcome, HypercoreBuilder, Storage};
+use hypercore::{AppendOutcome, Hypercore, HypercoreBuilder, Storage};
 use prost::Message;
+use random_access_storage::RandomAccess;
 
 use crate::{
     blocks::{Blocks, BlocksBuilder},
@@ -12,6 +13,7 @@ use crate::{
     Node, Shared, PROTOCOL,
 };
 use std::{
+    fmt::Debug,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -144,14 +146,6 @@ impl Tree {
         Ok(stream.map(move |kv_and_node| kv_and_node.0))
     }
 
-    /// Helper for creating a Hyperbee
-    /// # Panics
-    /// when storage path is incorrect
-    /// when Hypercore failse to build
-    /// when Blocks fails to build
-    ///
-    /// # Errors
-    /// when Hyperbee fails to build
     pub async fn from_storage_dir<T: AsRef<Path>>(
         path_to_storage_dir: T,
     ) -> Result<Tree, HyperbeeError> {
@@ -159,11 +153,8 @@ impl Tree {
         let storage = Storage::new_disk(&p, false).await?;
         let hc = Arc::new(Mutex::new(HypercoreBuilder::new(storage).build().await?));
         let blocks = BlocksBuilder::default().core(hc).build()?;
-        Ok(TreeBuilder::default()
-            .blocks(Arc::new(RwLock::new(blocks)))
-            .build()?)
+        Self::from_blocks(blocks)
     }
-    /// Helper for creating a Hyperbee in RAM
     pub async fn from_ram() -> Result<Tree, HyperbeeError> {
         let hc = Arc::new(Mutex::new(
             HypercoreBuilder::new(Storage::new_memory().await?)
@@ -171,6 +162,18 @@ impl Tree {
                 .await?,
         ));
         let blocks = BlocksBuilder::default().core(hc).build()?;
+        Self::from_blocks(blocks)
+    }
+
+    pub fn from_hypercore<T: RandomAccess + Debug + Send + 'static>(
+        hypercore: Hypercore<T>,
+    ) -> Result<Self, HyperbeeError> {
+        let hc = Arc::new(Mutex::new(hypercore));
+        let blocks = BlocksBuilder::default().core(hc).build()?;
+        Self::from_blocks(blocks)
+    }
+
+    fn from_blocks(blocks: Blocks) -> Result<Self, HyperbeeError> {
         Ok(TreeBuilder::default()
             .blocks(Arc::new(RwLock::new(blocks)))
             .build()?)
@@ -185,6 +188,24 @@ impl Clone for Tree {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[tokio::test]
+    async fn from_hc() -> Result<(), HyperbeeError> {
+        let hc = HypercoreBuilder::new(Storage::new_memory().await?)
+            .build()
+            .await?;
+        let tree = Tree::from_hypercore(hc)?;
+        assert_eq!((None, 1), tree.put(b"hello", Some(b"world")).await?);
+        assert_eq!(
+            tree.get(b"hello").await?,
+            Some((1u64, Some(b"world".into())))
+        );
+        Ok(())
+    }
+}
 #[cfg(feature = "debug")]
 #[cfg(test)]
 mod test {

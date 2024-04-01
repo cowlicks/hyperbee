@@ -36,7 +36,7 @@ use messages::yolo_index;
 use tree::Tree;
 
 pub use error::HyperbeeError;
-pub use hb::{Hyperbee, HyperbeeBuilder, HyperbeeBuilderError};
+pub use hb::Hyperbee;
 pub use messages::header::Metadata;
 
 type Shared<T> = Arc<RwLock<T>>;

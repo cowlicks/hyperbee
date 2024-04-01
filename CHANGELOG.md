@@ -11,10 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-###Changed
+- Added `Hyperbee::from_hypercore`.
+
+### Changed
+
 
 ### Removed
 
+- Removed some types that should not have been public:
+    * `HyperbeeBuilder` this was impossible to use anyway because it required a private type (`Tree`).
+    * `HyperbeeBuilderError` consumers should use `HyperbeeError` instead.
 
 
 ## [0.4.0] - 2024-03-31
