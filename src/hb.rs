@@ -1,8 +1,9 @@
-use std::{path::Path, sync::Arc};
+use std::{fmt::Debug, path::Path, sync::Arc};
 
 use derive_builder::Builder;
 use futures_lite::Stream;
-use hypercore::AppendOutcome;
+use hypercore::{AppendOutcome, Hypercore};
+use random_access_storage::RandomAccess;
 use tokio::sync::RwLock;
 
 use crate::{
@@ -10,10 +11,9 @@ use crate::{
     messages::header::Metadata,
     prefixed::{Prefixed, PrefixedConfig},
     traverse::{KeyDataResult, TraverseConfig},
-    tree, KeyValueData,
+    tree::Tree,
+    KeyValueData, Shared,
 };
-
-use super::{tree::Tree, Shared};
 
 /// An append only B-Tree built on [`Hypercore`](hypercore::Hypercore). It provides a key-value
 /// store API, with methods for [inserting](Hyperbee::put), [getting](Hyperbee::get), and
@@ -123,10 +123,10 @@ impl Hyperbee {
         self.tree.read().await.traverse(conf).await
     }
 
-    /// Helper for creating a Hyperbee
+    /// Create a [`Hyperbee`] from a storage directory
     /// # Panics
     /// when storage path is incorrect
-    /// when Hypercore failse to build
+    /// when Hypercore fails to build
     /// when Blocks fails to build
     ///
     /// # Errors
@@ -134,15 +134,22 @@ impl Hyperbee {
     pub async fn from_storage_dir<T: AsRef<Path>>(
         path_to_storage_dir: T,
     ) -> Result<Hyperbee, HyperbeeError> {
-        let tree = tree::Tree::from_storage_dir(path_to_storage_dir).await?;
-        Ok(HyperbeeBuilder::default()
-            .tree(Arc::new(RwLock::new(tree)))
-            .build()?)
+        Self::from_tree(Tree::from_storage_dir(path_to_storage_dir).await?)
     }
 
-    /// Helper for creating a Hyperbee in RAM
+    /// Create a [`Hyperbee`] in RAM
     pub async fn from_ram() -> Result<Hyperbee, HyperbeeError> {
-        let tree = tree::Tree::from_ram().await?;
+        Self::from_tree(Tree::from_ram().await?)
+    }
+
+    /// Helper for creating a [`Hyperbee`] from a [`Hypercore`]
+    pub fn from_hypercore<T: RandomAccess + Debug + Send + 'static>(
+        hypercore: Hypercore<T>,
+    ) -> Result<Self, HyperbeeError> {
+        Self::from_tree(Tree::from_hypercore(hypercore)?)
+    }
+
+    fn from_tree(tree: Tree) -> Result<Self, HyperbeeError> {
         Ok(HyperbeeBuilder::default()
             .tree(Arc::new(RwLock::new(tree)))
             .build()?)
