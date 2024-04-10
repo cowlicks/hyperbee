@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added `Hyperbee::from_hypercore`.
+- Made `HyperbeeError` non-exhaustive [#32](https://github.com/cowlicks/hyperbee/pull/32)
 
 ### Changed
 
