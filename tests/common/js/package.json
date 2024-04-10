@@ -6,6 +6,7 @@
   "license": "MIT",
   "dependencies": {
     "hyperbee": "^2.18.1",
-    "hypercore": "10.31.10"
+    "hypercore": "10.31.10",
+    "random-access-memory": "^6.2.1"
   }
 }
