@@ -3,7 +3,6 @@ use std::{fmt::Debug, path::Path, sync::Arc};
 use derive_builder::Builder;
 use futures_lite::Stream;
 use hypercore::{AppendOutcome, Hypercore};
-use random_access_storage::RandomAccess;
 use tokio::sync::RwLock;
 
 use crate::{
@@ -143,9 +142,7 @@ impl Hyperbee {
     }
 
     /// Helper for creating a [`Hyperbee`] from a [`Hypercore`]
-    pub fn from_hypercore<T: RandomAccess + Debug + Send + 'static>(
-        hypercore: Hypercore<T>,
-    ) -> Result<Self, HyperbeeError> {
+    pub fn from_hypercore(hypercore: Hypercore) -> Result<Self, HyperbeeError> {
         Self::from_tree(Tree::from_hypercore(hypercore)?)
     }
 
