@@ -35,7 +35,7 @@ debug = []
 async-trait = "0.1.77"
 derive_builder = "0.12.0"
 futures-lite = "2.1.0"
-hypercore = "0.12.1"
+hypercore = { git = "https://github.com/cowlicks/hypercore.git", rev="61423de6d66a73447b35b9144408d5fa612d1151" }
 libc = { version = "0.2.153", optional = true }
 prost = "0.12.1"
 random-access-disk = "3.0.0"
