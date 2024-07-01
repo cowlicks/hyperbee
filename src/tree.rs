@@ -2,7 +2,6 @@ use derive_builder::Builder;
 use futures_lite::{Stream, StreamExt};
 use hypercore::{AppendOutcome, Hypercore, HypercoreBuilder, Storage};
 use prost::Message;
-use random_access_storage::RandomAccess;
 
 use crate::{
     blocks::{Blocks, BlocksBuilder},
@@ -165,9 +164,7 @@ impl Tree {
         Self::from_blocks(blocks)
     }
 
-    pub fn from_hypercore<T: RandomAccess + Debug + Send + 'static>(
-        hypercore: Hypercore<T>,
-    ) -> Result<Self, HyperbeeError> {
+    pub fn from_hypercore(hypercore: Hypercore) -> Result<Self, HyperbeeError> {
         let hc = Arc::new(Mutex::new(hypercore));
         let blocks = BlocksBuilder::default().core(hc).build()?;
         Self::from_blocks(blocks)
