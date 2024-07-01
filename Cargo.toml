@@ -38,9 +38,6 @@ futures-lite = "2.1.0"
 hypercore = { git = "https://github.com/cowlicks/hypercore.git", rev="44eb7673fea7cf1a08ad5219153056ec3898544a" }
 libc = { version = "0.2.153", optional = true }
 prost = "0.12.1"
-random-access-disk = "3.0.0"
-random-access-memory = "3.0.0"
-random-access-storage = "5.0.0"
 thiserror = "1.0.50"
 tokio = { version = "1.34.0", features = ["macros", "rt", "sync"] }
 tokio-stream = "0.1.14"
