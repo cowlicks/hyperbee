@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Update to latest Hypercore with IO type erased. This resulted in 4 dependencies being removed.
 
 ### Removed
 
