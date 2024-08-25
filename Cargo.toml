@@ -32,20 +32,18 @@ ffi = ["clib", "dep:uniffi"]
 debug = []
 
 [dependencies]
-async-trait = "0.1.77"
 derive_builder = "0.12.0"
 futures-lite = "2.1.0"
-hypercore = "0.12.1"
 libc = { version = "0.2.153", optional = true }
 prost = "0.12.1"
-random-access-disk = "3.0.0"
-random-access-memory = "3.0.0"
-random-access-storage = "5.0.0"
 thiserror = "1.0.50"
 tokio = { version = "1.34.0", features = ["macros", "rt", "sync"] }
 tokio-stream = "0.1.14"
 tracing = "0.1.40"
 uniffi = { version = "0.26.1", features = ["cli"], optional = true }
+
+[dependencies.hypercore]
+version = "0.13.0"
 
 [build-dependencies]
 prost-build = "0.12.1"
