@@ -88,6 +88,7 @@ pub fn run_code(
     );
     let script_path = working_dir.path().join(script_file_name);
     let script_file = File::create(&script_path)?;
+    println!("{code}");
     write!(&script_file, "{}", &code)?;
 
     let working_dir_path = working_dir.path().display().to_string();
@@ -107,7 +108,10 @@ pub fn run_code(
     }
     let script_path_str = script_path.display().to_string();
     let cmd = build_command(&working_dir_path, &script_path_str);
-    check_cmd_output(Command::new("sh").arg("-c").arg(cmd).output()?)
+    let o = Command::new("sh").arg("-c").arg(cmd).output()?;
+    println!("OUT\n{}", String::from_utf8_lossy(&o.stdout));
+    println!("ERR\n{}", String::from_utf8_lossy(&o.stderr));
+    check_cmd_output(o)
 }
 
 pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output> {

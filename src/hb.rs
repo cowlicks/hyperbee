@@ -133,11 +133,13 @@ impl Hyperbee {
     pub async fn from_storage_dir<T: AsRef<Path>>(
         path_to_storage_dir: T,
     ) -> Result<Hyperbee, HyperbeeError> {
+        dbg!(tokio::runtime::Handle::try_current());
         Self::from_tree(Tree::from_storage_dir(path_to_storage_dir).await?)
     }
 
     /// Create a [`Hyperbee`] in RAM
     pub async fn from_ram() -> Result<Hyperbee, HyperbeeError> {
+        dbg!(tokio::runtime::Handle::try_current());
         Self::from_tree(Tree::from_ram().await?)
     }
 

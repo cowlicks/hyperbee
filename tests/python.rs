@@ -79,6 +79,8 @@ async fn optionals() -> Result<()> {
         "
 async def main():
     import json
+    init_env_logs()
+    try_current_rt()
     hb = await hyperbee_from_storage_dir('{}')
     res = await hb.get(b'hello')
     assert(res.value is None)

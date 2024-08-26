@@ -148,18 +148,29 @@ impl Tree {
     pub async fn from_storage_dir<T: AsRef<Path>>(
         path_to_storage_dir: T,
     ) -> Result<Tree, HyperbeeError> {
+        dbg!(tokio::runtime::Handle::try_current());
+        dbg!();
+        dbg!();
+        dbg!();
         let p: PathBuf = path_to_storage_dir.as_ref().to_owned();
+        dbg!();
         let storage = Storage::new_disk(&p, false).await?;
+        dbg!();
+        dbg!(tokio::runtime::Handle::current());
         let hc = Arc::new(Mutex::new(HypercoreBuilder::new(storage).build().await?));
+        dbg!();
         let blocks = BlocksBuilder::default().core(hc).build()?;
+        dbg!();
         Self::from_blocks(blocks)
     }
     pub async fn from_ram() -> Result<Tree, HyperbeeError> {
+        dbg!(tokio::runtime::Handle::try_current());
         let hc = Arc::new(Mutex::new(
             HypercoreBuilder::new(Storage::new_memory().await?)
                 .build()
                 .await?,
         ));
+        dbg!(tokio::runtime::Handle::try_current());
         let blocks = BlocksBuilder::default().core(hc).build()?;
         Self::from_blocks(blocks)
     }
