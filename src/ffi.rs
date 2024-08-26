@@ -109,9 +109,23 @@ async fn hyperbee_from_storage_dir(path_to_storage_dir: &str) -> Result<Hyperbee
     })
 }
 
+/// log current rt
+#[uniffi::export]
+fn try_current_rt() {
+    dbg!(tokio::runtime::Handle::try_current());
+}
+
 #[derive(Debug, uniffi::Object)]
 struct Prefixed {
     rust_prefixed: Shared<RustPrefixed>,
+}
+
+/// initialize logging
+#[uniffi::export]
+pub fn init_env_logs() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()) // Reads `RUST_LOG` environment variable
+        .init();
 }
 
 #[uniffi::export]
