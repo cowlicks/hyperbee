@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use derive_builder::Builder;
+use futures_lite::{AsyncRead, AsyncWrite};
 use hypercore::{AppendOutcome, CoreMethods, SharedCore};
 use prost::{bytes::Buf, DecodeError, Message};
 use replicator::{Replicate, Replicator};
@@ -37,6 +38,14 @@ impl BlocksBuilder {
 }
 
 impl Blocks {
+    pub async fn add_stream<S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static>(
+        &self,
+        stream: S,
+        is_initiator: bool,
+    ) -> Result<(), HyperbeeError> {
+        Ok(self.replicator.add_stream(stream, is_initiator).await?)
+    }
+
     /// Get a BlockEntry for the given `seq`
     /// # Errors
     /// when the provided `seq` is not in the Hypercore

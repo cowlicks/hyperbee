@@ -1,8 +1,7 @@
 use derive_builder::Builder;
-use futures_lite::{Stream, StreamExt};
+use futures_lite::{AsyncRead, AsyncWrite, Stream, StreamExt};
 use hypercore::{AppendOutcome, Hypercore, HypercoreBuilder, SharedCore, Storage};
 use prost::Message;
-use replicator::Replicate;
 
 use crate::{
     blocks::{Blocks, BlocksBuilder},
@@ -29,6 +28,20 @@ pub struct Tree {
 }
 
 impl Tree {
+    /// add replication stream
+    pub async fn add_stream<S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static>(
+        &self,
+        stream: S,
+        is_initiator: bool,
+    ) -> Result<(), HyperbeeError> {
+        Ok(self
+            .blocks
+            .read()
+            .await
+            .add_stream(stream, is_initiator)
+            .await?)
+    }
+
     /// The number of blocks in the hypercore.
     /// The first block is always the header block so:
     /// `version` would be the `seq` of the next block

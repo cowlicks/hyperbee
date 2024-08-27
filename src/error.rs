@@ -1,3 +1,4 @@
+use replicator::ReplicatorError;
 use std::{num::TryFromIntError, string::FromUtf8Error};
 use thiserror::Error;
 
@@ -48,4 +49,6 @@ pub enum HyperbeeError {
     NoRootError,
     #[error("The tree already has a header")]
     HeaderAlreadyExists,
+    #[error("Replication error: {0}")]
+    ReplicationError(#[from] ReplicatorError),
 }

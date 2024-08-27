@@ -1,7 +1,7 @@
 use std::{fmt::Debug, path::Path, sync::Arc};
 
 use derive_builder::Builder;
-use futures_lite::Stream;
+use futures_lite::{AsyncRead, AsyncWrite, Stream};
 use hypercore::{AppendOutcome, Hypercore};
 use tokio::sync::RwLock;
 
@@ -27,6 +27,20 @@ pub struct Hyperbee {
 }
 
 impl Hyperbee {
+    /// add replication stream
+    pub async fn add_stream<S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static>(
+        &self,
+        stream: S,
+        is_initiator: bool,
+    ) -> Result<(), HyperbeeError> {
+        Ok(self
+            .tree
+            .read()
+            .await
+            .add_stream(stream, is_initiator)
+            .await?)
+    }
+
     /// The number of blocks in the hypercore.
     /// The first block is always the header block so:
     /// `version` would be the `seq` of the next block
