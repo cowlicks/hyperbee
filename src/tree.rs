@@ -1,6 +1,6 @@
 use derive_builder::Builder;
 use futures_lite::{AsyncRead, AsyncWrite, Stream, StreamExt};
-use hypercore::{AppendOutcome, Hypercore, HypercoreBuilder, SharedCore, Storage};
+use hypercore::{AppendOutcome, HypercoreBuilder, SharedCore, Storage};
 use prost::Message;
 
 use crate::{
@@ -34,8 +34,7 @@ impl Tree {
         stream: S,
         is_initiator: bool,
     ) -> Result<(), HyperbeeError> {
-        self
-            .blocks
+        self.blocks
             .read()
             .await
             .add_stream(stream, is_initiator)
@@ -178,10 +177,8 @@ impl Tree {
         Self::from_blocks(blocks)
     }
 
-    pub fn from_hypercore(hypercore: Hypercore) -> Result<Self, HyperbeeError> {
-        let blocks = BlocksBuilder::default()
-            .core(SharedCore::from_hypercore(hypercore))
-            .build()?;
+    pub fn from_hypercore<T: Into<SharedCore>>(hypercore: T) -> Result<Self, HyperbeeError> {
+        let blocks = BlocksBuilder::default().core(hypercore.into()).build()?;
         Self::from_blocks(blocks)
     }
 
