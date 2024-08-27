@@ -1,6 +1,8 @@
 #![cfg(test)]
 //! utils used for tests
 
+mod replicate;
+
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use tokio::sync::OnceCell;
