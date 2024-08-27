@@ -33,12 +33,12 @@ impl Hyperbee {
         stream: S,
         is_initiator: bool,
     ) -> Result<(), HyperbeeError> {
-        Ok(self
+        self
             .tree
             .read()
             .await
             .add_stream(stream, is_initiator)
-            .await?)
+            .await
     }
 
     /// The number of blocks in the hypercore.
