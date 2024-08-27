@@ -1,6 +1,9 @@
 //! Rust version of [hyperbee](https://github.com/holepunchto/hyperbee)
 //! A [B-tree](https://en.wikipedia.org/wiki/B-tree) built on top of [Hypercore](https://docs.pears.com/building-blocks/hypercore).
 
+// TODO explain whyt Hyperebee is separate from Tree
+// it is the interface for using a hb directly
+
 mod messages {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
