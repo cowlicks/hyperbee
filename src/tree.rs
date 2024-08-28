@@ -1,6 +1,6 @@
 use derive_builder::Builder;
 use futures_lite::{AsyncRead, AsyncWrite, Stream, StreamExt};
-use hypercore::{AppendOutcome, HypercoreBuilder, SharedCore, Storage};
+use hypercore::{replication::SharedCore, AppendOutcome, HypercoreBuilder, Storage};
 use prost::Message;
 
 use crate::{

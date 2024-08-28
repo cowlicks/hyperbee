@@ -2,7 +2,10 @@ use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use derive_builder::Builder;
 use futures_lite::{AsyncRead, AsyncWrite};
-use hypercore::{AppendOutcome, CoreMethods, SharedCore};
+use hypercore::{
+    replication::{CoreInfo, CoreMethods, SharedCore},
+    AppendOutcome,
+};
 use prost::{bytes::Buf, DecodeError, Message};
 use replicator::{Replicate, Replicator};
 use tokio::sync::RwLock;

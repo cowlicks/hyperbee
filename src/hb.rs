@@ -2,7 +2,7 @@ use std::{fmt::Debug, path::Path, sync::Arc};
 
 use derive_builder::Builder;
 use futures_lite::{AsyncRead, AsyncWrite, Stream};
-use hypercore::{AppendOutcome, SharedCore};
+use hypercore::{replication::SharedCore, AppendOutcome};
 use tokio::sync::RwLock;
 
 use crate::{
