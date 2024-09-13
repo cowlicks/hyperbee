@@ -16,7 +16,7 @@ macro_rules! assert_gets {
                     String::from_utf8_lossy($key)
                 );
             }
-            if let Some((_, Some(x))) = $core.get($key).await? {
+            if let Ok(Some((_, Some(x)))) = $core.get($key).await {
                 assert_eq!(x, $val);
                 break;
             }
