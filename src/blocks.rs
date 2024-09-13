@@ -3,11 +3,11 @@ use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 use derive_builder::Builder;
 use futures_lite::{AsyncRead, AsyncWrite};
 use hypercore::{
-    replication::{CoreInfo, CoreMethods, SharedCore},
+    replication::{CoreInfo, CoreMethods},
     AppendOutcome,
 };
 use prost::{bytes::Buf, DecodeError, Message};
-use replicator::{Replicate, ReplicatingCore};
+use replicator::ReplicatingCore;
 use tokio::sync::RwLock;
 use tracing::trace;
 
@@ -24,19 +24,14 @@ pub struct Blocks {
     #[builder(default)]
     // TODO make the cache smarter. Allow setting max size and strategy
     cache: Shared<BTreeMap<u64, Shared<BlockEntry>>>,
-    core: SharedCore,
-    #[builder(default = "self.default_replicator()?")]
-    replicator: ReplicatingCore,
+    #[builder(setter(custom))]
+    core: ReplicatingCore,
 }
 
 impl BlocksBuilder {
-    fn default_replicator(&self) -> Result<ReplicatingCore, String> {
-        let core = self
-            .core
-            .as_ref()
-            .ok_or("core is required".to_string())?
-            .clone();
-        Ok(core.replicate())
+    pub fn core<T: Into<ReplicatingCore>>(mut self, core: T) -> Self {
+        self.core = Some(core.into());
+        self
     }
 }
 
@@ -46,7 +41,7 @@ impl Blocks {
         stream: S,
         is_initiator: bool,
     ) -> Result<(), HyperbeeError> {
-        self.replicator.add_stream(stream, is_initiator).await;
+        self.core.add_stream(stream, is_initiator).await;
         Ok(())
     }
 
