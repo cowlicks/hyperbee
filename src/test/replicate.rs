@@ -29,7 +29,6 @@ macro_rules! assert_gets {
 #[tokio::test]
 async fn hello_world() -> Result<(), Box<dyn std::error::Error>> {
     let (writer_core, reader_core) = writer_and_reader_cores().await?;
-
     let (a_to_b, b_to_a) = create_connected_streams();
     let writer_bee = Hyperbee::from_hypercore(writer_core)?;
     let reader_bee = Hyperbee::from_hypercore(reader_core)?;

@@ -7,7 +7,7 @@ use hypercore::{
     AppendOutcome,
 };
 use prost::{bytes::Buf, DecodeError, Message};
-use replicator::{Replicate, Replicator};
+use replicator::{Replicate, ReplicatingCore};
 use tokio::sync::RwLock;
 use tracing::trace;
 
@@ -26,11 +26,11 @@ pub struct Blocks {
     cache: Shared<BTreeMap<u64, Shared<BlockEntry>>>,
     core: SharedCore,
     #[builder(default = "self.default_replicator()?")]
-    replicator: Replicator,
+    replicator: ReplicatingCore,
 }
 
 impl BlocksBuilder {
-    fn default_replicator(&self) -> Result<Replicator, String> {
+    fn default_replicator(&self) -> Result<ReplicatingCore, String> {
         let core = self
             .core
             .as_ref()
@@ -46,7 +46,8 @@ impl Blocks {
         stream: S,
         is_initiator: bool,
     ) -> Result<(), HyperbeeError> {
-        Ok(self.replicator.add_stream(stream, is_initiator).await?)
+        self.replicator.add_stream(stream, is_initiator).await;
+        Ok(())
     }
 
     /// Get a BlockEntry for the given `seq`
