@@ -33,8 +33,11 @@ impl Default for PrefixedConfig {
     }
 }
 
-/// A "sub" [`Hyperbee`](crate::Hyperbee), which can be used for grouping data. [`get`](Self::get), [`put`](Self::put), [`del`](Self::del), [`traverse`](Self::traverse) operations are automatically prefixed
-/// with [`Prefixed::prefix`] + [`PrefixedConfig::seperator`] where appropriate.
+/// A "sub" [`Hyperbee`](crate::Hyperbee), used for grouping data.
+///
+/// [`get`](Self::get), [`put`](Self::put), [`del`](Self::del), [`traverse`](Self::traverse)
+/// operations are automatically prefixed with [`Prefixed::prefix`] + [`PrefixedConfig::seperator`]
+/// where appropriate.
 #[derive(Debug)]
 pub struct Prefixed {
     /// All keys inserted with [`Prefixed::put`] are prefixed with this value

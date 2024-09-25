@@ -14,10 +14,12 @@ use crate::{
     KeyValueData, Shared,
 };
 
-/// An append only B-Tree built on [`Hypercore`](hypercore::Hypercore). It provides a key-value
-/// store API, with methods for [inserting](Hyperbee::put), [getting](Hyperbee::get), and
-/// [deleting](Hyperbee::del) key-value pair. As well as creating [sorted
-/// iterators](Hyperbee::traverse), and ["sub" B-Trees](Hyperbee::sub) for grouping related data.
+/// An append only B-Tree built on [`Hypercore`](hypercore::Hypercore).
+///
+/// It provides a key-value store API, with methods for [inserting](Hyperbee::put),
+/// [getting](Hyperbee::get), and [deleting](Hyperbee::del) key-value pair. As well as creating
+/// [sorted iterators](Hyperbee::traverse), and ["sub" B-Trees](Hyperbee::sub) for grouping related
+/// data.
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned", derive(Debug))]
 pub struct Hyperbee {
