@@ -67,7 +67,7 @@ Distributable python packages are still a work-in-progress. Currently only Pytho
 
 ## Development
 
-Run the tests with `$ cargo test`.
+Running the tests requires [`protoc`](https://docs.rs/prost-build/latest/prost_build/#sourcing-protoc) and [GNU Make](https://www.gnu.org/software/make/) be installed.
 
 Each significant pull request should include an update the [`CHANGELOG.md`](CHANGELOG.md)
 
