@@ -14,7 +14,9 @@ fn make_test_basic_ffi_hb_get() -> Result<()> {
     loop {
         // TODO FIXME sometimes there is junk in the beggining of the stdout on the first run
         let output = run_script_relative_to_git_root("tests/common/c/target/hyperbee")?;
+        dbg!(&output);
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        println!("{}", &stdout);
         if stdout == "25" {
             break;
         }
