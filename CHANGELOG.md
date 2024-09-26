@@ -11,7 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CI checks for pull requests
+- Enable basic replication
+
 ### Changed
+
+- Work around some broken python & FFI tests
 
 ### Removed
 

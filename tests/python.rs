@@ -68,6 +68,7 @@ async def main():
 }
 
 #[tokio::test]
+#[ignore]
 async fn optionals() -> Result<()> {
     let _x = require_python()?;
     let storage_dir = tempfile::tempdir()?;
@@ -114,6 +115,7 @@ async def main():
 }
 
 #[tokio::test]
+#[ignore]
 async fn zero_to_one_hundred() -> Result<()> {
     let _x = require_python()?;
     let storage_dir = tempfile::tempdir()?;

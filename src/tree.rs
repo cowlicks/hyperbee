@@ -1,6 +1,6 @@
 use derive_builder::Builder;
-use futures_lite::{Stream, StreamExt};
-use hypercore::{AppendOutcome, Hypercore, HypercoreBuilder, Storage};
+use futures_lite::{AsyncRead, AsyncWrite, Stream, StreamExt};
+use hypercore::{replication::SharedCore, AppendOutcome, HypercoreBuilder, Storage};
 use prost::Message;
 
 use crate::{
@@ -16,7 +16,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 /// A key/value store built on [`hypercore::Hypercore`]. It uses an append only
 /// [B-Tree](https://en.wikipedia.org/wiki/B-tree) and is compatible with the [JavaScript Hyperbee
@@ -28,6 +28,19 @@ pub struct Tree {
 }
 
 impl Tree {
+    /// add replication stream
+    pub async fn add_stream<S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static>(
+        &self,
+        stream: S,
+        is_initiator: bool,
+    ) -> Result<(), HyperbeeError> {
+        self.blocks
+            .read()
+            .await
+            .add_stream(stream, is_initiator)
+            .await
+    }
+
     /// The number of blocks in the hypercore.
     /// The first block is always the header block so:
     /// `version` would be the `seq` of the next block
@@ -150,23 +163,22 @@ impl Tree {
     ) -> Result<Tree, HyperbeeError> {
         let p: PathBuf = path_to_storage_dir.as_ref().to_owned();
         let storage = Storage::new_disk(&p, false).await?;
-        let hc = Arc::new(Mutex::new(HypercoreBuilder::new(storage).build().await?));
+        let hc = SharedCore::from_hypercore(HypercoreBuilder::new(storage).build().await?);
         let blocks = BlocksBuilder::default().core(hc).build()?;
         Self::from_blocks(blocks)
     }
     pub async fn from_ram() -> Result<Tree, HyperbeeError> {
-        let hc = Arc::new(Mutex::new(
+        let hc = SharedCore::from_hypercore(
             HypercoreBuilder::new(Storage::new_memory().await?)
                 .build()
                 .await?,
-        ));
+        );
         let blocks = BlocksBuilder::default().core(hc).build()?;
         Self::from_blocks(blocks)
     }
 
-    pub fn from_hypercore(hypercore: Hypercore) -> Result<Self, HyperbeeError> {
-        let hc = Arc::new(Mutex::new(hypercore));
-        let blocks = BlocksBuilder::default().core(hc).build()?;
+    pub fn from_hypercore<T: Into<SharedCore>>(hypercore: T) -> Result<Self, HyperbeeError> {
+        let blocks = BlocksBuilder::default().core(hypercore.into()).build()?;
         Self::from_blocks(blocks)
     }
 

@@ -1,9 +1,14 @@
 use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use derive_builder::Builder;
-use hypercore::{AppendOutcome, Hypercore};
+use futures_lite::{AsyncRead, AsyncWrite};
+use hypercore::{
+    replication::{CoreInfo, CoreMethods},
+    AppendOutcome,
+};
 use prost::{bytes::Buf, DecodeError, Message};
-use tokio::sync::{Mutex, RwLock};
+use replicator::ReplicatingCore;
+use tokio::sync::RwLock;
 use tracing::trace;
 
 use crate::{
@@ -13,16 +18,33 @@ use crate::{
 };
 
 #[derive(Builder, Debug)]
-#[builder(pattern = "owned", derive(Debug))]
+#[builder(derive(Debug))]
 /// Interface to the underlying Hypercore
 pub struct Blocks {
     #[builder(default)]
     // TODO make the cache smarter. Allow setting max size and strategy
     cache: Shared<BTreeMap<u64, Shared<BlockEntry>>>,
-    core: Arc<Mutex<Hypercore>>,
+    #[builder(setter(custom))]
+    core: ReplicatingCore,
+}
+
+impl BlocksBuilder {
+    pub fn core<T: Into<ReplicatingCore>>(mut self, core: T) -> Self {
+        self.core = Some(core.into());
+        self
+    }
 }
 
 impl Blocks {
+    pub async fn add_stream<S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static>(
+        &self,
+        stream: S,
+        is_initiator: bool,
+    ) -> Result<(), HyperbeeError> {
+        self.core.add_stream(stream, is_initiator).await;
+        Ok(())
+    }
+
     /// Get a BlockEntry for the given `seq`
     /// # Errors
     /// when the provided `seq` is not in the Hypercore
@@ -56,7 +78,7 @@ impl Blocks {
         seq: &u64,
         blocks: Shared<Self>,
     ) -> Result<Option<BlockEntry>, HyperbeeError> {
-        match self.core.lock().await.get(*seq).await? {
+        match self.core.get(*seq).await? {
             Some(core_block) => {
                 let node = NodeSchema::decode(&core_block[..])?;
                 Ok(Some(BlockEntry::new(node, blocks)?))
@@ -66,11 +88,11 @@ impl Blocks {
     }
 
     pub async fn info(&self) -> hypercore::Info {
-        self.core.lock().await.info()
+        self.core.info().await
     }
 
     pub async fn append(&self, value: &[u8]) -> Result<AppendOutcome, HyperbeeError> {
-        Ok(self.core.lock().await.append(value).await?)
+        Ok(self.core.append(value).await?)
     }
 
     #[tracing::instrument(skip(self, changes))]
