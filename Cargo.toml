@@ -46,6 +46,7 @@ uniffi = { version = "0.26.1", features = ["cli"], optional = true }
 #path = "../replicator/replicator"
 git = "https://github.com/cowlicks/replicator.git"
 rev = "9a8ea4c02f6bc7b7479ceafbe0bb13bd5389f061"
+# TODO onyl used in the tests, but duplicating this for dev-dependencies is annoying
 features = ["utils"]
 
 [dependencies.hypercore]
