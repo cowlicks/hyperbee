@@ -156,7 +156,7 @@ impl Hyperbee {
         Self::from_tree(Tree::from_ram().await?)
     }
 
-    /// Helper for creating a [`Hyperbee`] from a [`Hypercore`]
+    /// Helper for creating a [`Hyperbee`] from a [`hypercore::Hypercore`]
     pub fn from_hypercore<T: Into<SharedCore>>(hypercore: T) -> Result<Self, HyperbeeError> {
         Self::from_tree(Tree::from_hypercore(hypercore)?)
     }
