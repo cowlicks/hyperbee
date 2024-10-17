@@ -45,7 +45,6 @@ uniffi = { version = "0.26.1", features = ["cli"], optional = true }
 [dependencies.replicator]
 #path = "../replicator/replicator"
 git = "https://github.com/cowlicks/replicator.git"
-rev = "9a8ea4c02f6bc7b7479ceafbe0bb13bd5389f061"
 # TODO onyl used in the tests, but duplicating this for dev-dependencies is annoying
 features = ["utils"]
 
@@ -53,7 +52,9 @@ features = ["utils"]
 #version = "0.13.0"
 #path = "../core"
 git = "https://github.com/cowlicks/hypercore.git"
-rev = "29f0a199861d06dee701413f473a43acbcfdff4f"
+branch = "replication"
+default-features = false
+features = ["sparse", "tokio"]
 
 [build-dependencies]
 prost-build = "0.12.1"
