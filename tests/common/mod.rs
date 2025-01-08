@@ -146,12 +146,16 @@ macro_rules! write_range_to_hb {
 pub(crate) use write_range_to_hb;
 
 pub fn check_cmd_output(out: Output) -> Result<Output> {
-    eprint!("{}", String::from_utf8_lossy(&out.stdout));
     if out.status.code() != Some(0) {
+        if !out.stdout.is_empty() {
+            eprintln!("stdout:\n{}", String::from_utf8_lossy(&out.stdout));
+        }
+        if !out.stderr.is_empty() {
+            eprintln!("stderr:\n{}", String::from_utf8_lossy(&out.stderr));
+        }
         return Err(Box::new(Error::TestError(format!(
-            "comand output status was not zero. Got:\nstdout: {}\nstderr: {}",
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr),
+            "command output status was not zero. Got:{:?}",
+            out.status.code()
         ))));
     }
     Ok(out)
