@@ -214,12 +214,7 @@ mod test {
         );
         Ok(())
     }
-}
-#[cfg(feature = "debug")]
-#[cfg(test)]
-mod test {
-    use super::*;
-
+    #[cfg(feature = "debug")]
     #[tokio::test]
     async fn height_zero() -> Result<(), HyperbeeError> {
         let tree = Tree::from_ram().await?;

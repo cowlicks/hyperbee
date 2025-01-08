@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `TraverseConfig::in_bounds` takes a slice instead of a `&Vec` now.
+- Bumped upstream dependencies.
+- Fixed broken python tests. FFI requires tokio now.
 - Work around some broken python & FFI tests
 
 ### Removed

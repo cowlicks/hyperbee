@@ -216,7 +216,7 @@ async fn make_child_key_index_iter(
 }
 
 impl TraverseConfig {
-    fn in_bounds(&self, value: &Vec<u8>) -> bool {
+    fn in_bounds(&self, value: &[u8]) -> bool {
         // TODO impl Ord for LimitValue and remove the expects
         match self
             .min_value
@@ -308,7 +308,7 @@ async fn get_child_stream<'a>(
     Ok(Traverse::new(child, config))
 }
 
-impl<'a> Stream for Traverse<'a> {
+impl Stream for Traverse<'_> {
     type Item = TreeItem;
     #[tracing::instrument(skip(self, cx))]
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
