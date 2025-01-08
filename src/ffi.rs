@@ -39,7 +39,7 @@ struct Hyperbee {
     rust_hyperbee: Shared<RustHyperbee>,
 }
 
-#[uniffi::export]
+#[uniffi::export(async_runtime = "tokio")]
 impl Hyperbee {
     /// The number of blocks in the hypercore.
     /// The first block is always the header block so:
@@ -101,7 +101,7 @@ async fn hyperbee_from_ram() -> Result<Hyperbee, HyperbeeError> {
 }
 
 /// Helper for creating a Hyperbee from the provided path to a storage directory
-#[uniffi::export]
+#[uniffi::export(async_runtime = "tokio")]
 async fn hyperbee_from_storage_dir(path_to_storage_dir: &str) -> Result<Hyperbee, HyperbeeError> {
     let rust_hyperbee = RustHyperbee::from_storage_dir(path_to_storage_dir).await?;
     Ok(Hyperbee {
@@ -114,7 +114,7 @@ struct Prefixed {
     rust_prefixed: Shared<RustPrefixed>,
 }
 
-#[uniffi::export]
+#[uniffi::export(async_runtime = "tokio")]
 impl Prefixed {
     /// Get the value associated with the provided key plus this [`Prefixed`]'s instance's `prefix`
     async fn get(&self, key: &[u8]) -> Result<Option<Gotten>, HyperbeeError> {

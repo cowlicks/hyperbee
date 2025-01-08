@@ -40,7 +40,7 @@ thiserror = "1.0.50"
 tokio = { version = "1.34.0", features = ["macros", "rt", "sync"] }
 tokio-stream = "0.1.14"
 tracing = "0.1.40"
-uniffi = { version = "0.26.1", features = ["cli"], optional = true }
+uniffi = { version = "0.26.1", features = ["cli", "tokio"], optional = true }
 
 [dependencies.replicator]
 #path = "../replicator/replicator"
