@@ -7,7 +7,7 @@ use super::{git_root, join_paths, path_to_c_lib, run_code, run_make_from_with};
 static REL_PATH_TO_HERE: &str = "./tests/common/python";
 static PRE_SCRIPT: &str = "
 import asyncio
-from target.hyperbee import *
+from hyperbee import *
 ";
 
 static POST_SCRIPT: &str = "
@@ -20,7 +20,7 @@ fn build_command(working_dir: &str, script_path: &str) -> String {
 }
 
 pub fn path_to_python_target() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let p = join_paths!(&git_root()?, &REL_PATH_TO_HERE, "target");
+    let p = join_paths!(&git_root()?, "target/debug/hyperbee.py");
     Ok(p.into())
 }
 
