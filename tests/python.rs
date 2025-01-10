@@ -6,14 +6,32 @@ use common::{
 };
 use hyperbee::Hyperbee;
 
-#[cfg(test)]
-mod python {
-    use super::*;
-    #[tokio::test]
-    async fn test_sub_prefix() -> Result<()> {
-        require_python()?;
-        let out = run_python(
-            "
+#[tokio::test]
+async fn hello_world() -> Result<()> {
+    require_python()?;
+    let storage_dir = tempfile::tempdir()?;
+    {
+        let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
+        hb.put(b"hello", Some(b"world")).await?;
+    }
+    let result = run_python(&format!(
+        "
+async def main():
+    hb = await hyperbee_from_storage_dir('{}')
+    res = await hb.get(b'hello')
+    assert(res.value == b'world')
+",
+        storage_dir.path().display()
+    ))?;
+
+    assert_eq!(result.status.code(), Some(0));
+    Ok(())
+}
+#[tokio::test]
+async fn test_sub_prefix() -> Result<()> {
+    require_python()?;
+    let out = run_python(
+        "
 async def main():
     prefix = b'myprefix'
     key = b'keykey'
@@ -33,16 +51,16 @@ async def main():
     x = await sub_hb.get(key)
     assert(x.value == val_with_pref)
 ",
-        )?;
-        assert_eq!(out.status.code(), Some(0));
-        Ok(())
-    }
+    )?;
+    assert_eq!(out.status.code(), Some(0));
+    Ok(())
+}
 
-    #[tokio::test]
-    async fn hello_world_get_set_del() -> Result<()> {
-        require_python()?;
-        let out = run_python(
-            "
+#[tokio::test]
+async fn get_set_del() -> Result<()> {
+    require_python()?;
+    let out = run_python(
+        "
 async def main():
     hb = await hyperbee_from_ram()
     x = await hb.put(b'hello', b'world')
@@ -55,21 +73,21 @@ async def main():
     x = await hb.delete(b'hello')
     assert(x == 1)
 ",
-        )?;
-        assert_eq!(out.status.code(), Some(0));
-        Ok(())
-    }
+    )?;
+    assert_eq!(out.status.code(), Some(0));
+    Ok(())
+}
 
-    #[tokio::test]
-    async fn optionals() -> Result<()> {
-        let _x = require_python()?;
-        let storage_dir = tempfile::tempdir()?;
-        {
-            let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
-            let _ = hb.put(b"hello", None).await?;
-        }
-        let code = format!(
-            "
+#[tokio::test]
+async fn optionals() -> Result<()> {
+    let _x = require_python()?;
+    let storage_dir = tempfile::tempdir()?;
+    {
+        let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
+        let _ = hb.put(b"hello", None).await?;
+    }
+    let code = format!(
+        "
 async def main():
     import json
     hb = await hyperbee_from_storage_dir('{}')
@@ -80,19 +98,19 @@ async def main():
     res = await hb.get(b'skipval')
     assert(res.value is None)
 ",
-            storage_dir.path().display()
-        );
+        storage_dir.path().display()
+    );
 
-        let output = run_python(&code)?;
-        assert_eq!(output.status.code(), Some(0));
-        Ok(())
-    }
+    let output = run_python(&code)?;
+    assert_eq!(output.status.code(), Some(0));
+    Ok(())
+}
 
-    #[tokio::test]
-    async fn check_version() -> Result<()> {
-        let _x = require_python()?;
-        let out = run_python(
-            "
+#[tokio::test]
+async fn check_version() -> Result<()> {
+    let _x = require_python()?;
+    let out = run_python(
+        "
 async def main():
     hb = await hyperbee_from_ram()
     x = await hb.version()
@@ -101,19 +119,19 @@ async def main():
     x = await hb.version()
     assert(x == 2)
 ",
-        )?;
-        assert_eq!(out.status.code(), Some(0));
-        Ok(())
-    }
+    )?;
+    assert_eq!(out.status.code(), Some(0));
+    Ok(())
+}
 
-    #[tokio::test]
-    async fn zero_to_one_hundred() -> Result<()> {
-        let _x = require_python()?;
-        let storage_dir = tempfile::tempdir()?;
-        let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
-        let keys = write_range_to_hb!(&hb);
-        let code = format!(
-            "
+#[tokio::test]
+async fn zero_to_one_hundred() -> Result<()> {
+    let _x = require_python()?;
+    let storage_dir = tempfile::tempdir()?;
+    let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
+    let keys = write_range_to_hb!(&hb);
+    let code = format!(
+        "
 async def main():
     import json
     hb = await hyperbee_from_storage_dir('{}')
@@ -122,13 +140,12 @@ async def main():
     values = [res.value.decode('utf8') for res in results]
     print(json.dumps(values))
 ",
-            storage_dir.path().display()
-        );
+        storage_dir.path().display()
+    );
 
-        let output = run_python(&code)?;
-        let res = parse_json_result(&output)?;
-        assert_eq!(res, keys);
-        assert_eq!(output.status.code(), Some(0));
-        Ok(())
-    }
+    let output = run_python(&code)?;
+    let res = parse_json_result(&output)?;
+    assert_eq!(res, keys);
+    assert_eq!(output.status.code(), Some(0));
+    Ok(())
 }
