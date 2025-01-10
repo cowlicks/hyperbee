@@ -3,7 +3,7 @@ use std::{path::PathBuf, process::Output};
 use tempfile::tempdir;
 
 use super::{
-    build_whole_script, git_root, join_paths, path_to_c_lib, run_code, run_make_from_with,
+    build_whole_script, git_root, join_paths, path_to_c_lib, run_code, run_make_from_dir_with_arg,
 };
 
 static REL_PATH_TO_HERE: &str = "./tests/common/python";
@@ -38,5 +38,5 @@ pub fn run_python(code: &str) -> Result<Output, Box<dyn std::error::Error>> {
 }
 
 pub fn require_python() -> Result<Output, Box<dyn std::error::Error>> {
-    run_make_from_with(REL_PATH_TO_HERE, "")
+    run_make_from_dir_with_arg(REL_PATH_TO_HERE, "")
 }

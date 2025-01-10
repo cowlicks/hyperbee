@@ -110,7 +110,7 @@ pub fn run_code(
     check_cmd_output(Command::new("sh").arg("-c").arg(cmd).output()?)
 }
 
-pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output> {
+pub fn run_make_from_dir_with_arg(dir: &str, arg: &str) -> Result<Output> {
     let path = join_paths!(git_root()?, dir);
     let cmd = format!("cd {path} && flock make.lock make {arg} && rm -f make.lock ");
     let out = check_cmd_output(Command::new("sh").arg("-c").arg(cmd).output()?)?;

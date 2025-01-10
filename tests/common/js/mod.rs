@@ -1,4 +1,4 @@
-use super::{build_whole_script, git_root, join_paths, run_code, run_make_from_with};
+use super::{build_whole_script, git_root, join_paths, run_code, run_make_from_dir_with_arg};
 use std::{
     path::{Path, PathBuf},
     process::Output,
@@ -8,7 +8,7 @@ pub static REL_PATH_TO_NODE_MODULES: &str = "./tests/common/js/node_modules";
 pub static REL_PATH_TO_JS_DIR: &str = "./tests/common/js";
 
 pub fn require_js_data() -> Result<(), Box<dyn std::error::Error>> {
-    let _ = run_make_from_with(REL_PATH_TO_JS_DIR, "")?;
+    let _ = run_make_from_dir_with_arg(REL_PATH_TO_JS_DIR, "")?;
     Ok(())
 }
 
