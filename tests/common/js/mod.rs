@@ -1,4 +1,4 @@
-use super::{git_root, join_paths, run_code, run_make_from_with};
+use super::{build_whole_script, git_root, join_paths, run_code, run_make_from_with};
 use std::{
     path::{Path, PathBuf},
     process::Output,
@@ -56,26 +56,16 @@ fn no_write_pre_script(storage_dir: &str) -> String {
 }
 
 pub fn run_js(storage_dir: &str, script: &str) -> Result<Output, Box<dyn std::error::Error>> {
-    run_code(
-        storage_dir,
-        no_write_pre_script,
-        script,
-        POST_SCRIPT,
-        SCRIPT_FILE_NAME,
-        build_command,
-        vec![],
-    )
+    let code = build_whole_script(&no_write_pre_script(storage_dir), script, POST_SCRIPT);
+    run_code(&code, SCRIPT_FILE_NAME, build_command, vec![])
 }
 
 pub fn run_js_writable<T: AsRef<Path>>(storage_dir: T, script: &str) -> super::Result<Output> {
     let path = storage_dir.as_ref();
-    run_code(
-        &path.to_string_lossy(),
-        writable_pre_script,
+    let code = build_whole_script(
+        &writable_pre_script(&path.to_string_lossy()),
         script,
         POST_SCRIPT,
-        SCRIPT_FILE_NAME,
-        build_command,
-        vec![],
-    )
+    );
+    run_code(&code, SCRIPT_FILE_NAME, build_command, vec![])
 }

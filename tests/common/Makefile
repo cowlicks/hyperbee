@@ -7,4 +7,3 @@ include $(dir $(lastword $(MAKEFILE_LIST)))vars.mk
 # Build Rust FFI library
 $(C_LIB_PATH): $(RS_SOURCES) $(ROOT)/Cargo.toml
 	cd $(ROOT) && cargo build -F ffi
-

@@ -2,7 +2,9 @@ use std::{path::PathBuf, process::Output};
 
 use tempfile::tempdir;
 
-use super::{git_root, join_paths, path_to_c_lib, run_code, run_make_from_with};
+use super::{
+    build_whole_script, git_root, join_paths, path_to_c_lib, run_code, run_make_from_with,
+};
 
 static REL_PATH_TO_HERE: &str = "./tests/common/python";
 static PRE_SCRIPT: &str = "
@@ -24,18 +26,14 @@ pub fn path_to_python_target() -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(p.into())
 }
 
-pub fn run_python(script: &str) -> Result<Output, Box<dyn std::error::Error>> {
-    let storage_dir = tempdir()?;
-    let target_path = path_to_python_target()?.display().to_string();
-    let storage_dir_path = format!("{}", storage_dir.path().display());
+/// Run the provided python `code` within a context where the Python Hyperbee library is imported.
+/// Code must be written within a `async main(): ...` function.
+pub fn run_python(code: &str) -> Result<Output, Box<dyn std::error::Error>> {
     run_code(
-        &storage_dir_path,
-        |_| PRE_SCRIPT.to_string(),
-        script,
-        POST_SCRIPT,
+        &build_whole_script(PRE_SCRIPT, code, POST_SCRIPT),
         "script.py",
         build_command,
-        vec![target_path, path_to_c_lib()?],
+        vec![path_to_python_target()?, path_to_c_lib()?],
     )
 }
 
