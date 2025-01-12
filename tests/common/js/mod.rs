@@ -1,4 +1,4 @@
-use super::{git_root, join_paths, run_code, run_make_from_with};
+use super::{build_whole_script, git_root, join_paths, run_code, run_make_from_dir_with_arg};
 use std::{
     path::{Path, PathBuf},
     process::Output,
@@ -8,7 +8,7 @@ pub static REL_PATH_TO_NODE_MODULES: &str = "./tests/common/js/node_modules";
 pub static REL_PATH_TO_JS_DIR: &str = "./tests/common/js";
 
 pub fn require_js_data() -> Result<(), Box<dyn std::error::Error>> {
-    let _ = run_make_from_with(REL_PATH_TO_JS_DIR, "")?;
+    let _ = run_make_from_dir_with_arg(REL_PATH_TO_JS_DIR, "")?;
     Ok(())
 }
 
@@ -56,26 +56,18 @@ fn no_write_pre_script(storage_dir: &str) -> String {
 }
 
 pub fn run_js(storage_dir: &str, script: &str) -> Result<Output, Box<dyn std::error::Error>> {
-    run_code(
-        storage_dir,
-        no_write_pre_script,
-        script,
-        POST_SCRIPT,
-        SCRIPT_FILE_NAME,
-        build_command,
-        vec![],
-    )
+    require_js_data()?;
+    let code = build_whole_script(&no_write_pre_script(storage_dir), script, POST_SCRIPT);
+    run_code(&code, SCRIPT_FILE_NAME, build_command, vec![])
 }
 
 pub fn run_js_writable<T: AsRef<Path>>(storage_dir: T, script: &str) -> super::Result<Output> {
+    require_js_data()?;
     let path = storage_dir.as_ref();
-    run_code(
-        &path.to_string_lossy(),
-        writable_pre_script,
+    let code = build_whole_script(
+        &writable_pre_script(&path.to_string_lossy()),
         script,
         POST_SCRIPT,
-        SCRIPT_FILE_NAME,
-        build_command,
-        vec![],
-    )
+    );
+    run_code(&code, SCRIPT_FILE_NAME, build_command, vec![])
 }

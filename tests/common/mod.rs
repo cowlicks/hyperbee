@@ -6,6 +6,7 @@
 use std::{
     fs::File,
     io::Write,
+    path::PathBuf,
     process::{Command, Output},
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -51,8 +52,8 @@ pub fn git_root() -> Result<String> {
     Ok(String::from_utf8(x.stdout)?.trim().to_string())
 }
 
-pub fn path_to_c_lib() -> Result<String> {
-    Ok(join_paths!(git_root()?, PATH_TO_C_LIB))
+pub fn path_to_c_lib() -> Result<PathBuf> {
+    Ok(join_paths!(git_root()?, PATH_TO_C_LIB).parse()?)
 }
 
 pub fn get_data_dir() -> Result<String> {
@@ -66,31 +67,30 @@ pub fn run_script_relative_to_git_root(script: &str) -> Result<Output> {
         .output()?)
 }
 
+pub fn build_whole_script(pre_code: &str, code: &str, post_code: &str) -> String {
+    format!(
+        "{pre_code}
+{code}
+{post_code}
+"
+    )
+}
+
+/// Run some code.
+/// Put the provided `code` into a file named `script_file_name` inside a temporary directory where
+/// `copy_dirs` are copied into. `build_command` should output a shell command as a string that
+/// runs the script.
 pub fn run_code(
-    storage_dir: &str,
-    build_pre_script: impl FnOnce(&str) -> String,
-    script: &str,
-    post_script: &str,
+    code: &str,
     script_file_name: &str,
     build_command: impl FnOnce(&str, &str) -> String,
-    copy_dirs: Vec<String>,
+    copy_dirs: Vec<PathBuf>,
 ) -> Result<Output> {
-    let storage_dir_name = storage_dir.to_string();
-    let pre_script = build_pre_script(&storage_dir_name);
-
     let working_dir = tempfile::tempdir()?;
-
-    let code = format!(
-        "{pre_script}
-{script}
-{post_script}
-"
-    );
-    let script_path = working_dir.path().join(script_file_name);
-    let script_file = File::create(&script_path)?;
-    write!(&script_file, "{}", &code)?;
-
     let working_dir_path = working_dir.path().display().to_string();
+    let script_path = working_dir.path().join(script_file_name);
+    write!(&File::create(&script_path)?, "{code}")?;
+
     // copy dirs into working dir
     for dir in copy_dirs {
         let dir_cp_cmd = Command::new("cp")
@@ -100,17 +100,17 @@ pub fn run_code(
             .output()?;
         if dir_cp_cmd.status.code() != Some(0) {
             return Err(Box::new(Error::TestError(format!(
-                "failed to copy dir [{dir}] to [{working_dir_path}] got stderr: {}",
+                "failed to copy dir [{}] to [{working_dir_path}] got stderr: {}",
+                dir.display(),
                 String::from_utf8_lossy(&dir_cp_cmd.stderr),
             ))));
         }
     }
-    let script_path_str = script_path.display().to_string();
-    let cmd = build_command(&working_dir_path, &script_path_str);
+    let cmd = build_command(&working_dir_path, &script_path.to_string_lossy());
     check_cmd_output(Command::new("sh").arg("-c").arg(cmd).output()?)
 }
 
-pub fn run_make_from_with(dir: &str, arg: &str) -> Result<Output> {
+pub fn run_make_from_dir_with_arg(dir: &str, arg: &str) -> Result<Output> {
     let path = join_paths!(git_root()?, dir);
     let cmd = format!("cd {path} && flock make.lock make {arg} && rm -f make.lock ");
     let out = check_cmd_output(Command::new("sh").arg("-c").arg(cmd).output()?)?;

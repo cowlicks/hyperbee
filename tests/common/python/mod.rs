@@ -2,12 +2,14 @@ use std::{path::PathBuf, process::Output};
 
 use tempfile::tempdir;
 
-use super::{git_root, join_paths, path_to_c_lib, run_code, run_make_from_with};
+use super::{
+    build_whole_script, git_root, join_paths, path_to_c_lib, run_code, run_make_from_dir_with_arg,
+};
 
 static REL_PATH_TO_HERE: &str = "./tests/common/python";
 static PRE_SCRIPT: &str = "
 import asyncio
-from target.hyperbee import *
+from hyperbee import *
 ";
 
 static POST_SCRIPT: &str = "
@@ -20,25 +22,22 @@ fn build_command(working_dir: &str, script_path: &str) -> String {
 }
 
 pub fn path_to_python_target() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let p = join_paths!(&git_root()?, &REL_PATH_TO_HERE, "target");
+    let p = join_paths!(&git_root()?, "target/debug/hyperbee.py");
     Ok(p.into())
 }
 
-pub fn run_python(script: &str) -> Result<Output, Box<dyn std::error::Error>> {
-    let storage_dir = tempdir()?;
-    let target_path = path_to_python_target()?.display().to_string();
-    let storage_dir_path = format!("{}", storage_dir.path().display());
+/// Run the provided python `code` within a context where the Python Hyperbee library is imported.
+/// Code must be written within a `async main(): ...` function.
+pub fn run_python(code: &str) -> Result<Output, Box<dyn std::error::Error>> {
+    require_python()?;
     run_code(
-        &storage_dir_path,
-        |_| PRE_SCRIPT.to_string(),
-        script,
-        POST_SCRIPT,
+        &build_whole_script(PRE_SCRIPT, code, POST_SCRIPT),
         "script.py",
         build_command,
-        vec![target_path, path_to_c_lib()?],
+        vec![path_to_python_target()?, path_to_c_lib()?],
     )
 }
 
 pub fn require_python() -> Result<Output, Box<dyn std::error::Error>> {
-    run_make_from_with(REL_PATH_TO_HERE, "")
+    run_make_from_dir_with_arg(REL_PATH_TO_HERE, "")
 }
