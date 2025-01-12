@@ -1,14 +1,9 @@
 mod common;
-use common::{
-    parse_json_result,
-    python::{require_python, run_python},
-    write_range_to_hb, Result,
-};
+use common::{parse_json_result, python::run_python, write_range_to_hb, Result};
 use hyperbee::Hyperbee;
 
 #[tokio::test]
 async fn hello_world() -> Result<()> {
-    require_python()?;
     let storage_dir = tempfile::tempdir()?;
     {
         let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
@@ -29,7 +24,6 @@ async def main():
 }
 #[tokio::test]
 async fn test_sub_prefix() -> Result<()> {
-    require_python()?;
     let out = run_python(
         "
 async def main():
@@ -58,7 +52,6 @@ async def main():
 
 #[tokio::test]
 async fn get_set_del() -> Result<()> {
-    require_python()?;
     let out = run_python(
         "
 async def main():
@@ -80,7 +73,6 @@ async def main():
 
 #[tokio::test]
 async fn optionals() -> Result<()> {
-    let _x = require_python()?;
     let storage_dir = tempfile::tempdir()?;
     {
         let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
@@ -108,7 +100,6 @@ async def main():
 
 #[tokio::test]
 async fn check_version() -> Result<()> {
-    let _x = require_python()?;
     let out = run_python(
         "
 async def main():
@@ -126,7 +117,6 @@ async def main():
 
 #[tokio::test]
 async fn zero_to_one_hundred() -> Result<()> {
-    let _x = require_python()?;
     let storage_dir = tempfile::tempdir()?;
     let hb = Hyperbee::from_storage_dir(&storage_dir).await?;
     let keys = write_range_to_hb!(&hb);

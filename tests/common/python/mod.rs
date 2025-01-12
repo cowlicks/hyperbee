@@ -29,6 +29,7 @@ pub fn path_to_python_target() -> Result<PathBuf, Box<dyn std::error::Error>> {
 /// Run the provided python `code` within a context where the Python Hyperbee library is imported.
 /// Code must be written within a `async main(): ...` function.
 pub fn run_python(code: &str) -> Result<Output, Box<dyn std::error::Error>> {
+    require_python()?;
     run_code(
         &build_whole_script(PRE_SCRIPT, code, POST_SCRIPT),
         "script.py",

@@ -56,11 +56,13 @@ fn no_write_pre_script(storage_dir: &str) -> String {
 }
 
 pub fn run_js(storage_dir: &str, script: &str) -> Result<Output, Box<dyn std::error::Error>> {
+    require_js_data()?;
     let code = build_whole_script(&no_write_pre_script(storage_dir), script, POST_SCRIPT);
     run_code(&code, SCRIPT_FILE_NAME, build_command, vec![])
 }
 
 pub fn run_js_writable<T: AsRef<Path>>(storage_dir: T, script: &str) -> super::Result<Output> {
+    require_js_data()?;
     let path = storage_dir.as_ref();
     let code = build_whole_script(
         &writable_pre_script(&path.to_string_lossy()),
