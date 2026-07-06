@@ -145,17 +145,20 @@ impl Tree {
         Ok(out)
     }
 
-    /// Traverse the tree based on the given [`TraverseConfig`]
+    /// Traverse the tree based on the given [`TraverseConfig`]. Yields an empty stream when the
+    /// tree has no root yet (i.e. it is empty), matching [`Tree::get`]'s handling of that case.
     pub async fn traverse<'a>(
         &self,
         conf: TraverseConfig,
     ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError> {
-        let root = self
-            .get_root(false)
-            .await?
-            .ok_or(HyperbeeError::NoRootError)?;
-        let stream = Traverse::new(root, conf);
-        Ok(stream.map(move |kv_and_node| kv_and_node.0))
+        let stream: std::pin::Pin<Box<dyn Stream<Item = KeyDataResult> + 'a>> =
+            match self.get_root(false).await? {
+                Some(root) => {
+                    Box::pin(Traverse::new(root, conf).map(move |kv_and_node| kv_and_node.0))
+                }
+                None => Box::pin(futures_lite::stream::empty()),
+            };
+        Ok(stream)
     }
 
     pub async fn from_storage_dir<T: AsRef<Path>>(
