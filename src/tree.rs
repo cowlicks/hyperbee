@@ -217,6 +217,19 @@ mod test {
         );
         Ok(())
     }
+
+    /// An empty tree has no root. `traverse` should yield an empty stream in that case, matching
+    /// `get`'s handling of the same situation (`Ok(None)`), rather than returning `NoRootError`.
+    #[tokio::test]
+    async fn traverse_on_empty_tree_yields_empty_stream() -> Result<(), HyperbeeError> {
+        let hc = HypercoreBuilder::new(Storage::new_memory().await?)
+            .build()
+            .await?;
+        let tree = Tree::from_hypercore(hc)?;
+        let mut stream = Box::pin(tree.traverse(TraverseConfig::default()).await?);
+        assert!(stream.next().await.is_none());
+        Ok(())
+    }
     #[cfg(feature = "debug")]
     #[tokio::test]
     async fn height_zero() -> Result<(), HyperbeeError> {
