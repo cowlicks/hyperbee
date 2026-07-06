@@ -1,8 +1,9 @@
 use std::{fmt::Debug, path::Path, sync::Arc};
 
 use derive_builder::Builder;
-use futures_lite::{AsyncRead, AsyncWrite, Stream};
-use hypercore::{replication::SharedCore, AppendOutcome};
+use futures_lite::Stream;
+use hypercore::{AppendOutcome, Hypercore};
+use hypercore_handshake::CipherTrait;
 use tokio::sync::RwLock;
 
 use crate::{
@@ -28,16 +29,8 @@ pub struct Hyperbee {
 
 impl Hyperbee {
     /// add replication stream
-    pub async fn add_stream<S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static>(
-        &self,
-        stream: S,
-        is_initiator: bool,
-    ) -> Result<(), HyperbeeError> {
-        self.tree
-            .read()
-            .await
-            .add_stream(stream, is_initiator)
-            .await
+    pub async fn add_stream(&self, stream: impl CipherTrait + 'static) -> Result<(), HyperbeeError> {
+        self.tree.read().await.add_stream(stream).await
     }
 
     /// The number of blocks in the hypercore.
@@ -157,7 +150,7 @@ impl Hyperbee {
     }
 
     /// Helper for creating a [`Hyperbee`] from a [`hypercore::Hypercore`]
-    pub fn from_hypercore<T: Into<SharedCore>>(hypercore: T) -> Result<Self, HyperbeeError> {
+    pub fn from_hypercore<T: Into<Hypercore>>(hypercore: T) -> Result<Self, HyperbeeError> {
         Self::from_tree(Tree::from_hypercore(hypercore)?)
     }
 

@@ -1,13 +1,9 @@
 use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use derive_builder::Builder;
-use futures_lite::{AsyncRead, AsyncWrite};
-use hypercore::{
-    replication::{CoreInfo, CoreMethods},
-    AppendOutcome,
-};
+use hypercore::{AppendOutcome, Hypercore};
+use hypercore_handshake::CipherTrait;
 use prost::{bytes::Buf, DecodeError, Message};
-use replicator::ReplicatingCore;
 use tokio::sync::RwLock;
 use tracing::trace;
 
@@ -25,23 +21,19 @@ pub struct Blocks {
     // TODO make the cache smarter. Allow setting max size and strategy
     cache: Shared<BTreeMap<u64, Shared<BlockEntry>>>,
     #[builder(setter(custom))]
-    core: ReplicatingCore,
+    core: Hypercore,
 }
 
 impl BlocksBuilder {
-    pub fn core<T: Into<ReplicatingCore>>(mut self, core: T) -> Self {
+    pub fn core<T: Into<Hypercore>>(mut self, core: T) -> Self {
         self.core = Some(core.into());
         self
     }
 }
 
 impl Blocks {
-    pub async fn add_stream<S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static>(
-        &self,
-        stream: S,
-        is_initiator: bool,
-    ) -> Result<(), HyperbeeError> {
-        self.core.add_stream(stream, is_initiator).await;
+    pub async fn add_stream(&self, stream: impl CipherTrait + 'static) -> Result<(), HyperbeeError> {
+        tokio::spawn(self.core.replicate(stream));
         Ok(())
     }
 
@@ -88,7 +80,7 @@ impl Blocks {
     }
 
     pub async fn info(&self) -> hypercore::Info {
-        self.core.info().await
+        self.core.info()
     }
 
     pub async fn append(&self, value: &[u8]) -> Result<AppendOutcome, HyperbeeError> {

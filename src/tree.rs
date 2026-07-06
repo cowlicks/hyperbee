@@ -1,6 +1,7 @@
 use derive_builder::Builder;
-use futures_lite::{AsyncRead, AsyncWrite, Stream, StreamExt};
-use hypercore::{replication::SharedCore, AppendOutcome, HypercoreBuilder, Storage};
+use futures_lite::{Stream, StreamExt};
+use hypercore::{AppendOutcome, Hypercore, HypercoreBuilder, Storage};
+use hypercore_handshake::CipherTrait;
 use prost::Message;
 
 use crate::{
@@ -29,16 +30,8 @@ pub struct Tree {
 
 impl Tree {
     /// add replication stream
-    pub async fn add_stream<S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static>(
-        &self,
-        stream: S,
-        is_initiator: bool,
-    ) -> Result<(), HyperbeeError> {
-        self.blocks
-            .read()
-            .await
-            .add_stream(stream, is_initiator)
-            .await
+    pub async fn add_stream(&self, stream: impl CipherTrait + 'static) -> Result<(), HyperbeeError> {
+        self.blocks.read().await.add_stream(stream).await
     }
 
     /// The number of blocks in the hypercore.
@@ -166,21 +159,19 @@ impl Tree {
     ) -> Result<Tree, HyperbeeError> {
         let p: PathBuf = path_to_storage_dir.as_ref().to_owned();
         let storage = Storage::new_disk(&p, false).await?;
-        let hc = SharedCore::from_hypercore(HypercoreBuilder::new(storage).build().await?);
+        let hc = HypercoreBuilder::new(storage).build().await?;
         let blocks = BlocksBuilder::default().core(hc).build()?;
         Self::from_blocks(blocks)
     }
     pub async fn from_ram() -> Result<Tree, HyperbeeError> {
-        let hc = SharedCore::from_hypercore(
-            HypercoreBuilder::new(Storage::new_memory().await?)
-                .build()
-                .await?,
-        );
+        let hc = HypercoreBuilder::new(Storage::new_memory().await?)
+            .build()
+            .await?;
         let blocks = BlocksBuilder::default().core(hc).build()?;
         Self::from_blocks(blocks)
     }
 
-    pub fn from_hypercore<T: Into<SharedCore>>(hypercore: T) -> Result<Self, HyperbeeError> {
+    pub fn from_hypercore<T: Into<Hypercore>>(hypercore: T) -> Result<Self, HyperbeeError> {
         let blocks = BlocksBuilder::default().core(hypercore.into()).build()?;
         Self::from_blocks(blocks)
     }
