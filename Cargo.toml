@@ -44,8 +44,7 @@ tracing = "0.1.40"
 uniffi = { version = "0.26.1", features = ["cli", "tokio"], optional = true }
 
 [dependencies.hypercore]
-path = "../core"
-#version = "0.14.0"
+version = "0.17.0-alpha.1"
 default-features = false
 features = ["sparse", "replication"]
 
