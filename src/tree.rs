@@ -1,6 +1,7 @@
 use derive_builder::Builder;
-use futures_lite::{AsyncRead, AsyncWrite, Stream, StreamExt};
-use hypercore::{replication::SharedCore, AppendOutcome, HypercoreBuilder, Storage};
+use futures_lite::{Stream, StreamExt};
+use hypercore::{AppendOutcome, Hypercore, HypercoreBuilder, Storage};
+use hypercore_handshake::CipherTrait;
 use prost::Message;
 
 use crate::{
@@ -29,16 +30,8 @@ pub struct Tree {
 
 impl Tree {
     /// add replication stream
-    pub async fn add_stream<S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static>(
-        &self,
-        stream: S,
-        is_initiator: bool,
-    ) -> Result<(), HyperbeeError> {
-        self.blocks
-            .read()
-            .await
-            .add_stream(stream, is_initiator)
-            .await
+    pub async fn add_stream(&self, stream: impl CipherTrait + 'static) -> Result<(), HyperbeeError> {
+        self.blocks.read().await.add_stream(stream).await
     }
 
     /// The number of blocks in the hypercore.
@@ -145,17 +138,20 @@ impl Tree {
         Ok(out)
     }
 
-    /// Traverse the tree based on the given [`TraverseConfig`]
+    /// Traverse the tree based on the given [`TraverseConfig`]. Yields an empty stream when the
+    /// tree has no root yet (i.e. it is empty), matching [`Tree::get`]'s handling of that case.
     pub async fn traverse<'a>(
         &self,
         conf: TraverseConfig,
     ) -> Result<impl Stream<Item = KeyDataResult> + 'a, HyperbeeError> {
-        let root = self
-            .get_root(false)
-            .await?
-            .ok_or(HyperbeeError::NoRootError)?;
-        let stream = Traverse::new(root, conf);
-        Ok(stream.map(move |kv_and_node| kv_and_node.0))
+        let stream: std::pin::Pin<Box<dyn Stream<Item = KeyDataResult> + 'a>> =
+            match self.get_root(false).await? {
+                Some(root) => {
+                    Box::pin(Traverse::new(root, conf).map(move |kv_and_node| kv_and_node.0))
+                }
+                None => Box::pin(futures_lite::stream::empty()),
+            };
+        Ok(stream)
     }
 
     pub async fn from_storage_dir<T: AsRef<Path>>(
@@ -163,21 +159,19 @@ impl Tree {
     ) -> Result<Tree, HyperbeeError> {
         let p: PathBuf = path_to_storage_dir.as_ref().to_owned();
         let storage = Storage::new_disk(&p, false).await?;
-        let hc = SharedCore::from_hypercore(HypercoreBuilder::new(storage).build().await?);
+        let hc = HypercoreBuilder::new(storage).build().await?;
         let blocks = BlocksBuilder::default().core(hc).build()?;
         Self::from_blocks(blocks)
     }
     pub async fn from_ram() -> Result<Tree, HyperbeeError> {
-        let hc = SharedCore::from_hypercore(
-            HypercoreBuilder::new(Storage::new_memory().await?)
-                .build()
-                .await?,
-        );
+        let hc = HypercoreBuilder::new(Storage::new_memory().await?)
+            .build()
+            .await?;
         let blocks = BlocksBuilder::default().core(hc).build()?;
         Self::from_blocks(blocks)
     }
 
-    pub fn from_hypercore<T: Into<SharedCore>>(hypercore: T) -> Result<Self, HyperbeeError> {
+    pub fn from_hypercore<T: Into<Hypercore>>(hypercore: T) -> Result<Self, HyperbeeError> {
         let blocks = BlocksBuilder::default().core(hypercore.into()).build()?;
         Self::from_blocks(blocks)
     }
@@ -212,6 +206,19 @@ mod test {
             tree.get(b"hello").await?,
             Some((1u64, Some(b"world".into())))
         );
+        Ok(())
+    }
+
+    /// An empty tree has no root. `traverse` should yield an empty stream in that case, matching
+    /// `get`'s handling of the same situation (`Ok(None)`), rather than returning `NoRootError`.
+    #[tokio::test]
+    async fn traverse_on_empty_tree_yields_empty_stream() -> Result<(), HyperbeeError> {
+        let hc = HypercoreBuilder::new(Storage::new_memory().await?)
+            .build()
+            .await?;
+        let tree = Tree::from_hypercore(hc)?;
+        let mut stream = Box::pin(tree.traverse(TraverseConfig::default()).await?);
+        assert!(stream.next().await.is_none());
         Ok(())
     }
     #[cfg(feature = "debug")]

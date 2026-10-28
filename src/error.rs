@@ -1,8 +1,7 @@
-use replicator::ReplicatorError;
 use std::{num::TryFromIntError, string::FromUtf8Error};
 use thiserror::Error;
 
-use hypercore::{replication::CoreMethodsError, HypercoreError};
+use hypercore::HypercoreError;
 use prost::{DecodeError, EncodeError};
 
 use crate::{
@@ -49,8 +48,4 @@ pub enum HyperbeeError {
     NoRootError,
     #[error("The tree already has a header")]
     HeaderAlreadyExists,
-    #[error("Replication error: {0}")]
-    ReplicationError(#[from] ReplicatorError),
-    #[error("Error in CoreMethods: {0}")]
-    CoreMethodsError(#[from] CoreMethodsError),
 }
